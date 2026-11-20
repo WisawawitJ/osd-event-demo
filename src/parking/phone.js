@@ -51,9 +51,15 @@ export function createPhone({root, sim, actions}) {
     ${ui.error ? `<p class="ph-error">${ui.error}</p>` : ''}
     <button type="button" class="ph-submit" data-ph="submit"${cue('submit')}>${t('ph.submit')}</button>`;
   }
+  // The form's response, as in the real app: received, the result comes by email, and the receipt details.
+  // There is no live status on the page; the decision arrives only by email.
   function sentScreen() {
     const r = req();
-    return `<div class="ph-done">${icon('check')}<strong>${t('ph.sentTitle')}</strong><p>${t('ph.sentBody')}</p><div class="ph-ref"><span>${t('req.receipt')}</span><b>${esc(r?.receipt || '')}</b></div><div class="ph-summary"><span>${esc(r?.plate)} · ${esc(r?.province)}</span><span>${r ? fmtDate(r.arrival) : ''}</span></div><p class="ph-wait"><i></i>${t('ph.waiting')}</p><button type="button" class="ph-link" data-ph="new">${t('ph.newRequest')}</button></div>`;
+    if (!r) return formScreen();
+    const row = (label, value) => `<div><span>${label}</span><b>${value}</b></div>`;
+    return `<div class="ph-done">${icon('check')}<strong>${t('ph.sentTitle')}</strong><p>${t('ph.sentBody')}</p><p>${t('ph.sentEmail', {email: esc(r.visitor.email)})}</p>
+      <div class="ph-receipt">${row(t('ph.receiptNo'), esc(r.receipt || ''))}${row(t('req.plate'), `${esc(r.plate)} · ${esc(r.province)}`)}${row(t('ph.arrive'), fmtDate(r.arrival))}${row(t('ph.depart'), fmtDate(r.departure))}</div>
+      <button type="button" class="ph-link" data-ph="new">${t('ph.newRequest')}</button></div>`;
   }
   function mailScreen() {
     const r = req();
@@ -62,7 +68,7 @@ export function createPhone({root, sim, actions}) {
     const subject = t(`ph.mail.${mail.kind}`);
     const head = `<div class="ph-mail-head"><span class="ph-avatar">P</span><div><strong>OSD Parking</strong><small>no-reply@osd.example · ${fmtTime(mail.at)}</small></div></div><h4>${subject}</h4><p class="ph-to">${esc(r.visitor.email)}, cc ${esc(r.contact)}</p>`;
     if (mail.kind === 'approved') {
-      return `${head}<div class="ph-ticket"><div class="ph-ticket-top"><span>${t('ph.ticket')}</span><b>OSD</b></div><div class="ph-ticket-plate">${esc(r.plate)}<small>${esc(r.province)}</small></div><div class="ph-ticket-rows"><div><span>${t('req.dates')}</span><b>${fmtDate(r.arrival)}${r.departure !== r.arrival ? ` – ${fmtDate(r.departure)}` : ''}</b></div><div><span>${t('req.visitor')}</span><b>${esc(r.visitor.name)}</b></div><div><span>${t('parking.floor')}</span><b>P2 · A</b></div></div><p class="ph-ticket-how">${t('ph.ticket.how')}</p><div class="ph-ticket-qr">${fakeQr(r.qr || r.ref)}<span>${t('ph.ticket.qr')}</span></div><button type="button" class="ph-cal" data-ph="calendar">${icon('calendar')}${t('ph.ticket.cal')}</button></div>`;
+      return `${head}<div class="ph-ticket"><div class="ph-ticket-top"><span>${t('ph.ticket')}</span><b>OSD</b></div><div class="ph-ticket-plate">${esc(r.plate)}<small>${esc(r.province)}</small></div><div class="ph-ticket-rows"><div><span>${t('req.dates')}</span><b>${fmtDate(r.arrival)}${r.departure !== r.arrival ? ` – ${fmtDate(r.departure)}` : ''}</b></div><div><span>${t('req.visitor')}</span><b>${esc(r.visitor.name)}</b></div><div><span>${t('parking.floor')}</span><b>P2 · A</b></div></div><p class="ph-ticket-how">${t('ph.ticket.how')}</p><div class="ph-ticket-qr">${fakeQr(r.qr || r.ref)}<span>${t('ph.ticket.qr')}</span></div><button type="button" class="ph-cal" data-ph="calendar">${icon('calendar')}${t('ph.ticket.cal')}</button><p class="ph-cc-note">${t('ph.ccNote', {contact: esc(r.contact)})}</p></div>`;
     }
     return `${head}<p class="ph-mail-body">${mail.kind === 'rejected' ? esc(r.reason || '') : t('req.revoke.confirm')}</p><button type="button" class="ph-link" data-ph="new">${t('ph.newRequest')}</button>`;
   }
@@ -71,9 +77,13 @@ export function createPhone({root, sim, actions}) {
     root.hidden = !ui.open;
     if (!ui.open) return;
     const body = ui.screen === 'form' ? formScreen() : ui.screen === 'sent' ? sentScreen() : mailScreen();
-    const inboxCount = req() ? sim.state.emails.filter(m => m.requestId === ui.requestId).length : 0;
-    patch(root, `<div class="ph-frame"><div class="ph-notch"></div><div class="ph-status"><span>${fmtTime(sim.now())}</span><span class="ph-sys">5G ▮▮▮ 82%</span></div>
-      <div class="ph-url">${icon(ui.screen === 'mail' ? 'inbox' : 'globe')}<span>${ui.screen === 'mail' ? t('ph.inbox') : t('ph.site')}</span>${inboxCount && ui.screen !== 'mail' ? `<button type="button" class="ph-inbox" data-ph="inbox">${icon('inbox')}<i>${inboxCount}</i></button>` : ''}${ui.screen === 'mail' ? `<button type="button" class="ph-inbox" data-ph="site">${icon('globe')}</button>` : ''}</div>
+    const signal = '<svg class="ph-ic" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx=".7"/><rect x="5" y="5.5" width="3" height="6.5" rx=".7"/><rect x="10" y="3" width="3" height="9" rx=".7"/><rect x="15" y="0" width="3" height="12" rx=".7"/></svg>';
+    const battery = '<svg class="ph-ic bat" viewBox="0 0 26 12" aria-hidden="true"><rect x=".6" y=".6" width="22" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="15" height="7.2" rx="1.6"/><rect x="23.8" y="4" width="1.8" height="4" rx=".8"/></svg>';
+    const bar = ui.screen === 'mail'
+      ? `<div class="ph-appbar mail"><button type="button" data-ph="site" aria-label="${t('back')}">${icon('next', 'flip')}</button><span>${icon('inbox')}${t('ph.mailApp')}</span></div>`
+      : `<div class="ph-url">${icon('globe')}<span>${t('ph.site')}</span></div>`;
+    patch(root, `<div class="ph-frame"><div class="ph-notch"></div><div class="ph-status"><span>${fmtTime(sim.now())}</span><span class="ph-sys">${signal}<b>5G</b>${battery}</span></div>
+      ${bar}
       <div class="ph-screen" data-screen="${ui.screen}">${body}</div>
       ${ui.banner ? `<button type="button" class="ph-banner" data-ph="inbox"${cue('banner')}><span class="ph-avatar">P</span><span><b>OSD Parking</b><small>${esc(ui.banner)}</small></span></button>` : ''}
       <div class="ph-home"></div></div><span class="ph-caption">${icon('phone')}${t('ph.label')}</span>`);
@@ -101,7 +111,7 @@ export function createPhone({root, sim, actions}) {
     if (what === 'submit') submit();
     if (what === 'inbox') { ui.screen = 'mail'; ui.banner = null; render(); }
     if (what === 'site') { ui.screen = req() ? 'sent' : 'form'; render(); }
-    if (what === 'calendar' && req()) saveFile(`osd-parking-${req().ref}.ics`, visitInvite(req()), 'text/calendar;charset=utf-8');
+    if (what === 'calendar' && req()) saveFile('parking-visit.ics', visitInvite(req()), 'text/calendar;charset=utf-8');
     if (what === 'new') { ui.form = blankForm(); ui.screen = 'form'; ui.requestId = null; ui.banner = null; render(); }
   });
   root.addEventListener('input', e => {

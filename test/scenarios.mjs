@@ -99,11 +99,12 @@ export const scenarios = [
     expect(await p.eval(`__parking.lot.root.children.filter(c=>c.name==='Demo_car_4ศย 5150').length`) === 0, 'parked unknown plate not sent again');
   }},
 
-  {name: 'calendar invite is a valid all-day event', async run(p, expect) {
+  {name: 'calendar invite is an arrival-day reminder', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
     const ics = await p.eval(`import('/src/parking/dom.js').then(m=>m.visitInvite({ref:'PK-T1',plate:'7กข 4821',province:'กรุงเทพมหานคร',arrival:Date.UTC(2026,10,24,-7),departure:Date.UTC(2026,10,25,-7)}))`);
-    expect(ics.includes('DTSTART;VALUE=DATE:20261124') && ics.includes('DTEND;VALUE=DATE:20261126'), 'dates cover 24–25 Nov');
+    // As in the real app: a reminder for the arrival date only, even for a two-day visit.
+    expect(ics.includes('DTSTART;VALUE=DATE:20261124') && ics.includes('DTEND;VALUE=DATE:20261125'), 'all-day reminder on the arrival date (24 Nov) only');
     expect(ics.startsWith('BEGIN:VCALENDAR') && ics.includes('END:VEVENT'), 'calendar structure');
   }},
 
@@ -125,7 +126,7 @@ export const scenarios = [
     await p.click('[data-bar="phone"]');
     // The page colours fade over .35 s; wait for them to settle rather than guessing a delay.
     // Compare the colour, not the alpha: the fade may still be finishing under load.
-    await p.until(`getComputedStyle(document.body).backgroundColor === 'rgb(14, 21, 28)'`, {timeout: 3000, what: 'dark page background'}).catch(() => {});
+    await p.until(`/^rgba?\\(14, 21, 28/.test(getComputedStyle(document.body).backgroundColor)`, {timeout: 8000, what: 'dark page background'});
     const bg = await p.eval(`getComputedStyle(document.body).backgroundColor`);
     const ink = await p.eval(`getComputedStyle(document.querySelector('.ph-field input')).color`);
     expect(/^rgba?\(14, 21, 28/.test(bg), `page background dark (got ${bg})`);
@@ -385,5 +386,16 @@ export const scenarios = [
     const r = JSON.parse(await p.eval(`JSON.stringify({story:__parking.story.running,dest:document.body.dataset.tourDestination,pause:!!document.querySelector('#tour-play svg path[d^="M8 5v14"]')})`));
     expect(!r.story, 'the story stopped');
     expect(r.dest === 'parking' && !r.pause, `the tour stopped at the car park (at ${r.dest}, tour ${r.pause ? 'still running' : 'stopped'})`);
+  }},
+  {name: 'visitor flow as in the real app: a confirmation, then the decision by email only', async run(p, expect) {
+    await p.goto(parking('&story=1&auto=0'));
+    await p.until('window.__parking && __parking.story.running', {timeout: 40000});
+    await p.until('__parking.story.waitingForNext', {timeout: 30000}); await p.click('[data-bar="next"]');
+    await p.until('__parking.story.index===1 && __parking.story.waitingForNext', {timeout: 30000, what: 'request sent'});
+    const sent = JSON.parse(await p.eval(`JSON.stringify((()=>{const ph=document.querySelector('#pk-phone');return {text:ph.querySelector('.ph-screen').textContent,rows:ph.querySelectorAll('.ph-receipt div').length,spinner:!!ph.querySelector('.ph-wait,[class*="spin"]'),inbox:!!ph.querySelector('[data-ph="inbox"]')}})())`));
+    expect(/chujai@example\.com/.test(sent.text) && sent.rows === 4, 'confirmation names the email and lists receipt, plate and both dates');
+    expect(!sent.spinner && !sent.inbox, 'no live status and no inbox on the website');
+    const statusBar = JSON.parse(await p.eval(`JSON.stringify((()=>{const n=document.querySelector('.ph-notch').getBoundingClientRect();return [...document.querySelectorAll('.ph-status > *')].map(e=>{const r=e.getBoundingClientRect();return r.right<=n.left||r.left>=n.right})})())`));
+    expect(statusBar.every(Boolean), 'status bar items clear of the notch');
   }},
 ];

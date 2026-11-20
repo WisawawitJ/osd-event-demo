@@ -71,14 +71,14 @@ export function saveFile(name, text, type) {
 // CSV with a byte-order mark so spreadsheet apps read the Thai text as UTF-8.
 export const download = (name, rows) => saveFile(name, '﻿' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
 
-// A calendar invite for an approved visit: all-day events in Bangkok time, as access covers whole days.
+// The approval email's calendar file, as in the real app: a Thai/English all-day reminder for the arrival date only.
 export function visitInvite(r) {
   const day = ms => new Date(ms + 7 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
   const text = s => String(s).replace(/[\;,]/g, m => '\\' + m).replace(/\n/g, '\\n');
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//OSD event demo//Parking (simulated)//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
     `UID:${r.ref}@parking.osd.example`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
-    `DTSTART;VALUE=DATE:${day(r.arrival)}`, `DTEND;VALUE=DATE:${day(r.departure + 86400e3)}`,
-    `SUMMARY:${text(`OSD parking · ${r.plate}`)}`, `LOCATION:${text('OSD car park, zone P2 row A (simulated)')}`,
+    `DTSTART;VALUE=DATE:${day(r.arrival)}`, `DTEND;VALUE=DATE:${day(r.arrival + 86400e3)}`,
+    `SUMMARY:${text(`ที่จอดรถ OSD / OSD parking · ${r.plate}`)}`, `LOCATION:${text('OSD car park, zone P2 row A (simulated)')}`,
     `DESCRIPTION:${text(`Demo ticket ${r.ref} for ${r.plate} ${r.province}. Drive to the main gate and the plate camera opens the barrier. Simulated for the OSD event demo.`)}`,
     'END:VEVENT', 'END:VCALENDAR', ''].join('\r\n');
 }

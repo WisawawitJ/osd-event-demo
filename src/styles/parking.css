@@ -300,14 +300,21 @@
 .pk-phone { position: absolute; left: 22px; bottom: 18px; width: 268px; height: min(560px, calc(100% - 36px)); display: flex; flex-direction: column; animation: pk-in .3s ease-out; }
 .pk-phone[hidden] { display: none; }
 .ph-frame { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: #f7f9fb; border: 9px solid #1b2129; border-radius: 34px; box-shadow: 0 20px 50px #10203033, inset 0 0 0 1px #0002; overflow: hidden; font-size: 12px; }
-.ph-notch { position: absolute; top: 5px; left: 50%; transform: translateX(-50%); width: 76px; height: 19px; border-radius: 12px; background: #1b2129; z-index: 3; }
-.ph-status { display: flex; justify-content: space-between; padding: 7px 18px 3px; font-size: 10.5px; font-weight: 600; color: #1d2733; }
-.ph-sys { font-weight: 500; letter-spacing: .02em; }
+.ph-notch { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 62px; height: 17px; border-radius: 10px; background: #1b2129; z-index: 3; }
+/* Status bar: time left of the notch, network and battery right of it, never under it. */
+.ph-status { display: flex; justify-content: space-between; align-items: center; height: 26px; padding: 2px 16px 0 20px; font-size: 11px; font-weight: 600; color: #1d2733; font-variant-numeric: tabular-nums; }
+.ph-sys { display: flex; align-items: center; gap: 4px; }
+.ph-sys b { font-size: 9.5px; font-weight: 600; }
+.showcase-page .ph-sys svg.ph-ic { width: 15px; height: 10px; fill: currentColor; stroke: none; }
+.showcase-page .ph-sys svg.ph-ic.bat { width: 21px; height: 10px; }
+.showcase-page .ph-sys svg.ph-ic.bat rect:first-child { fill: none; stroke: currentColor; }
+.ph-appbar { display: flex; align-items: center; gap: 4px; margin: 4px 8px 6px; font-size: 13px; font-weight: 600; color: #1d2733; }
+.ph-appbar span { display: flex; align-items: center; gap: 6px; }
+.ph-appbar button { min-height: 28px !important; padding: 2px 4px !important; border-radius: 6px; color: #244dba; }
+.showcase-page .ph-appbar svg { width: 16px; height: 16px; }
 .ph-url { display: flex; align-items: center; gap: 6px; margin: 4px 10px 6px; padding: 5px 10px; border-radius: 9px; background: #e8edf2; font-size: 10.5px; color: #4a5c66; }
 .ph-url svg { width: 13px !important; height: 13px !important; }
 .ph-url span { flex: 1; }
-.ph-inbox { position: relative; padding: 2px 4px !important; min-height: 0 !important; border-radius: 6px; }
-.ph-inbox i { position: absolute; top: -4px; right: -5px; font-style: normal; font-size: 8.5px; min-width: 13px; height: 13px; border-radius: 7px; background: #e5483b; color: #fff; display: grid; place-items: center; }
 .ph-screen { flex: 1; overflow-y: auto; padding: 4px 12px 16px; scrollbar-width: none; }
 .ph-home { height: 4px; width: 90px; border-radius: 3px; background: #1b2129; margin: 5px auto 6px; flex-shrink: 0; }
 .ph-caption { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 11px; color: #3d5361; margin-top: 6px; background: #ffffffd9; border-radius: 7px; padding: 3px 8px; align-self: center; }
@@ -343,11 +350,12 @@ html[data-night=true] .ph-caption { background: #ffffffe6; }
 .ph-done > svg { width: 46px !important; height: 46px !important; padding: 10px; border-radius: 50%; background: var(--pk-ok-bg); color: var(--pk-ok); }
 .ph-done strong { display: block; font-size: 17px; margin: 10px 0 4px; font-family: 'OSD Thai', sans-serif; }
 .ph-done p { font-size: 11px; color: var(--muted); line-height: 1.6; margin: 0 0 12px; }
-.ph-ref { display: flex; justify-content: space-between; padding: 9px 11px; border-radius: 9px; background: #fff; border: 1px solid #e3e9ef; font-size: 11px; }
-.ph-ref b { font-variant-numeric: tabular-nums; letter-spacing: .04em; }
-.ph-summary { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); padding: 8px 4px; }
-.ph-wait { display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 11px !important; color: #4a5c66 !important; }
-.ph-wait i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #c7d3f7; border-top-color: var(--pk-blue); animation: pk-spin .9s linear infinite; }
+.ph-receipt { text-align: left; border-radius: 10px; background: #fff; border: 1px solid #e3e9ef; padding: 2px 11px; margin-bottom: 10px; }
+.ph-receipt div { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; padding: 7px 0; border-bottom: 1px solid #edf1f5; }
+.ph-receipt div:last-child { border-bottom: 0; }
+.ph-receipt span { color: var(--muted); }
+.ph-receipt b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.ph-cc-note { font-size: 9.5px; color: var(--muted); text-align: center; margin: 0 12px 10px; }
 @keyframes pk-spin { to { transform: rotate(360deg); } }
 .ph-link { font-size: 11px !important; color: #244dba; min-height: 30px !important; }
 .ph-banner { position: absolute; left: 8px; right: 8px; top: 30px; z-index: 4; display: flex; align-items: center; gap: 9px; text-align: left; padding: 9px 10px !important; border-radius: 14px; background: #ffffffF5; box-shadow: 0 10px 26px #10203033; animation: pk-drop .45s cubic-bezier(.2, .9, .3, 1.2); min-height: 0 !important; }
