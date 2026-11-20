@@ -26,7 +26,7 @@
 .parking-active #viewport { height: calc(100dvh - 330px); min-height: 500px; }
 .parking-active .context-panel { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 .parking-active .context-panel .panel-heading { padding: 20px 22px 0; margin-bottom: 12px; }
-.parking-active.phone-open .scene-title { opacity: 0; }
+.parking-active.phone-open .scene-title, .parking-active.phone-open #scene-chip { opacity: 0; }
 .parking-active #viewport:has(.has-caption) .scene-bottom { opacity: 0; }
 .scene-title, .scene-bottom { transition: opacity .25s; }
 

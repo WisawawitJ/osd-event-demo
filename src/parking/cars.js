@@ -87,6 +87,13 @@ export function createCar({plate, province, color = 0}) {
   return car;
 }
 
+// Head and tail lamps glow after dark.
+export function setCarLights(night) {
+  const p = sharedParts();
+  p.headMaterial.emissiveIntensity = night ? 2.4 : .35;
+  p.tailMaterial.emissiveIntensity = night ? 1.6 : .25;
+}
+
 export function disposeCars() {
   if (!shared) return;
   for (const k of ['body', 'glass', 'roof', 'wheels', 'head', 'tail', 'plate', 'blob']) shared[k].dispose();

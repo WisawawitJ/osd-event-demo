@@ -53,7 +53,7 @@ function aisleToExit(stall) {
   else r.toZ(LANE_OUT - 2).arc(2, Math.PI / 2).toX(GATE.exitX - 1.8).arc(1.8, -Math.PI / 2);
   return r.toZ(GATE.exitStopZ).build();
 }
-const exitToStreet = () => new Route(GATE.exitX, GATE.exitStopZ, SOUTH).toZ(STREET.laneEast - 2.6).arc(2.6, Math.PI / 2).toX(98).build();
+const exitToStreet = () => new Route(GATE.exitX, GATE.exitStopZ, SOUTH).toZ(STREET.laneEast - 2.6).arc(2.6, Math.PI / 2).toX(70).build();
 const gateBackOut = () => new Route(GATE.entryX, GATE.entryStopZ, SOUTH).arc(2.6, -Math.PI / 2).build();
 const awayEast = () => new Route(GATE.entryX - 2.6, STREET.laneEast, EAST).toX(98).build();
 const passing = dir => (dir > 0 ? new Route(-98, STREET.laneEast, EAST).toX(98) : new Route(98, STREET.laneWest, WEST).toX(-98)).build();

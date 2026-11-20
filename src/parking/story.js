@@ -133,10 +133,11 @@ export function createStory(ctx) {
       ctx.panel.show('gate');
       ctx.sim.setNow(at(11, 30));
       const k = ctx.sim.key(STORY.plate, STORY.province);
-      const leaving = ctx.traffic.leave(k);
+      ctx.traffic.leave(k);
       await s.wait(4200);
       ctx.fly('gate', 2400);
-      await leaving; s.alive();
+      // Done once the exit is logged and the barrier is down again; the car drives off in the background.
+      await s.until(() => !ctx.sim.state.presence.has(k) && ctx.sim.state.gate === 'closed', 60000); s.alive();
       ctx.panel.show('overview');
     }, hold: 3000},
   ];

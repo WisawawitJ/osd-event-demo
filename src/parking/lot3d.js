@@ -4,6 +4,7 @@
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
 import {DRIVE, GATE, STREET, SITE, Y} from './layout.js';
+import {setCarLights} from './cars.js';
 
 export function createLot({scene, stalls, schedule}) {
   const root = new THREE.Group();
@@ -209,6 +210,7 @@ export function createLot({scene, stalls, schedule}) {
 
   function setNight(night) {
     lampMat.emissiveIntensity = night ? 2.2 : 0;
+    setCarLights(night);
     schedule();
   }
 

@@ -1,10 +1,12 @@
 // The visitor's phone: the public request form, the confirmation, and the emailed ticket.
-import {t, fmtDate, fmtTime} from './i18n.js';
+import {t, fmtDate, fmtTime, bkk} from './i18n.js';
 import {esc, icon, patch, fakeQr} from './dom.js';
 import {PROVINCES} from './sim.js';
 
 const blankForm = () => ({name: '', phone: '', email: '', company: '', contact: '', plate: '', province: '', arrival: '2026-11-24', departure: '2026-11-24', notes: '', consent: false, faceConsent: false, face: false, photo: 'idle'});
 const dateValue = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d, -7); };
+// The form offers today and the next 30 days, shown in the chosen language.
+const DATE_OPTIONS = Array.from({length: 31}, (_, i) => { const ms = bkk(2026, 11, 24 + i); const d = new Date(ms + 7 * 3600e3); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`; });
 
 // An illustrated car photo for the plate-reading step (drawn, not captured).
 function carPhoto(plate, province, reading) {
@@ -23,6 +25,9 @@ export function createPhone({root, sim, actions}) {
     const v = ui.form[name];
     return `<label class="ph-field${ui.typing === name ? ' typing' : ''}"><span>${label}${required ? ' *' : ''}</span><input name="${name}" data-focus="ph-${name}" type="${type}" value="${esc(v)}" placeholder="${esc(placeholder)}"${type === 'email' ? ' inputmode="email"' : ''}>${help ? `<small>${help}</small>` : ''}</label>`;
   }
+  function dateField(name, label) {
+    return `<label class="ph-field"><span>${label} *</span><select name="${name}" data-focus="ph-${name}">${DATE_OPTIONS.map(v => `<option value="${v}"${ui.form[name] === v ? ' selected' : ''}>${fmtDate(dateValue(v))}</option>`).join('')}</select></label>`;
+  }
   function formScreen() {
     const f = ui.form;
     return `<div class="ph-hero"><strong>${t('ph.formTitle')}</strong><span>${t('ph.formIntro')}</span></div>
@@ -31,7 +36,7 @@ export function createPhone({root, sim, actions}) {
     ${field('contact', t('req.contact'), {type: 'email', placeholder: 'name@osd.example'})}
     ${field('company', t('req.company'), {required: false})}
     ${field('phone', t('req.phone'), {type: 'tel', placeholder: '08x-xxx-xxxx'})}
-    <div class="ph-two">${field('arrival', t('req.arrival'), {type: 'date'})}${field('departure', t('req.departure'), {type: 'date'})}</div>
+    <div class="ph-two">${dateField('arrival', t('req.arrival'))}${dateField('departure', t('req.departure'))}</div>
     <div class="ph-card">
       <button type="button" class="ph-photo-btn" data-ph="photo"${cue('photo')}>${icon('camera')}${t('ph.photo')}</button>
       ${f.photo !== 'idle' ? `<div class="ph-photo-wrap">${carPhoto(f.photo === 'idle' ? '' : (ui.photoPlate || f.plate), ui.photoProvince || f.province, f.photo === 'reading')}<span class="ph-photo-state ${f.photo}">${f.photo === 'reading' ? t('ph.photo.reading') : t('ph.photo.done')}</span></div>` : ''}

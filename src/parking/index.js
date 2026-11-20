@@ -81,7 +81,8 @@ export function createParking({scene, schedule, capture, fly, onStoryChange = ()
       if (traffic.busy && !quiet) overlays.toast(esc(t('gate.busy')));
       if (kind === 'unknown') { const [plate, province] = pickOne(UNKNOWN_PLATES); traffic.arrive({plate, province, color: Math.floor(Math.random() * 9), fromX}); return; }
       const pool = sim.state.vehicles.filter(v => v.enabled && v.sync === 'synced' && !parkedIds.has(v.id) && (kind === 'visitor' ? v.type === 'guest' && v.validFrom <= sim.now() && v.validTo >= sim.now() : v.type === 'staff'));
-      const v = pickOne(pool);
+      // The newest approved visitor drives up first, so a request made on the phone can be followed to the gate.
+      const v = kind === 'visitor' ? pool[pool.length - 1] : pickOne(pool);
       if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX});
     },
   };
