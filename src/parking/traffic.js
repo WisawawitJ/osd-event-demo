@@ -235,6 +235,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           agents.set(k, agent);
           refreshBays();
           const going = drive(agent, gateToStall(stall), {speed: 5.5}, gen);
+          going.catch(() => {}); // awaited later; if a reset cancels the drive before that, its rejection is expected
           await waitFor(() => passed(agent, 6.5), gen);
           hooks.onLeaveGate?.('in');
           releaseLane();
@@ -284,6 +285,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           agents.delete(k);
           refreshBays();
           const going = drive(agent, exitToStreet(), {speed: LANE_SPEED[1]}, gen);
+          going.catch(() => {}); // awaited later; if a reset cancels the drive before that, its rejection is expected
           await waitFor(() => passed(agent, 6), gen);
           hooks.onLeaveGate?.('out');
           releaseLane();

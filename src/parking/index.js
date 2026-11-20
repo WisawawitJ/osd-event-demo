@@ -29,7 +29,7 @@ function idleStaffCars(sim, traffic) {
 // Parked cars that may drive out; VIPs stay. The explore page, which only brings staff cars back, passes staffOnly.
 const leavingCandidates = (sim, traffic, {staffOnly = false} = {}) => traffic.parkedKeys().filter(k => { const type = sim.state.presence.get(k)?.type; return staffOnly ? type === 'staff' : type !== 'vip'; });
 
-export function createParking({scene, schedule, capture, fly}) {
+export function createParking({scene, schedule, renderer, afterRender, capture, fly}) {
   let interactHandler = () => {};
   const onInteract = () => interactHandler();
   const $ = s => document.querySelector(s);
@@ -54,21 +54,45 @@ export function createParking({scene, schedule, capture, fly}) {
   }
   const snap = which => capture(lot.cameras[which]);
 
+  // Live LPR feed: after each 3D frame, draw the gate camera into the pop-up's picture area of the same canvas
+  // (a scissored viewport), and place the plate box from that camera. Costs one extra render while it shows.
+  let live = null;
+  const liveSize = new THREE.Vector2(), liveViewport = new THREE.Vector4(), liveScissor = new THREE.Vector4();
+  function drawLiveFeed() {
+    const area = active && live ? overlays.feedView() : null;
+    if (!area) return;
+    const canvas = renderer.domElement, c = canvas.getBoundingClientRect(), r = area.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) return;
+    const x = r.left - c.left, y = c.bottom - r.bottom; // three.js viewports count from the bottom, in CSS pixels
+    const {camera, agent} = live;
+    camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
+    renderer.getViewport(liveViewport); renderer.getScissor(liveScissor); renderer.getSize(liveSize);
+    const scissorTest = renderer.getScissorTest();
+    renderer.setViewport(x, y, r.width, r.height); renderer.setScissor(x, y, r.width, r.height); renderer.setScissorTest(true);
+    renderer.render(scene, camera);
+    renderer.setViewport(liveViewport); renderer.setScissor(liveScissor); renderer.setScissorTest(scissorTest);
+    overlays.setFeedBox(agent.car.parent ? plateBox(camera, agent) : null);
+  }
+  afterRender?.add(drawLiveFeed);
+
   const traffic = createTraffic({lot, sim, schedule, hooks: {
     snapshot: snap,
     async readPlate(which, agent, verdict) {
       const camera = lot.cameras[which];
       const confidence = .9 + Math.random() * .09;
       const shot = snap(which);
-      overlays.showFeed({which, snapshot: shot, box: plateBox(camera, agent), phase: 'reading', plate: agent.plate, province: agent.province, verdict, confidence});
+      // The pop-up shows the gate camera live: the 3D view draws this camera into its picture area every frame.
+      live = {camera, agent};
+      overlays.showFeed({which, snapshot: shot, live: Boolean(renderer && afterRender), phase: 'reading', plate: agent.plate, province: agent.province, verdict, confidence});
       panel.setSnapshot(which, shot);
+      schedule();
       await sleep(900);
       overlays.updateFeed({phase: 'done'});
       await sleep(verdict.allow ? 500 : 300);
     },
     onFull(plate) { overlays.toast(`${icon('alert')}<span>${esc(t('gate.full', {plate}))}</span>`); },
     onLeaveGate(which) {
-      const refresh = () => { const shot = snap(which); panel.setSnapshot(which, shot); overlays.updateFeed({snapshot: shot, box: null}); };
+      const refresh = () => { const shot = snap(which); panel.setSnapshot(which, shot); };
       later(refresh, 700);
       overlays.hideFeed(3200);
     },
@@ -76,6 +100,7 @@ export function createParking({scene, schedule, capture, fly}) {
 
   const actions = {
     interact: () => onInteract(),
+    feedChanged: () => schedule(),
     toast: text => overlays.toast(esc(text)),
     approve(id) { sim.approve(id); },
     resolveAlert(id, decision, reason) { sim.resolveAlert(id, decision === 'open' ? 'open' : 'deny', reason); },
@@ -255,7 +280,7 @@ export function createParking({scene, schedule, capture, fly}) {
     setNight(night) { lot.setNight(night); },
     toggleLang() { setLang(getLang() === 'en' ? 'th' : 'en'); },
     setInteractHandler(fn) { interactHandler = fn; },
-    dispose() { story.stop(); clearTimeout(ambientTimer); clearTimeout(passTimer); clearInterval(autoDeny); lot.dispose(); disposeCars(); },
+    dispose() { afterRender?.delete(drawLiveFeed); story.stop(); clearTimeout(ambientTimer); clearTimeout(passTimer); clearInterval(autoDeny); lot.dispose(); disposeCars(); },
   };
 }
 

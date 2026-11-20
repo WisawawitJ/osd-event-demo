@@ -61,7 +61,8 @@ try {
   // and step down (never back up) towards 1x while continuous rendering stays under ~38 fps.
   const maxPixelRatio = Math.min(devicePixelRatio, 1.5), minPixelRatio = Math.min(1, maxPixelRatio);
   let pixelRatio = maxPixelRatio, slowFrames = 0, lastFrameAt = 0;
-  let warming = false; // the startup shader warm-up holds normal frames so its temporary states never show
+  let warming = false;
+  const afterRender = new Set(); // extra views drawn into the same canvas after each frame (the live LPR feed) // the startup shader warm-up holds normal frames so its temporary states never show
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -138,7 +139,9 @@ try {
     frame = requestAnimationFrame(time => {
       frame = 0;
       if (disposed || warming) return;
-      renderer.render(scene, camera); fpsMeter?.();
+      renderer.render(scene, camera);
+      for (const draw of afterRender) draw();
+      fpsMeter?.();
       adaptResolution(time);
     });
   }
@@ -477,7 +480,7 @@ try {
        }
        // The parking access demo adds its own lot, cars and UI to this scene (src/parking).
        const parkingModule=await import('osd/parking/index.js');
-       parking=parkingModule.createParking({scene,schedule,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
+       parking=parkingModule.createParking({scene,schedule,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
        parking.lot.root.visible=renderKit.ground.visible;
        if(new URLSearchParams(location.search).has('debug')){window.__parking=parking;window.__renderer=renderer;window.__scene=scene;window.__camera=camera;window.__controls=controls;}
        simulation.subscribe(()=>parking.setNight(simulation.getState().night));

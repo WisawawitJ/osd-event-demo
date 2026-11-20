@@ -338,12 +338,18 @@ export const scenarios = [
     await p.until("window.__parking && __parking.active && document.documentElement.dataset.warm==='done'", {timeout: 40000});
     await p.until(`[...__parking.lot.root.children].some(c=>c.name==='Demo_car_'&&c.position.x>-60&&c.position.x<20)`, {timeout: 20000, what: 'a street car'});
     // Pick and follow one car in the same frame loop (a car picked earlier may already have left the stretch).
-    await p.eval(`(()=>{let c=null;window.__s=[];const f=t=>{if(!c||!c.parent){c=[...__parking.lot.root.children].find(c=>c.name==='Demo_car_'&&c.position.x>-60&&c.position.x<20)||null;window.__s=[];}if(c)__s.push([t,c.position.x]);window.__fr=requestAnimationFrame(f)};window.__fr=requestAnimationFrame(f)})()`);
-    // Keep the main thread busy meanwhile, as scrolling or a heavy view does.
-    await p.eval(`window.__busy=setInterval(()=>{const end=performance.now()+6;while(performance.now()<end);},16)`);
-    await p.sleep(1500);
-    const s = await p.eval('clearInterval(__busy),cancelAnimationFrame(__fr),__s');
-    expect(s.length > 20, `followed one car for a while (${s.length} frames)`);
+    // Keeps the longest trace (a car may leave the stretch during the window); up to three windows under load.
+    let s = [], ticks = 0;
+    for (let attempt = 0; attempt < 3 && s.length <= 20; attempt++) {
+      await p.until(`[...__parking.lot.root.children].some(c=>c.name==='Demo_car_'&&c.position.x>-60&&c.position.x<20)`, {timeout: 20000, what: 'a street car'});
+      await p.eval(`(()=>{let c=null,cur=[];window.__s=[];window.__ticks=0;const f=t=>{__ticks++;if(!c||!c.parent||c.position.x<-60||c.position.x>20){c=[...__parking.lot.root.children].find(c=>c.name==='Demo_car_'&&c.position.x>-60&&c.position.x<20)||null;cur=[];}if(c){cur.push([t,c.position.x]);if(cur.length>__s.length)window.__s=cur;}window.__fr=requestAnimationFrame(f)};window.__fr=requestAnimationFrame(f)})()`);
+      // Keep the main thread busy meanwhile, as scrolling or a heavy view does.
+      await p.eval(`window.__busy=setInterval(()=>{const end=performance.now()+6;while(performance.now()<end);},16)`);
+      await p.sleep(1500);
+      s = await p.eval('clearInterval(__busy),cancelAnimationFrame(__fr),__s');
+      ticks = await p.eval('__ticks');
+    }
+    expect(s.length > 20, `followed one car for a while (${s.length} frames of ${ticks})`);
     if (s.length < 2) return;
     const v = Math.abs(s.at(-1)[1] - s[0][1]) / ((s.at(-1)[0] - s[0][0]) / 1000);
     expect(Math.abs(v - 7) < .2 || Math.abs(v - 9) < .2, `street car at 7 or 9 m/s (measured ${v.toFixed(2)})`);
@@ -397,5 +403,17 @@ export const scenarios = [
     expect(!sent.spinner && !sent.inbox, 'no live status and no inbox on the website');
     const statusBar = JSON.parse(await p.eval(`JSON.stringify((()=>{const n=document.querySelector('.ph-notch').getBoundingClientRect();return [...document.querySelectorAll('.ph-status > *')].map(e=>{const r=e.getBoundingClientRect();return r.right<=n.left||r.left>=n.right})})())`));
     expect(statusBar.every(Boolean), 'status bar items clear of the notch');
+  }},
+  {name: 'LPR pop-up is live: it shows the gate camera and its plate box follows the car', async run(p, expect) {
+    await p.goto('?dest=parking&debug=1&speed=5');
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`void __parking.traffic.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:5,fromX:-40})`);
+    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='1กก 1111')`, {timeout: 30000, what: 'car at the gate'});
+    expect(await p.eval(`!!document.querySelector('.pk-feed-img.live')`), 'the pop-up picture is the live camera');
+    await p.click(`[data-alert-open="${await p.eval(`__parking.sim.state.alerts.find(a=>a.status==='open'&&a.plate==='1กก 1111').id`)}"]`);
+    await p.until(`__parking.sim.state.gate === 'open'`, {timeout: 15000, what: 'barrier open'});
+    const box = () => p.eval(`(()=>{const b=document.querySelector('.pk-feed-box');return b&&!b.hidden?b.style.left+b.style.top:''})()`);
+    const a = await box(); await p.sleep(150); const b = await box();
+    expect(a && b && a !== b, `plate box moves with the car (${a} → ${b})`);
   }},
 ];

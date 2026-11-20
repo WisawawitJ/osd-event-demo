@@ -11,13 +11,15 @@ export function createOverlays({layer, sim, actions}) {
 
   function renderFeed() {
     const f = state.feed;
+    if (feed.hidden !== !f) actions.feedChanged?.(); // the 3D view redraws so a live picture appears or clears
     feed.hidden = !f;
     if (!f) return;
     const v = f.verdict;
     const verdict = f.phase === 'reading' ? '' : v.exit ? `<span class="pk-pill info">${t('lpr.exit')}</span>` : v.allow ? `<span class="pk-pill ok">${t('lpr.match')} · ${t(`type.${v.type}`)}</span>` : `<span class="pk-pill bad">${t('lpr.nomatch')}</span>`;
-    const box = f.box ? `<i class="pk-feed-box ${f.phase}" style="left:${f.box.x * 100}%;top:${f.box.y * 100}%;width:${f.box.w * 100}%;height:${f.box.h * 100}%"></i>` : '';
+    // Live: the box element always exists and is placed each frame; a still keeps its fixed box.
+    const box = f.live ? `<i class="pk-feed-box ${f.phase}" hidden></i>` : f.box ? `<i class="pk-feed-box ${f.phase}" style="left:${f.box.x * 100}%;top:${f.box.y * 100}%;width:${f.box.w * 100}%;height:${f.box.h * 100}%"></i>` : '';
     feed.innerHTML = `<div class="pk-feed-head"><span><i class="pk-rec"></i>${f.which === 'in' ? 'LPR-IN' : 'LPR-OUT'} · ${t('sim')}</span><time>${fmtTime(sim.now(), true)}</time></div>
-      <div class="pk-feed-img">${f.snapshot ? `<img src="${f.snapshot}" alt="">` : ''}${box}</div>
+      <div class="pk-feed-img${f.live ? ' live' : ''}">${!f.live && f.snapshot ? `<img src="${f.snapshot}" alt="">` : ''}${box}</div>
       <div class="pk-feed-result"><div class="pk-feed-plate${f.phase === 'reading' ? ' reading' : ''}"><b>${f.phase === 'reading' ? '· · ·' : esc(f.plate)}</b><small>${f.phase === 'reading' ? t('lpr.read') + '…' : esc(f.province)}</small></div><div class="pk-feed-meta">${f.phase === 'reading' ? '' : `<small>${t('lpr.confidence')} ${Math.round(f.confidence * 100)}%</small>`}${verdict}${v.vehicle?.validTo && f.phase !== 'reading' && !v.exit ? `<small>${t('lpr.validUntil')} ${fmtTime(v.vehicle.validTo)}</small>` : ''}</div></div>`;
   }
 
@@ -53,6 +55,16 @@ export function createOverlays({layer, sim, actions}) {
   return {
     showFeed(f) { clearTimeout(hideTimer); state.feed = f; renderFeed(); },
     updateFeed(patch) { if (state.feed) { Object.assign(state.feed, patch); renderFeed(); } },
+    // The live picture area and its plate box, for the canvas inset drawn each frame (index.js).
+    feedView() { return state.feed?.live && !feed.hidden ? feed.querySelector('.pk-feed-img') : null; },
+    setFeedBox(box) {
+      const el = feed.querySelector('.pk-feed-box');
+      if (!el) return;
+      // Hidden once the plate has left the camera's frame.
+      if (box && (box.x + box.w < 0 || box.x > 1 || box.y + box.h < 0 || box.y > 1)) box = null;
+      el.hidden = !box;
+      if (box) Object.assign(el.style, {left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.w * 100}%`, height: `${box.h * 100}%`});
+    },
     hideFeed(delay = 3500) { clearTimeout(hideTimer); hideTimer = setTimeout(() => { state.feed = null; renderFeed(); }, delay); },
     showAlert(id) { state.alertId = id; state.reason = REASONS[1]; renderAlert(); },
     setCue(name) { state.cue = name; renderAlert(); },
