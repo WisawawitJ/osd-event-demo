@@ -34,7 +34,7 @@ Useful URLs:
 - On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance** and
   **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
-- **EN / TH** in the header switches the parking demo between Thai and English. The building's own panels stay in Thai.
+- **EN / TH** in the header switches the whole showcase page (building and parking) between Thai and English. Names, plates and provinces stay as entered. The `#explore` page stays in Thai.
 - **Night** in the header switches the whole scene, car park lamps included.
 
 ### The parking story (10 steps, about 2½ minutes on auto)

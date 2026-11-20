@@ -1,7 +1,8 @@
 import {createCameraFlight} from 'osd/viewer/camera-flight.js';
 import {createSecurityPreview} from 'osd/viewer/security-preview.js';
 import {createSceneTransition} from 'osd/viewer/scene-transition.js';
-import {createShowcase} from 'osd/viewer/showcase.js';
+import {createShowcase,translatePage,pageString} from 'osd/viewer/showcase.js';
+import {getLang} from 'osd/parking/i18n.js';
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import { OrbitControls } from 'osd/node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'osd/node_modules/three/examples/jsm/loaders/GLTFLoader.js';
@@ -33,11 +34,15 @@ const abort = new AbortController();
 let currentFloor = 'all', exploded = false, cutaway = false;
 let renderer, controls, model, resizeObserver, showcase, flight, sceneTransition, securityPreview, parking = null;
 const isShowcase=Boolean(document.querySelector('#showcase')),isAtom=Boolean(document.querySelector('#atom'));
+// Status texts follow the TH/EN switch on the showcase page only; #explore and the kiosk stay Thai.
+const L=(th,en)=>isShowcase&&getLang()==='en'?en:th;
 let frame = 0, disposed = false;
 const floorRoots = [], basePositions = new Map(), cutMeshes = [], roofs = [];
 const ownedMaterials = new Set();
 
 retry.addEventListener('click', () => location.reload());
+// The showcase's static texts start in the chosen language (Thai unless English was picked before).
+if(isShowcase)translatePage({initial:true});
 function fail(message) {
   status.dataset.state = 'error';
   status.textContent = message;
@@ -65,6 +70,7 @@ try {
   canvas.tabIndex = 0;
   canvas.setAttribute('aria-label', 'โมเดลอาคาร OSD ลากเพื่อหมุน ใช้ปุ่มลูกศรเพื่อเลื่อน ปุ่มบวกหรือลบเพื่อซูม และ R เพื่อคืนมุมมอง');
   viewport.prepend(canvas);
+  if(isShowcase){canvas.dataset.i18nLabel='canvas';canvas.setAttribute('aria-label',pageString('canvas'));}
   controls = new OrbitControls(camera, canvas);
   controls.enableDamping = false;
   controls.screenSpacePanning = true;
@@ -93,7 +99,7 @@ try {
   controls.addEventListener('change', schedule);
   const readPose=()=>({eye:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov});
   const writePose=pose=>{camera.position.fromArray(pose.eye);controls.target.fromArray(pose.target);camera.fov=pose.fov;camera.updateProjectionMatrix();controls.update();schedule();};
-  flight=createCameraFlight({read:readPose,write:writePose,onState(active){const el=document.querySelector('#flight-status');if(el)el.textContent=active?'กำลังพาไปยังจุดที่เลือก…':'';}});
+  flight=createCameraFlight({read:readPose,write:writePose,onState(active){const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';}});
   // An eased turn of the camera around its target (the lights view). It runs its own frame loop
   // only while it turns; stopSpin(), every flight (flight.stop) and a drag on the model end it.
   let spinFrame=0,spinEnd=null;
@@ -260,7 +266,7 @@ try {
   });
   canvas.addEventListener('webglcontextlost', event => {
     event.preventDefault();
-    fail('การแสดงผล 3D หยุดทำงาน ลองโหลดหน้านี้ใหม่');
+    fail(L('การแสดงผล 3D หยุดทำงาน ลองโหลดหน้านี้ใหม่','3D rendering stopped. Try reloading this page.'));
   });
 
   let lastAspect = 0;
@@ -378,7 +384,7 @@ try {
         }
       });
       status.dataset.state = 'ready';
-      status.textContent = 'โมเดลพร้อมแสดง';
+      status.textContent = L('โมเดลพร้อมแสดง','Model ready');
       for (const button of [...floorButtons, explodeButton, cutButton, resetButton, ...extraButtons]) button.disabled = false;
       updateView();
       if(isShowcase){
@@ -434,16 +440,16 @@ try {
           const orient=contextPose();
           const phases=[];
           if(!same&&lastDestination!=='overview')phases.push({to:retreat,duration:local?600:1050,
-           onStart(){onPhase('ถอยออกจากจุดเดิม');if(!local)sceneTransition.begin(()=>applyDestination('overview'));},
+           onStart(){onPhase(L('ถอยออกจากจุดเดิม','Pulling back'));if(!local)sceneTransition.begin(()=>applyDestination('overview'));},
            onUpdate(t){if(!local)sceneTransition.progress(Math.max(0,(t-.25)/.75));},
            onEnd(){if(!local)sceneTransition.finish();}
           });
           if(!local&&!same)phases.push({to:orient,duration:lastDestination==='overview'?450:750,
-           onStart(){onPhase('มองตำแหน่งบนอาคาร');marker.position.set(to.target[0],id==='energy'?15.8:id==='meeting'?meetingTarget.y-.6:.2,to.target[2]);marker.visible=id!=='overview';},
+           onStart(){onPhase(L('มองตำแหน่งบนอาคาร','Locating it on the building'));marker.position.set(to.target[0],id==='energy'?15.8:id==='meeting'?meetingTarget.y-.6:.2,to.target[2]);marker.visible=id!=='overview';},
            onUpdate(){schedule();}
           });
           phases.push({to,duration:local?1150:same?850:1450,
-           onStart(){onPhase('กำลังเข้าใกล้จุดหมาย');sceneTransition.begin(()=>applyDestination(id));},
+           onStart(){onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));},
            onUpdate(t){sceneTransition.progress(Math.min(1,t/.75));markerMaterial.opacity=.6*(1-t);},
            onEnd(){sceneTransition.finish();}
           });
@@ -612,11 +618,11 @@ try {
        writePose(overviewPose());
       }
     } catch (error) {
-      if (error.name !== 'AbortError' && !disposed) fail('โหลดโมเดลไม่สำเร็จ ตรวจสอบไฟล์โมเดล แล้วลองโหลดใหม่');
+      if (error.name !== 'AbortError' && !disposed) fail(L('โหลดโมเดลไม่สำเร็จ ตรวจสอบไฟล์โมเดล แล้วลองโหลดใหม่','Could not load the model. Check the model file, then reload.'));
     }
   }
   void loadModel();
 } catch {
   renderer?.dispose();
-  fail('เปิดมุมมอง 3D ไม่สำเร็จ กรุณาเปิดใช้ WebGL แล้วลองโหลดใหม่');
+  fail(L('เปิดมุมมอง 3D ไม่สำเร็จ กรุณาเปิดใช้ WebGL แล้วลองโหลดใหม่','Could not open the 3D view. Turn on WebGL, then reload.'));
 }

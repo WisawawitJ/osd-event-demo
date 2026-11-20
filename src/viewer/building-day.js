@@ -1,11 +1,15 @@
+import {getLang} from 'osd/parking/i18n.js';
 // A deterministic narrative dataset. No real sensors, device calls or random values.
+// Titles and details follow the TH/EN switch (getters), so a re-render picks up the language.
+const L=(th,en)=>getLang()==='en'?en:th;
+const event=(minute,destination,layer,title,detail)=>({minute,destination,layer,get title(){return L(...title);},get detail(){return L(...detail);}});
 export const dayEvents = [
- {minute:495,destination:'access',title:'อาคารเริ่มวันใหม่',detail:'อ่านทะเบียนและเปิดทางเข้า',layer:'none'},
- {minute:540,destination:'meeting',title:'เริ่มประชุม ชั้น 4',detail:'มีคน 6 คน · เปิดไฟและแอร์',layer:'occupancy'},
- {minute:720,destination:'energy',title:'แดดดีบนดาดฟ้า',detail:'โซลาร์ช่วยจ่ายไฟให้อาคาร',layer:'none'},
- {minute:870,destination:'meeting',title:'ห้องว่าง แต่แอร์ยังเปิด',detail:'ดูสถานะคนและแอร์ประกอบกัน',layer:'temperature'},
- {minute:900,destination:'pond',title:'ระดับน้ำลดลง',detail:'ตรวจสอบบ่อปลาที่ชั้น 1',layer:'none'},
- {minute:1080,destination:'overview',title:'อาคารหลังเลิกงาน',detail:'ปิดไฟและแอร์ในห้องทำงาน',layer:'none'}
+ event(495,'access','none',['อาคารเริ่มวันใหม่','The building starts its day'],['อ่านทะเบียนและเปิดทางเข้า','Plate read and entrance opened']),
+ event(540,'meeting','occupancy',['เริ่มประชุม ชั้น 4','Meeting starts, floor 4'],['มีคน 6 คน · เปิดไฟและแอร์','6 people · lights and AC on']),
+ event(720,'energy','none',['แดดดีบนดาดฟ้า','Strong sun on the roof'],['โซลาร์ช่วยจ่ายไฟให้อาคาร','Solar helps power the building']),
+ event(870,'meeting','temperature',['ห้องว่าง แต่แอร์ยังเปิด','Room empty, AC still on'],['ดูสถานะคนและแอร์ประกอบกัน','Compare occupancy with the AC']),
+ event(900,'pond','none',['ระดับน้ำลดลง','Water level dropping'],['ตรวจสอบบ่อปลาที่ชั้น 1','Check the fish pond on floor 1']),
+ event(1080,'overview','none',['อาคารหลังเลิกงาน','After hours'],['ปิดไฟและแอร์ในห้องทำงาน','Office lights and AC off'])
 ];
 const solarPoints=[[480,2.2],[540,4.5],[660,8.2],[720,9.4],[810,8.4],[900,5.8],[1020,1.1],[1080,0]];
 const lerp=(points,t)=>{for(let i=1;i<points.length;i++){const[a,x]=points[i-1],[b,y]=points[i];if(t<=b)return x+(y-x)*Math.max(0,(t-a)/(b-a));}return points.at(-1)[1];};
@@ -13,8 +17,8 @@ const round=n=>Math.round(n*10)/10;
 export const formatTime=minute=>`${String(Math.floor(minute/60)).padStart(2,'0')}:${String(Math.floor(minute%60)).padStart(2,'0')}`;
 export function incidentsFor(telemetry,rooms){
  const incidents=[];
- if(!telemetry.occupied&&rooms['f4_meeting_2']?.climate)incidents.push({id:'empty-ac',destination:'meeting',title:'ห้องว่าง แต่แอร์ยังเปิด',detail:'ห้องประชุมย่อย 2 ชั้น 4 · ไม่มีคน / แอร์เปิด',hint:'ตรวจสอบตารางใช้ห้องก่อนปิดแอร์',layer:'occupancy'});
- if(telemetry.water<65)incidents.push({id:'pond-low',destination:'pond',title:'ระดับน้ำบ่อต่ำ',detail:`บ่อปลา ชั้น 1 · ${telemetry.water}% / เกณฑ์ 65%`,hint:'ตรวจสอบบ่อและระบบเติมน้ำ',layer:'none'});
+ if(!telemetry.occupied&&rooms['f4_meeting_2']?.climate)incidents.push({id:'empty-ac',destination:'meeting',title:L('ห้องว่าง แต่แอร์ยังเปิด','Room empty, AC still on'),detail:L('ห้องประชุมย่อย 2 ชั้น 4 · ไม่มีคน / แอร์เปิด','Meeting room 2, floor 4 · nobody in / AC on'),hint:L('ตรวจสอบตารางใช้ห้องก่อนปิดแอร์','Check the room booking before turning the AC off'),layer:'occupancy'});
+ if(telemetry.water<65)incidents.push({id:'pond-low',destination:'pond',title:L('ระดับน้ำบ่อต่ำ','Pond water low'),detail:L(`บ่อปลา ชั้น 1 · ${telemetry.water}% / เกณฑ์ 65%`,`Fish pond, floor 1 · ${telemetry.water}% / threshold 65%`),hint:L('ตรวจสอบบ่อและระบบเติมน้ำ','Check the pond and the refill system'),layer:'none'});
  return incidents;
 }
 export function daySnapshot(value,roomMap){
