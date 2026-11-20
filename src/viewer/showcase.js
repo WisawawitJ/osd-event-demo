@@ -51,9 +51,11 @@ export function translatePage({initial=false}={}){
 const order=['overview','parking','meeting','pond','energy','access'],meetingId='f4_meeting_2';
 const initial=()=>({occupied:true,temp:25.6,target:24,pondAlert:false,water:82,solar:8.4,load:12.6,energy:37.8,barrierAngle:0,accessStep:0,scenario:null});
 export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,schedule,onUserOrbit,parking=null}){
- const abort=new AbortController(),signal=abort.signal,effects=createTourEffects({model,schedule,meetingRoom:simulation.rooms.find(r=>r.id===meetingId)});
+ const abort=new AbortController(),signal=abort.signal,effects=createTourEffects({model,schedule,meetingRoom:simulation.rooms.find(r=>r.id===meetingId),ownBarrier:!parking});
+ // One gate on site: with the car park present, the Entrance stop's camera and barrier are the main gate's.
+ const gateCamera=parking?parking.lot.cameras.in:effects.securityCamera;
  const $=s=>document.querySelector(s),content=$('#dashboard-content'),play=$('#tour-play');
- let tourGeneration=0,insights=null;
+ let tourGeneration=0,insights=null,gatePulsed=false;
  let traveling=false,pendingDestination=null;
  let destination='overview',state=initial(),tourTimer=0,scenarioFrame=0,scenarioStart=0,touring=false,disposed=false,sequence=0,cameraImage='',lastPreview=0,lastTick=0;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
@@ -70,7 +72,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   const focused=document.activeElement?.dataset?.control||document.activeElement?.dataset?.action;
   const lights=Object.values(sim.rooms).filter(r=>r.light).length,ac=Object.values(sim.rooms).filter(r=>r.climate).length;
   effects.update({...state,climate:s.climate,light:s.light});
-  if(destination==='access'&&!traveling&&(!cameraImage||performance.now()-lastPreview>=400)){cameraImage=snapshot(effects.securityCamera);lastPreview=performance.now();}
+  if(destination==='access'&&!traveling&&(!cameraImage||performance.now()-lastPreview>=400)){cameraImage=snapshot(gateCamera);lastPreview=performance.now();}
   $('#panel-title').textContent=d.panel;
   $('#panel-status').textContent=destination==='pond'&&state.pondAlert?L('ควรตรวจสอบ','Check needed'):destination==='meeting'?(state.occupied?L('มีคนใช้งาน','In use'):L('ห้องว่าง','Vacant')):destination==='access'?L(...[['พร้อมสาธิต','Ready to demo'],['อ่านทะเบียนแล้ว','Plate read'],['อนุญาตผ่าน','Access granted'],['ไม้กั้นเปิด','Barrier open'],['ผ่านเรียบร้อย','Car through']][state.accessStep]):L('ข้อมูลจำลอง','Simulated data');
   if(destination==='parking')$('#panel-status').textContent=pt('sim.data');
@@ -135,12 +137,14 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   if(kind==='meeting'){state.occupied=true;state.temp=27.4;simulation.selectRoom(meetingId);simulation.setRoom(meetingId,{light:true,climate:true});}
   if(kind==='pond'){state.pondAlert=!state.pondAlert;state.water=state.pondAlert?58:82;state.scenario=null;render();return;}
   if(kind==='energy'){if(simulation.getState().night)simulation.setNight(false);state.solar=state.solar<5?8.4:3.1;}
-  if(kind==='access'){state.accessStep=1;state.barrierAngle=0;}
+  if(kind==='access'){state.accessStep=1;state.barrierAngle=0;gatePulsed=false;}
   render();
   function tick(time){if(disposed||document.hidden)return;const elapsed=(time-scenarioStart)/1000,limit=kind==='meeting'?12:kind==='access'?10:5;
    if(kind==='meeting')state.temp=27.4-Math.min(1,elapsed/12)*2.6;
    if(kind==='access'){state.accessStep=elapsed<1.5?1:elapsed<3?2:elapsed<8?3:4;state.barrierAngle=elapsed<3?0:elapsed<5?(elapsed-3)/2*Math.PI/2:elapsed<7?Math.PI/2:elapsed<9?(9-elapsed)/2*Math.PI/2:0;}
    if(kind==='access'&&reduced.matches)state.barrierAngle=elapsed>=3&&elapsed<8?Math.PI/2:0;
+   // The main gate's arm rises once access is granted (queued behind any car already at the gate).
+   if(kind==='access'&&parking&&!gatePulsed&&elapsed>=3){gatePulsed=true;parking.traffic.pulse(4200);}
    if(!reduced.matches&&time-lastVisual>=50){effects.animate(elapsed);effects.update({...state,climate:actual().climate,light:actual().light});lastVisual=time;}
    if(Math.floor(elapsed*2)!==lastTick){lastTick=Math.floor(elapsed*2);render();}
    if(elapsed<limit)scenarioFrame=requestAnimationFrame(tick);else{scenarioFrame=0;state.scenario=null;render();}

@@ -1,6 +1,6 @@
 import * as T from 'osd/node_modules/three/build/three.module.js';
 // Presentation-only objects. No bindings to hardware or Home Assistant.
-export function createTourEffects({model,schedule,meetingRoom}){
+export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
  const groups={},owned=[],materials=[];let current='overview';
  const root=n=>model.getObjectByName(`Floor_${n}`);
  const group=(id,n)=>{const g=new T.Group();g.name=`Demo_${id}`;g.userData={simulation:true};root(n).add(g);groups[id]=g;return g;};
@@ -53,22 +53,37 @@ export function createTourEffects({model,schedule,meetingRoom}){
  const path=new T.BufferGeometry().setFromPoints([new T.Vector3(-1.4,.16,-5.9),new T.Vector3(-1.4,.16,6.1),new T.Vector3(4,.16,6.1)]);owned.push(path);const lm=new T.LineDashedMaterial({color:'#239b87',dashSize:.22,gapSize:.18});materials.push(lm);const flow=new T.Line(path,lm);flow.computeLineDistances();energy.add(flow);
  const packet=mesh(energy,new T.SphereGeometry(.09,10,8),energyMaterial,[-1.4,.2,1]);
  const access=group('access',1),body=mat('#4b5d6b'),white=mat('#fffdf5'),red=mat('#e37753');
- // Parking aisle: x -13.9 .. -7.9; south site edge z 15.96644.
- // One shared boom spans both arrow-marked directions, just inside that edge.
- const gateX=-13.65,gateZ=15.7,boomLength=5.45,cameraX=-8.1,cameraZ=15.6;
- mesh(access,new T.BoxGeometry(.42,1.18,.45),body,[gateX,.59,gateZ]);
- const boom=new T.Group();boom.position.set(gateX,1.12,gateZ);boom.name='Demo_barrier_arm';access.add(boom);
- mesh(boom,new T.BoxGeometry(boomLength,.12,.14),white,[boomLength/2,0,0]);for(let i=0;i<8;i++)mesh(boom,new T.BoxGeometry(.20,.125,.145),red,[.4+i*.65,0,0]);
- // Optical axis and the physical housing share one transform: local -Z looks into the aisle.
- const cameraHeight=1.6,head=new T.Group();head.name='Demo_security_camera_mount';head.position.set(cameraX,cameraHeight,cameraZ);access.add(head);
- const aim=new T.Vector3(-10.9,.7,8).sub(head.position).normalize();head.quaternion.setFromUnitVectors(new T.Vector3(0,0,-1),aim);
- mesh(head,new T.BoxGeometry(.28,.19,.42),body,[0,0,0]);
- mesh(access,new T.CylinderGeometry(.055,.055,cameraHeight,10),body,[cameraX,cameraHeight/2,cameraZ]);
- const lens=mesh(head,new T.CylinderGeometry(.055,.055,.05,12),mat('#2a3544'),[0,0,-.235]);lens.rotation.x=Math.PI/2;
- const securityCamera=new T.PerspectiveCamera(68,16/9,.05,160);securityCamera.name='Demo_security_camera';securityCamera.position.z=-.27;head.add(securityCamera);
+ // The original demo's barrier and camera at the P1 aisle mouth. With the car park's main gate present
+ // (src/parking) there is one gate only: this one is not built, and the Entrance stop uses the main gate.
+ let boom=null,securityCamera=null;
+ if(ownBarrier){
+  // Parking aisle: x -13.9 .. -7.9; south site edge z 15.96644.
+  // One shared boom spans both arrow-marked directions, just inside that edge.
+  const gateX=-13.65,gateZ=15.7,boomLength=5.45,cameraX=-8.1,cameraZ=15.6;
+  mesh(access,new T.BoxGeometry(.42,1.18,.45),body,[gateX,.59,gateZ]);
+  boom=new T.Group();boom.position.set(gateX,1.12,gateZ);boom.name='Demo_barrier_arm';access.add(boom);
+  mesh(boom,new T.BoxGeometry(boomLength,.12,.14),white,[boomLength/2,0,0]);for(let i=0;i<8;i++)mesh(boom,new T.BoxGeometry(.20,.125,.145),red,[.4+i*.65,0,0]);
+  // Optical axis and the physical housing share one transform: local -Z looks into the aisle.
+  const cameraHeight=1.6,head=new T.Group();head.name='Demo_security_camera_mount';head.position.set(cameraX,cameraHeight,cameraZ);access.add(head);
+  const aim=new T.Vector3(-10.9,.7,8).sub(head.position).normalize();head.quaternion.setFromUnitVectors(new T.Vector3(0,0,-1),aim);
+  mesh(head,new T.BoxGeometry(.28,.19,.42),body,[0,0,0]);
+  mesh(access,new T.CylinderGeometry(.055,.055,cameraHeight,10),body,[cameraX,cameraHeight/2,cameraZ]);
+  const lens=mesh(head,new T.CylinderGeometry(.055,.055,.05,12),mat('#2a3544'),[0,0,-.235]);lens.rotation.x=Math.PI/2;
+  securityCamera=new T.PerspectiveCamera(68,16/9,.05,160);securityCamera.name='Demo_security_camera';securityCamera.position.z=-.27;head.add(securityCamera);
+ }
 
+ // The room light's pool and beam fade in and out (~0.35 s) instead of snapping.
+ let lampLevel=1,lampTarget=1,lampFrame=0;
+ const lampBase=lamp.map(o=>o.material.opacity);
+ function drawLamp(){lamp.forEach((o,i)=>{o.material.opacity=lampBase[i]*lampLevel;o.visible=lampLevel>.001;});schedule();}
+ function fadeLamp(on){
+  lampTarget=on?1:0;if(lampFrame||lampLevel===lampTarget)return;
+  let last=performance.now();
+  const step=time=>{lampLevel=lampTarget>lampLevel?Math.min(lampTarget,lampLevel+(time-last)/350):Math.max(lampTarget,lampLevel-(time-last)/350);last=time;drawLamp();lampFrame=lampLevel===lampTarget?0:requestAnimationFrame(step);};
+  lampFrame=requestAnimationFrame(step);
+ }
  function select(id){current=id;for(const [name,g] of Object.entries(groups))g.visible=name===id;schedule();}
- function update(state){people.forEach(o=>o.visible=state.occupied);lamp.forEach(o=>o.visible=state.light!==false);air.forEach(o=>o.visible=state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;energyMaterial.opacity=state.solar>5?.8:.35;schedule();}
+ function update(state){people.forEach(o=>o.visible=state.occupied);fadeLamp(state.light!==false);air.forEach(o=>o.visible=state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');if(boom)boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;energyMaterial.opacity=state.solar>5?.8:.35;schedule();}
  function animate(t){if(current==='meeting')air.forEach((o,i)=>{o.material.dashSize=.12+.035*Math.sin(t*2+i);});if(current==='energy'){packet.position.z=-5.9+((t*.9)%12);packet.position.x=-1.4;}schedule();}
- select('overview');return {securityCamera,select,update,animate,dispose(){for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
+ select('overview');return {securityCamera,select,update,animate,dispose(){cancelAnimationFrame(lampFrame);for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
 }

@@ -495,7 +495,8 @@ try {
          stopPoses={
            pond:aim(ponds,[33,14,13],[22.7,1,-2.5],48),
            energy:aim([model.getObjectByName('Floor_5_solar_modules')],[12,29,23],[-1.6,15.6,.8],43),
-           access:aim([scene.getObjectByName('Demo_access')],[-24,14,29],[-10.9,.8,10.5],46),
+           // The main gate when the car park is present (one gate on site), else the original demo's barrier.
+           access:aim([scene.getObjectByName('Demo_main_barrier')||scene.getObjectByName('Demo_access')],[-24,14,29],[-10.9,.8,10.5],46),
          };
          return stopPoses;
        }

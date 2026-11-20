@@ -223,7 +223,7 @@ export const scenarios = [
     expect(await p.eval(`${group}.children.filter(o=>o.isLine&&o.visible).length`) === 6, 'six airflow lines from the AC unit');
     const lit = () => p.eval(`${group}.children.filter(o=>o.material?.blending===2&&o.visible).length`);
     const on = await lit();
-    await p.click('[data-control="light"]'); await p.sleep(200);
+    await p.click('[data-control="light"]'); await p.sleep(600); // the light fades out over ~0.35 s
     const off = await lit();
     expect(on === 2 && off === 0, `light pool and beam follow the switch (on ${on}, off ${off})`);
   }},
@@ -232,7 +232,7 @@ export const scenarios = [
     await p.goto(`?${FAST}`);
     await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
     const centre = expr => (p.eval(`JSON.stringify((()=>{const V=__camera.position.constructor,objs=${expr};const min=new V(1e9,1e9,1e9),max=new V(-1e9,-1e9,-1e9);for(const o of objs)o.traverse(m=>{if(!m.geometry)return;m.geometry.computeBoundingBox();const g=m.geometry.boundingBox;for(const x of [g.min.x,g.max.x])for(const y of [g.min.y,g.max.y])for(const z of [g.min.z,g.max.z]){const v=new V(x,y,z).applyMatrix4(m.matrixWorld);min.min(v);max.max(v)}});return min.add(max).multiplyScalar(.5).toArray()})())`)).then(JSON.parse);
-    const stops = {pond: `(()=>{const a=[];__scene.traverse(o=>{if(o.isMesh&&o.name.includes('_koi_pond_'))a.push(o)});return a})()`, energy: `[__scene.getObjectByName('Floor_5_solar_modules')]`, access: `[__scene.getObjectByName('Demo_access')]`};
+    const stops = {pond: `(()=>{const a=[];__scene.traverse(o=>{if(o.isMesh&&o.name.includes('_koi_pond_'))a.push(o)});return a})()`, energy: `[__scene.getObjectByName('Floor_5_solar_modules')]`, access: `[__scene.getObjectByName('Demo_main_barrier')]`};
     for (const [stop, objects] of Object.entries(stops)) {
       await p.click(`[data-destination="${stop}"]`);
       await p.until(`document.body.dataset.tourDestination === '${stop}' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 20000});
@@ -240,5 +240,15 @@ export const scenarios = [
       const off = Math.hypot(c[0] - t[0], c[2] - t[2]);
       expect(off < 1, `${stop}: camera aims within 1 m of the object (off by ${off.toFixed(1)} m)`);
     }
+  }},
+  {name: 'one gate on site: the Entrance stop uses the main gate', async run(p, expect) {
+    await p.goto(`?${FAST}`);
+    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
+    expect(!(await p.eval(`!!__scene.getObjectByName('Demo_barrier_arm')`)), 'no second (original) barrier arm');
+    await p.click('[data-destination="access"]');
+    await p.until(`document.body.dataset.tourDestination === 'access' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 20000});
+    await p.click('[data-action="access"]');
+    await p.until(`__parking.sim.state.gate !== 'closed'`, {timeout: 10000, what: 'the main gate opens for the entrance scenario'});
+    expect(true, 'main gate opened');
   }},
 ];
