@@ -107,7 +107,11 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   if(!arrived){$('#scene-chip').textContent=L('หยุดการบินแล้ว · หมุนสำรวจหรือเลือกจุดต่อไป','Flight stopped · orbit to explore or pick the next spot');effects.select(destination);if(destination==='parking'&&!parking?.active)parking?.enter();render();return false;}
   destination=id;document.body.dataset.tourDestination=id;$('#scene-heading').textContent=d.title;$('#scene-description').textContent=d.description;$('#scene-floor').textContent=d.floor;$('#scene-chip').textContent=d.chip;
   document.querySelectorAll('[data-destination]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.destination===id)));
-  effects.select(id);if(id==='access')cameraImage='';if(id==='parking')parking?.enter();render();return true;
+  effects.select(id);if(id==='access')cameraImage='';
+  // The meeting stop's controls act on its room: select it on arrival, so night lighting is laid out around it
+  // from the start and its switch only changes that room.
+  if(id==='meeting')simulation.selectRoom(meetingId);
+  if(id==='parking')parking?.enter();render();return true;
  }
 
  function scenario(kind){

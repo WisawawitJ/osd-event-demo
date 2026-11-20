@@ -154,4 +154,33 @@ export const scenarios = [
     await p.until(`document.body.dataset.tourDestination !== 'parking' || (__parking.story.running && __parking.story.auto)`, {timeout: 20000, what: `loop takes over (60 s / ${SPEED})`});
     expect(true, 'loop resumed');
   }},
+  {name: 'car park keeps living at building stops (staff cars come and go)', async run(p, expect) {
+    await p.goto(`?${FAST}`);
+    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
+    await p.click('[data-destination="pond"]');
+    await p.sleep(1500);
+    const before = await p.eval('__parking.sim.state.events.length');
+    await p.until(`__parking.sim.state.events.length > ${before}`, {timeout: 15000, what: 'an entry or exit while on the pond stop'});
+    const kinds = await p.eval(`__parking.sim.state.events.slice(0, __parking.sim.state.events.length - ${before}).map(e=>e.kind+':'+e.type).join(',')`);
+    expect(!/unknown/.test(kinds), `no unknown cars away from the parking stop (got ${kinds})`);
+  }},
+
+  {name: 'night: switching the meeting-room light changes only that room', async run(p, expect) {
+    await p.goto(`?${FAST}`);
+    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
+    await p.click('[data-destination="meeting"]');
+    await p.until("document.body.dataset.tourDestination === 'meeting'", {timeout: 20000});
+    await p.click('#tour-night');
+    await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 10000});
+    const spots = `JSON.stringify(__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.visible).map(l=>[l.userData.roomId,l.position.x.toFixed(1),l.position.z.toFixed(1),l.intensity]))`;
+    const before = JSON.parse(await p.eval(spots));
+    await p.click('[data-control="light"]');
+    await p.sleep(300);
+    const after = JSON.parse(await p.eval(spots));
+    const same = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+    expect(after.length === before.length && after.every((s, i) => same(s, before[i])), 'the same spots stay assigned to the same rooms');
+    const changed = after.filter((s, i) => s[3] !== before[i][3]).map(s => s[0]);
+    expect(changed.length > 0 && changed.every(id => id === 'f4_meeting_2'), `only the meeting room's spot changed (changed: ${changed.join(', ') || 'none'})`);
+    await p.click('#tour-night');
+  }},
 ];

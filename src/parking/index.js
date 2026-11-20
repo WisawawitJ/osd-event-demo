@@ -181,9 +181,11 @@ export function createParking({scene, schedule, capture, fly}) {
   function scheduleAmbient() {
     clearTimeout(ambientTimer);
     ambientTimer = later(() => {
-      if (active && !quietAmbient && !traffic.busy && document.visibilityState === 'visible') {
+      // Staff cars come and go whenever the car park is on screen. Unknown cars only on the parking stop,
+      // where their alert can be answered.
+      if (lot.root.visible && !quietAmbient && !traffic.busy && document.visibilityState === 'visible') {
         if (wantsExit(sim.state.presence.size)) actions.simulate('exit', {quiet: true});
-        else if (Math.random() < .12) actions.simulate('unknown', {quiet: true});
+        else if (active && Math.random() < .12) actions.simulate('unknown', {quiet: true});
         else actions.simulate('registered', {quiet: true});
       }
       scheduleAmbient();
@@ -203,6 +205,7 @@ export function createParking({scene, schedule, capture, fly}) {
   onLang(() => { panel.render(); phone.render(); overlays.refresh(); story.refreshCaption(); renderBar(); });
   traffic.syncParked();
   schedulePass();
+  scheduleAmbient();
   renderBar();
   panel.render();
 
@@ -213,7 +216,6 @@ export function createParking({scene, schedule, capture, fly}) {
       document.body.classList.add('parking-active');
       layer.hidden = false; panelRoot.hidden = false; bar.hidden = false;
       panel.render(); renderBar();
-      scheduleAmbient();
     },
     exit() {
       active = false;
@@ -221,7 +223,6 @@ export function createParking({scene, schedule, capture, fly}) {
       document.body.classList.remove('parking-active');
       layer.hidden = true; panelRoot.hidden = true; bar.hidden = true;
       phone.setOpen(false);
-      clearTimeout(ambientTimer);
     },
     get active() { return active; },
     // Runs the story once (the showcase loop calls this) and resolves when it ends or stops.

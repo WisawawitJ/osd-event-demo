@@ -78,8 +78,9 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   }
 
   // A fixed pool bounds lighting/shadow cost even when the map grows.
+  const SPOT_INTENSITY = 105;
   const lights = Array.from({ length: spotLights }, (_, index) => {
-    const light = new THREE.SpotLight(0xffdda0, 105, 14, Math.PI * .31, .8, 2);
+    const light = new THREE.SpotLight(0xffdda0, SPOT_INTENSITY, 14, Math.PI * .31, .8, 2);
     light.name = `Simulation_spot_${index + 1}`;
     light.visible = false;
     light.shadow.mapSize.set(512, 512);
@@ -97,7 +98,10 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   }
   function updateLighting() {
     model.updateWorldMatrix(true, true);
-    const visibleRooms = night ? rooms.filter(room => states.get(room.id).light &&
+    // Spots go to rooms whether or not their light is on; a switched-off room keeps its spot at zero intensity.
+    // Toggling one room's light then changes only that room, instead of the pool re-dealing spots to other rooms,
+    // and the number of active lights stays the same (no shader recompile on every switch).
+    const visibleRooms = night ? rooms.filter(room =>
       room.capabilities?.light !== false && floors.has(String(room.floor)) &&
       isVisible(floors.get(String(room.floor))) &&
       (view.currentFloor === 'all' || String(room.floor) === String(view.currentFloor))) : [];
@@ -129,6 +133,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       light.angle = Math.min(1.16, Math.max(.68, Math.atan((room.lightRadius || 3.7) / Math.max(light.position.y, 1))));
       light.target.position.set(position[0], .05, position[2]);
       light.userData.roomId = room.id;
+      light.intensity = states.get(room.id).light ? SPOT_INTENSITY : 0;
     });
   }
   function updateModel() {

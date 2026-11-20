@@ -32,7 +32,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all 14 behaviour checks, about 12 s
+npm test                 # all 16 behaviour checks, about 14 s
 npm test -- kiosk night  # only checks whose names match
 ```
 
