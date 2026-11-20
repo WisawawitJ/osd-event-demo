@@ -60,8 +60,7 @@ export function createOverlays({layer, sim, actions}) {
     setFeedBox(box) {
       const el = feed.querySelector('.pk-feed-box');
       if (!el) return;
-      // Hidden once the plate has left the camera's frame.
-      if (box && (box.x + box.w < 0 || box.x > 1 || box.y + box.h < 0 || box.y > 1)) box = null;
+      // null once the camera can no longer read the plate (index.js plateBox).
       el.hidden = !box;
       if (box) Object.assign(el.style, {left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.w * 100}%`, height: `${box.h * 100}%`});
     },

@@ -410,10 +410,14 @@ export const scenarios = [
     await p.eval(`void __parking.traffic.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:5,fromX:-40})`);
     await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='1กก 1111')`, {timeout: 30000, what: 'car at the gate'});
     expect(await p.eval(`!!document.querySelector('.pk-feed-img.live')`), 'the pop-up picture is the live camera');
+    // Record the box every frame from Open until the feed closes: [left, top, width, height] in %, or null when hidden.
+    await p.eval(`(()=>{const log=window.__boxLog=[];(function rec(){const f=document.querySelector('.pk-feed'),b=document.querySelector('.pk-feed-box');if(!f||f.hidden)return;log.push(b&&!b.hidden?[b.style.left,b.style.top,b.style.width,b.style.height].map(parseFloat):null);requestAnimationFrame(rec)})()})()`);
     await p.click(`[data-alert-open="${await p.eval(`__parking.sim.state.alerts.find(a=>a.status==='open'&&a.plate==='1กก 1111').id`)}"]`);
-    await p.until(`__parking.sim.state.gate === 'open'`, {timeout: 15000, what: 'barrier open'});
-    const box = () => p.eval(`(()=>{const b=document.querySelector('.pk-feed-box');return b&&!b.hidden?b.style.left+b.style.top:''})()`);
-    const a = await box(); await p.sleep(150); const b = await box();
-    expect(a && b && a !== b, `plate box moves with the car (${a} → ${b})`);
+    await p.until(`!document.querySelector('.pk-feed:not([hidden])')`, {timeout: 30000, what: 'feed closed after the car drove in'});
+    const log = await p.eval(`window.__boxLog`), shown = log.filter(Boolean);
+    expect(new Set(shown.map(String)).size > 1, `plate box moves with the car (${new Set(shown.map(String)).size} positions in ${log.length} frames)`);
+    // Once the car drives under the camera the plate is out of view: the box goes, and is never drawn off the picture.
+    expect(!shown.some(([x, y, w, h]) => x < -1 || y < -1 || x + w > 101 || y + h > 101), 'plate box never drawn outside the picture');
+    expect(log.length > 1 && log.at(-1) === null, 'box cleared before the feed closes (the car has left the frame)');
   }},
 ];

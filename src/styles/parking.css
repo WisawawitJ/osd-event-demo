@@ -246,7 +246,7 @@
 .pk-feed-head time { font-variant-numeric: tabular-nums; }
 .pk-rec { width: 7px; height: 7px; border-radius: 50%; background: #ff4b3e; animation: pk-blink 1.2s steps(2) infinite; }
 @keyframes pk-blink { 50% { opacity: .2; } }
-.pk-feed-img { position: relative; aspect-ratio: 16 / 9; background: #1d2731; }
+.pk-feed-img { position: relative; aspect-ratio: 16 / 9; background: #1d2731; overflow: hidden; }
 /* Live: a hole in the card; the 3D canvas draws the gate camera underneath it each frame. */
 .pk-feed-img.live { background: transparent; }
 .pk-feed:has(.pk-feed-img.live) { background: transparent; animation: none; }

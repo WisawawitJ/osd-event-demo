@@ -38,15 +38,22 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
   const lot = createLot({scene, stalls: sim.state.stalls, schedule});
   let active = false, ambientTimer = 0, passTimer = 0, quietAmbient = false;
 
-  // Plate camera: snapshot plus where the plate sits in the frame.
-  const corner = new THREE.Vector3();
+  // Plate camera: snapshot plus where the plate sits in the frame, or null when the camera cannot read it: the plate
+  // faces away, is behind the lens (projected corners would flip into the frame), or is not wholly in the picture.
+  const corner = new THREE.Vector3(), plateNormal = new THREE.Vector3(), toCamera = new THREE.Vector3();
   function plateBox(camera, agent) {
     agent.car.updateWorldMatrix(true, true); camera.updateWorldMatrix(true, false);
+    agent.car.localToWorld(corner.set(0, CAR.plateY, CAR.frontPlateZ));
+    camera.getWorldPosition(toCamera).sub(corner);
+    plateNormal.set(0, 0, 1).transformDirection(agent.car.matrixWorld);
+    if (plateNormal.dot(toCamera) <= 0) return null;
     let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
     for (const [dx, dy] of [[-.31, -.15], [.31, -.15], [.31, .15], [-.31, .15]]) {
       corner.set(dx, CAR.plateY + dy, CAR.frontPlateZ + .02);
       agent.car.localToWorld(corner).project(camera);
+      if (corner.z < -1 || corner.z > 1) return null;
       const x = (corner.x + 1) / 2, y = (1 - corner.y) / 2;
+      if (x < 0 || x > 1 || y < 0 || y > 1) return null;
       x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
     }
     const pad = .02;
