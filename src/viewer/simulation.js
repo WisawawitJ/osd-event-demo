@@ -257,8 +257,13 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     panel.querySelector('details').open = true;
     toggle(data.deviceKind, data.doorId);
   });
+  // At night the light pool follows the camera. Re-pick once a zoom settles, not on every wheel tick:
+  // each re-pick redraws every shadow map.
+  let wheelSettle = 0;
   listen(canvas, 'wheel', () => {
-    if (night) { updateLighting(); renderer.shadowMap.needsUpdate = true; schedule(); }
+    if (!night) return;
+    clearTimeout(wheelSettle);
+    wheelSettle = setTimeout(() => { if (night && !disposed) { updateLighting(); renderer.shadowMap.needsUpdate = true; schedule(); } }, 220);
   }, { passive: true });
   renderControls();
   updateModel();

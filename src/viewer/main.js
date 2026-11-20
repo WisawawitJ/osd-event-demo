@@ -445,7 +445,7 @@ try {
       scene.add(model);
       renderKit.addPondReflections(model);
       // The kiosk (an iGPU) keeps 4 room spot lights at night, 1 casting shadows.
-      simulation=await createSimulation({THREE,scene,model,floorRoots,renderer,camera,schedule,...(isAtom?{spotLights:4,shadowSpots:1}:{}),
+      simulation=await createSimulation({THREE,scene,model,floorRoots,renderer,camera,schedule,...(isAtom?{spotLights:4,shadowSpots:1}:{spotLights:6,shadowSpots:1}),
         onSelectFloor(n){if(currentFloor!==String(n)){currentFloor=String(n);interiorView=null;updateView();}},
         onNightChange(night){
           // A host page may set a gradient day background (setBackground); night always uses a flat colour.

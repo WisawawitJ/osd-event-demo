@@ -36,7 +36,7 @@ Useful URLs:
   **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
 - **EN / TH** in the header switches the whole showcase page (building and parking) between Thai and English. Names, plates and provinces stay as entered. The `#explore` page stays in Thai.
-- **Night** in the header switches the whole scene, car park lamps and headlights included.
+- **Night** in the header switches the whole scene, car park lamps and headlights included, and turns the page around it dark (showcase and explore).
 - **View controls** at the bottom right of the 3D view: zoom in, zoom out, **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
 
 ### The parking story (10 steps, about 2½ minutes on auto)
@@ -74,6 +74,8 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
 - Cars are four draw calls each and share all their geometry. Trees, shrubs and bay lights are instanced, and static car-park
   parts skip per-frame matrix updates.
 - The building's ~110 interior partition walls are merged per floor at load time, with the same picture and cutaway clipping.
+- Sun shadows are computed once per view change, not every frame. At night the room-light pool is 6 lights with 1 casting shadows,
+  re-picked once a zoom settles rather than on every wheel tick. Plate-camera snapshots no longer force a shadow redraw.
 - Car movement runs in real time at any frame rate. Add `?fps=1` to see the frame rate.
 
 ## What is real and what is imagined

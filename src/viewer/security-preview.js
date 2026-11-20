@@ -11,14 +11,16 @@ export function createSecurityPreview({renderer,scene,fullVisibility=[],schedule
  const context=canvas.getContext('2d'),image=context.createImageData(width,height),viewport=new THREE.Vector4(),scissor=new THREE.Vector4();
  function capture(camera){
   if(!camera?.isPerspectiveCamera)return '';
-  const previousTarget=renderer.getRenderTarget(),scissorTest=renderer.getScissorTest(),visibility=fullVisibility.map(o=>[o,o.visible]);
+  let changed=false;const previousTarget=renderer.getRenderTarget(),scissorTest=renderer.getScissorTest(),visibility=fullVisibility.map(o=>[o,o.visible]);
   renderer.getViewport(viewport);renderer.getScissor(scissor);
   try{
    // The security camera sees the complete building even when the orbit view isolates a floor.
+   // Shadows only need redrawing when the capture really shows more of the building than the view does.
+   changed=visibility.some(([,visible])=>!visible);
    for(const [o] of visibility)o.visible=true;
    scene.updateMatrixWorld(true);camera.updateWorldMatrix(true,false);
    renderer.setRenderTarget(target);renderer.setScissorTest(false);
-   renderer.shadowMap.needsUpdate=true;
+   if(changed)renderer.shadowMap.needsUpdate=true;
    renderer.render(scene,camera);
    outputMaterial.uniforms.toneMappingExposure.value=renderer.toneMappingExposure;
    renderer.setRenderTarget(output);renderer.render(outputScene,outputCamera);renderer.readRenderTargetPixels(output,0,0,width,height,pixels);
@@ -27,7 +29,7 @@ export function createSecurityPreview({renderer,scene,fullVisibility=[],schedule
   }finally{
    for(const [o,visible] of visibility)o.visible=visible;
    renderer.setRenderTarget(previousTarget);renderer.setViewport(viewport);renderer.setScissor(scissor);renderer.setScissorTest(scissorTest);
-   renderer.shadowMap.needsUpdate=true;schedule();
+   if(changed)renderer.shadowMap.needsUpdate=true;schedule();
   }
  }
  return {capture,dispose(){target.dispose();output.dispose();quad.geometry.dispose();outputMaterial.dispose();}};
