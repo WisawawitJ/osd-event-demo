@@ -272,7 +272,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
         // The next car out waits in its aisle until the one ahead has cleared the exit lane.
         await previous; alive();
         await drive(agent, aisleToExit(stall), {}, gen);
-        const going = await withGate(async () => {
+        const {going} = await withGate(async () => {
           alive();
           await hooks.readPlate?.('out', agent, {allow: true, type: agent.type, exit: true});
           // Wait for a gap in the eastbound lane before lifting the barrier: the stretch a car covers in ~4 s.
@@ -287,7 +287,9 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           await waitFor(() => passed(agent, 6), gen);
           hooks.onLeaveGate?.('out');
           releaseLane();
-          return going;
+          // Wrapped: returning the promise itself from this async function would make the barrier wait until the
+          // car had driven off the map (the arm stayed up ~15 s after every exit).
+          return {going};
         });
         void wait(300, gen).then(() => { if (!gateQueueBusy()) return closeBoom(gen); }).catch(() => {});
         await going;
@@ -350,6 +352,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     parkedKeys: () => [...agents.entries()].filter(([, a]) => !a.leaving && a.stall).map(([k]) => k),
     get busy() { return movers.size > ambientCars.size; },
     get queued() { return entryPending; },
+    get gateHolders() { return gateHolders; },
     isArriving: k => arriving.has(k),
   };
 }

@@ -46,13 +46,15 @@ export const scenarios = [
   }},
 
   {name: 'unknown car: Open once disabled while waiting; Open with a reason is audited', async run(p, expect) {
-    await p.goto(parking());
+    // speed 10: the guard turns unanswered cars away after 45 s of demo time, 1.5 s of real time at speed 30.
+    await p.goto('?dest=parking&debug=1&speed=10');
     await p.until(ready, {timeout: 40000});
     await p.eval(`void __parking.traffic.arrive({plate:'3ฆง 6047',province:'ชลบุรี',color:6,fromX:-40})`);
-    await p.until('__parking.sim.state.alerts.some(a=>a.status==="open")', {timeout: 30000, what: 'alert'});
+    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='3ฆง 6047')`, {timeout: 30000, what: 'alert'});
     await p.click('[data-tab="gate"]');
     expect(await p.eval(`document.querySelector('[data-act="manual-open"]').disabled`), 'Open once disabled during the alert');
-    await p.click('[data-pop="open"]');
+    // This car's own alert card (a background unknown car may have one too).
+    await p.click(`[data-alert-open="${await p.eval(`__parking.sim.state.alerts.find(a=>a.status==='open'&&a.plate==='3ฆง 6047').id`)}"]`);
     await p.until(`__parking.sim.state.events.some(e=>e.kind==='manual'&&e.plate==='3ฆง 6047')`, {timeout: 30000, what: 'manual entry'});
     const audit = await p.eval(`__parking.sim.state.audit.find(a=>a.key==='a.manual'&&a.target==='3ฆง 6047')?.reasonKey`);
     expect(audit === 'gate.reason.delivery', `audit has the reason (got ${audit})`);
@@ -341,5 +343,15 @@ export const scenarios = [
     const s = await p.eval('clearInterval(__busy),cancelAnimationFrame(__fr),__s');
     const v = Math.abs(s.at(-1)[1] - s[0][1]) / ((s.at(-1)[0] - s[0][0]) / 1000);
     expect(Math.abs(v - 7) < .2 || Math.abs(v - 9) < .2, `street car at 7 or 9 m/s (measured ${v.toFixed(2)})`);
+  }},
+  {name: 'the barrier closes soon after a car drives out', async run(p, expect) {
+    await p.goto('?dest=parking&debug=1&speed=10');
+    await p.until(ready, {timeout: 40000});
+    const key = await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');void __parking.traffic.leave(k);return k})()`);
+    await p.until(`!__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 20000, what: 'exit recorded'});
+    const t0 = Date.now();
+    await p.until(`__parking.sim.state.gate === 'closed'`, {timeout: 10000, what: 'barrier closed'});
+    const s = (Date.now() - t0) * 10 / 1000;
+    expect(s < 6, `arm down within 6 s of demo time after the exit (took ${s.toFixed(1)} s)`);
   }},
 ];
