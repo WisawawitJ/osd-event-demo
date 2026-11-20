@@ -72,6 +72,19 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
   securityCamera=new T.PerspectiveCamera(68,16/9,.05,160);securityCamera.name='Demo_security_camera';securityCamera.position.z=-.27;head.add(securityCamera);
  }
 
+ // The AC's air: fades in and out with the switch, and while it is on the dashes flow down from the unit.
+ let airLevel=1,airTarget=1,airFrame=0,airLast=0;
+ const airBase=air.map(o=>o.material.opacity);
+ for(const line of air)line.userData.distances=Float32Array.from(line.geometry.attributes.lineDistance.array);
+ function airStep(time){
+  airFrame=0;const dt=Math.min(.1,(time-(airLast||time))/1000);airLast=time;
+  airLevel=airTarget>airLevel?Math.min(airTarget,airLevel+dt/.35):Math.max(airTarget,airLevel-dt/.35);
+  const shift=(time/1000*.35)%.26;
+  air.forEach((o,i)=>{o.visible=airLevel>.001;o.material.opacity=airBase[i]*airLevel;const d=o.geometry.attributes.lineDistance,base=o.userData.distances;for(let j=0;j<base.length;j++)d.array[j]=base[j]-shift;d.needsUpdate=true;});
+  schedule();
+  if(current==='meeting'&&(airLevel>0||airTarget>0)&&!document.hidden)airFrame=requestAnimationFrame(airStep);else airLast=0;
+ }
+ function fadeAir(on){airTarget=on?1:0;if(!airFrame&&current==='meeting')airFrame=requestAnimationFrame(airStep);if(current!=='meeting'){airLevel=airTarget;air.forEach((o,i)=>{o.visible=airLevel>0;o.material.opacity=airBase[i]*airLevel;});}}
  // The room light's pool and beam fade in and out (~0.35 s) instead of snapping.
  let lampLevel=1,lampTarget=1,lampFrame=0;
  const lampBase=lamp.map(o=>o.material.opacity);
@@ -82,8 +95,8 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
   const step=time=>{lampLevel=lampTarget>lampLevel?Math.min(lampTarget,lampLevel+(time-last)/350):Math.max(lampTarget,lampLevel-(time-last)/350);last=time;drawLamp();lampFrame=lampLevel===lampTarget?0:requestAnimationFrame(step);};
   lampFrame=requestAnimationFrame(step);
  }
- function select(id){current=id;for(const [name,g] of Object.entries(groups))g.visible=name===id;schedule();}
- function update(state){people.forEach(o=>o.visible=state.occupied);fadeLamp(state.light!==false);air.forEach(o=>o.visible=state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');if(boom)boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;energyMaterial.opacity=state.solar>5?.8:.35;schedule();}
+ function select(id){current=id;if(id==='meeting'&&!airFrame&&airTarget>0)airFrame=requestAnimationFrame(airStep);for(const [name,g] of Object.entries(groups))g.visible=name===id;schedule();}
+ function update(state){people.forEach(o=>o.visible=state.occupied);fadeLamp(state.light!==false);fadeAir(state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');if(boom)boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;energyMaterial.opacity=state.solar>5?.8:.35;schedule();}
  function animate(t){if(current==='meeting')air.forEach((o,i)=>{o.material.dashSize=.12+.035*Math.sin(t*2+i);});if(current==='energy'){packet.position.z=-5.9+((t*.9)%12);packet.position.x=-1.4;}schedule();}
- select('overview');return {securityCamera,select,update,animate,dispose(){cancelAnimationFrame(lampFrame);for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
+ select('overview');return {securityCamera,select,update,animate,dispose(){cancelAnimationFrame(lampFrame);cancelAnimationFrame(airFrame);for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
 }

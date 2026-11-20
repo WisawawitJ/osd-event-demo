@@ -212,7 +212,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           await drive(agent, streetToGate(fromX), {startMoving: fromX > -90}, gen);
         }
         offStreet();
-        // The barrier is held only while this car is at it: from the plate read until the arm is down again.
+        // The barrier is held only while this car is at it: from the plate read until the car is through.
         const passage = await withGate(async () => {
           alive();
           const verdict = sim.decide(plate, province);

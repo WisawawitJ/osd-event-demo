@@ -136,6 +136,26 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       light.intensity = states.get(room.id).light ? SPOT_INTENSITY : 0;
     });
   }
+  // Doors swing to their new angle over ~0.6 s (eased) instead of snapping; shadows follow when they settle.
+  const swinging = new Map();
+  let swingFrame = 0;
+  function swingDoor(hinge, angle) {
+    if (Math.abs(hinge.rotation.y - angle) < 1e-4) { swinging.delete(hinge); return; }
+    if (disposed || matchMedia('(prefers-reduced-motion: reduce)').matches) { hinge.rotation.y = angle; return; }
+    swinging.set(hinge, {from: hinge.rotation.y, to: angle, start: performance.now()});
+    if (!swingFrame) swingFrame = requestAnimationFrame(swingStep);
+  }
+  function swingStep(time) {
+    swingFrame = 0;
+    for (const [hinge, s] of swinging) {
+      const t = Math.min(1, (time - s.start) / 600), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      hinge.rotation.y = s.from + (s.to - s.from) * e;
+      if (t === 1) swinging.delete(hinge);
+    }
+    if (swinging.size) swingFrame = requestAnimationFrame(swingStep);
+    else renderer.shadowMap.needsUpdate = true;
+    schedule();
+  }
   function updateModel() {
     for (const room of rooms) {
       const state = states.get(room.id);
@@ -151,7 +171,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       }
       for (const [id, open] of Object.entries(state.doors)) {
         for (const hinge of hinges.get(id) || []) {
-          hinge.rotation.y = open ? (hinge.userData.openAngle ?? Math.PI / 2) : (hinge.userData.closedAngle ?? 0);
+          swingDoor(hinge, open ? (hinge.userData.openAngle ?? Math.PI / 2) : (hinge.userData.closedAngle ?? 0));
         }
       }
     }
@@ -314,6 +334,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     dispose() {
       if (disposed) return;
       disposed = true;
+      cancelAnimationFrame(swingFrame);
       abort.abort();
       listeners.clear();
       panel.remove();
