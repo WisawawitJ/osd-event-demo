@@ -9,6 +9,10 @@
 .kiosk-toggle input { accent-color: var(--pk-blue); width: 16px; height: 16px; }
 .kiosk-on .kiosk-toggle { background: var(--pk-blue-soft); color: #244dba; }
 
+/* Explore page: way back to the showcase beside the download link */
+.header-links { display: flex; align-items: center; gap: 6px; }
+.back-link { color: var(--ink) !important; }
+
 /* View controls on the 3D view (zoom, reset, idle orbit) */
 .view-controls { position: absolute; right: 20px; bottom: 50px; z-index: 3; display: flex; gap: 4px; padding: 4px; background: #ffffffeb; border-radius: 11px; box-shadow: 0 4px 16px #2030481a; }
 .showcase-page .view-controls button { min-height: 36px; min-width: 36px; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 9px; border-radius: 8px; font-size: 12px; color: #34495a; }
