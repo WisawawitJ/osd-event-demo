@@ -338,7 +338,9 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     }
     for (const m of movers) place(m.agent, sample(m.route, m.s), m.reverse);
     schedule();
-    if (active) kick();
+    // Chain straight to the next frame: going through kick() reset `last` to now and lost the time spent in this
+    // frame, so cars moved only ~75% as fast, and slower still whenever the page was busy (scrolling, zooming out).
+    if (active) frame = requestAnimationFrame(tick);
   }
 
   return {
