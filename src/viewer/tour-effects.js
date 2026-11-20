@@ -9,20 +9,26 @@ export function createTourEffects({model,schedule,meetingRoom}){
  const meeting=group('meeting',meetingRoom.floor),teal=mat('#299c94',.85),room=[meetingRoom.center[0],meetingRoom.center[2]];
  const people=[];
  for(let i=0;i<6;i++){const x=room[0]+(i<3?-1.1:1.1),z=room[1]+(i%3-1)*.8;const dot=mesh(meeting,new T.RingGeometry(.11,.16,28),teal,[x,.12,z]);dot.rotation.x=-Math.PI/2;people.push(dot);}
- // Cool air from the AC unit: a soft cone that fades out as it falls (it was four dashed lines, which read
- // as a rendering glitch rather than airflow).
+ // Air from the room's own AC unit (a two-way ceiling cassette, FCU 4-3 here): dashed curves leave both long
+ // slots and fall outward. The unit is found in the model, so the air starts where the AC actually is.
  const air=[];
  {
-  const apex=new T.Vector3(room[0]+.92,2.6,room[1]),toward=new T.Vector3(room[0]+1.6,1.55,room[1]),height=apex.distanceTo(toward)+.25;
-  const fade=document.createElement('canvas');fade.width=4;fade.height=64;
-  const f=fade.getContext('2d'),g=f.createLinearGradient(0,0,0,64);g.addColorStop(0,'#fff');g.addColorStop(.35,'#888');g.addColorStop(1,'#000');f.fillStyle=g;f.fillRect(0,0,4,64);
-  const fadeMap=new T.CanvasTexture(fade);
-  const geometry=new T.ConeGeometry(.75,height,28,1,true).translate(0,-height/2,0);owned.push(geometry);
-  const material=new T.MeshBasicMaterial({color:'#8fd6f2',transparent:true,opacity:.28,alphaMap:fadeMap,depthWrite:false,side:T.DoubleSide});materials.push(material);
-  material.userData.fadeMap=fadeMap;
-  const cone=new T.Mesh(geometry,material);cone.position.copy(apex);
-  cone.quaternion.setFromUnitVectors(new T.Vector3(0,-1,0),toward.clone().sub(apex).normalize());
-  meeting.add(cone);air.push(cone);
+  const floorRoot=root(meetingRoom.floor);let unit=null;
+  floorRoot.traverse(o=>{if(!unit&&o.userData.deviceKind==='climate'&&o.userData.roomId===meetingRoom.id&&!o.name.includes('_led_'))unit=o;});
+  const box=unit?new T.Box3().setFromObject(unit):null;
+  if(box){floorRoot.worldToLocal(box.min);floorRoot.worldToLocal(box.max);}
+  const center=box?box.getCenter(new T.Vector3()):new T.Vector3(room[0]+.92,2.65,room[1]),size=box?box.getSize(new T.Vector3()):new T.Vector3(.9,.2,.9);
+  // Slots run along the unit's long side; air leaves across it, on both sides.
+  const across=size.x<size.z?new T.Vector3(1,0,0):new T.Vector3(0,0,1),along=across.x?new T.Vector3(0,0,1):new T.Vector3(1,0,0);
+  const half=(across.x?size.x:size.z)/2,length=Math.max(.5,(along.x?size.x:size.z)*.7),top=box?box.min.y:center.y-.05;
+  for(const side of [-1,1])for(let i=0;i<3;i++){
+   const offset=along.clone().multiplyScalar((i-1)*length/2),out=across.clone().multiplyScalar(side);
+   const start=center.clone().add(offset).addScaledVector(out,half);start.y=top;
+   const points=[start,start.clone().addScaledVector(out,.45).setY(top-.45),start.clone().addScaledVector(out,.95).setY(top-1.05)];
+   const geom=new T.BufferGeometry().setFromPoints(new T.QuadraticBezierCurve3(...points).getPoints(24));owned.push(geom);
+   const m=new T.LineDashedMaterial({color:'#4eabc5',dashSize:.14,gapSize:.12,transparent:true,opacity:.6});materials.push(m);
+   const line=new T.Line(geom,m);line.computeLineDistances();meeting.add(line);air.push(line);
+  }
  }
  const pond=group('pond',1),pondMaterial=mat('#1b9caa',.8),pondRing=mesh(pond,new T.TorusGeometry(.23,.028,8,36),pondMaterial,[23.2,.32,0]);pondRing.rotation.x=-Math.PI/2;
  mesh(pond,new T.CylinderGeometry(.045,.045,.45,12),mat('#3f6975'),[23.2,.3,0]);
@@ -46,6 +52,6 @@ export function createTourEffects({model,schedule,meetingRoom}){
 
  function select(id){current=id;for(const [name,g] of Object.entries(groups))g.visible=name===id;schedule();}
  function update(state){people.forEach(o=>o.visible=state.occupied);air.forEach(o=>o.visible=state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;energyMaterial.opacity=state.solar>5?.8:.35;schedule();}
- function animate(t){if(current==='meeting')air.forEach(o=>{o.material.opacity=.24+.07*Math.sin(t*2.4);});if(current==='energy'){packet.position.z=-5.9+((t*.9)%12);packet.position.x=-1.4;}schedule();}
- select('overview');return {securityCamera,select,update,animate,dispose(){for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.fadeMap?.dispose();m.dispose();}}};
+ function animate(t){if(current==='meeting')air.forEach((o,i)=>{o.material.dashSize=.12+.035*Math.sin(t*2+i);});if(current==='energy'){packet.position.z=-5.9+((t*.9)%12);packet.position.x=-1.4;}schedule();}
+ select('overview');return {securityCamera,select,update,animate,dispose(){for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials)m.dispose();}};
 }
