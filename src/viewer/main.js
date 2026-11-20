@@ -518,7 +518,10 @@ try {
        // off-screen frame each way (shadows included), and upload every texture, before anyone clicks.
        {
         const hidden=[],opaque=[];
+        // Show the building once, then keep the loading message up while the warm-up runs (about 2 s).
+        renderer.render(scene,camera);
         warming=true;
+        status.dataset.state='loading';status.textContent=L('กำลังเตรียมอาคาร…','Preparing the building…');
         scene.traverse(object=>{if(!object.visible&&!object.isLight){hidden.push(object);object.visible=true;}});
         const target=new THREE.WebGLRenderTarget(16,16);
         const drawOffscreen=()=>{const previous=renderer.getRenderTarget();renderer.shadowMap.needsUpdate=true;renderer.setRenderTarget(target);renderer.render(scene,camera);renderer.setRenderTarget(previous);};
@@ -535,6 +538,7 @@ try {
          setTransparent(false);
          for(const object of hidden)object.visible=false;
          warming=false;
+         status.dataset.state='ready';status.textContent=L('โมเดลพร้อมแสดง','Model ready');
          target.dispose();renderer.shadowMap.needsUpdate=true;document.documentElement.dataset.warm='done';schedule();
         });
        }

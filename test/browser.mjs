@@ -87,7 +87,8 @@ export async function open({gpu = process.env.GPU || 'auto', shots = join(root, 
       while (Date.now() < end) { if (await page.eval(expression)) return; await sleep(100); }
       throw new Error(`timed out waiting for ${what}`);
     },
-    async click(selector) { const r = await page.eval(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;e.click();return true})()`); if (!r) throw new Error(`no element ${selector}`); },
+    // Like a real tap: pointer events first (the booth's idle timer listens for them), then the click.
+    async click(selector) { const r = await page.eval(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const o={bubbles:true,cancelable:true,pointerId:1,pointerType:'mouse',isPrimary:true};e.dispatchEvent(new PointerEvent('pointerdown',{...o,buttons:1}));e.dispatchEvent(new PointerEvent('pointerup',o));e.click();return true})()`); if (!r) throw new Error(`no element ${selector}`); },
     async shot(name) {
       const r = await send('Page.captureScreenshot', {format: 'png'});
       const file = join(shots, `${String(++shot).padStart(2, '0')}-${name}.png`);

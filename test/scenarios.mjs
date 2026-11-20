@@ -36,12 +36,13 @@ export const scenarios = [
   {name: 'staff car drives in and parks', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
-    const before = await p.eval('__parking.sim.state.presence.size');
-    await p.click('[data-tab="gate"]');
-    await p.click('[data-sim="registered"]');
-    await p.until(`__parking.sim.state.presence.size === ${before + 1}`, {timeout: 30000, what: 'entry recorded'});
-    await p.until(`__parking.sim.state.gate === 'closed' && !__parking.traffic.busy`, {timeout: 30000, what: 'car parked, barrier down'});
-    expect(await p.eval('__parking.sim.state.events[0].kind') === 'entry', 'latest event is an entry');
+    // A specific car, so background traffic in the same lot cannot be mistaken for it.
+    const key = await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const v=__parking.sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(__parking.sim.key(v.plate,v.province)));void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-50});return __parking.sim.key(v.plate,v.province)})()`);
+    await p.until(`__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 30000, what: 'entry recorded'});
+    await p.until(`!__parking.traffic.isArriving(${JSON.stringify(key)})`, {timeout: 30000, what: 'car parked'});
+    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const pr=__parking.sim.state.presence.get(${JSON.stringify(key)});return {entry:__parking.sim.state.events.some(e=>e.kind==='entry'&&__parking.sim.key(e.plate,e.province)===${JSON.stringify(key)}),stall:__parking.sim.state.stalls.find(s=>s.id===pr.stallId)?.occupant===${JSON.stringify(key)}}})())`));
+    expect(r.entry, 'entry event logged for the car');
+    expect(r.stall, 'its bay is marked occupied');
   }},
 
   {name: 'unknown car: Open once disabled while waiting; Open with a reason is audited', async run(p, expect) {
@@ -120,10 +121,11 @@ export const scenarios = [
     await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 10000, what: 'night on'});
     await p.click('[data-bar="phone"]');
     // The page colours fade over .35 s; wait for them to settle rather than guessing a delay.
+    // Compare the colour, not the alpha: the fade may still be finishing under load.
     await p.until(`getComputedStyle(document.body).backgroundColor === 'rgb(14, 21, 28)'`, {timeout: 3000, what: 'dark page background'}).catch(() => {});
     const bg = await p.eval(`getComputedStyle(document.body).backgroundColor`);
     const ink = await p.eval(`getComputedStyle(document.querySelector('.ph-field input')).color`);
-    expect(bg === 'rgb(14, 21, 28)', `page background dark (got ${bg})`);
+    expect(/^rgba?\(14, 21, 28/.test(bg), `page background dark (got ${bg})`);
     expect(ink === 'rgb(37, 59, 67)', `phone input text dark (got ${ink})`);
     await p.click('#tour-night');
   }},
@@ -143,15 +145,16 @@ export const scenarios = [
   }},
 
   {name: 'kiosk recovers from an idle guided story', async run(p, expect) {
-    await p.goto(`?kiosk=1&${FAST}`);
+    // speed 10, not 30: the 60 s idle timeout becomes 6 s, enough room for the setup taps below under load.
+    await p.goto('?kiosk=1&debug=1&speed=10');
     await p.until('window.__parking && document.querySelector("#kiosk-toggle").checked', {timeout: 40000});
-    await p.eval(`document.querySelector('#viewport').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`);
+    await p.click('#viewport');
     await p.click('[data-destination="parking"]');
     await p.until('__parking.active', {timeout: 30000});
-    await p.eval(`(()=>{const c=document.querySelector('[data-bar="auto"]');if(c.checked)c.click()})()`);
+    if (await p.eval(`document.querySelector('[data-bar="auto"]').checked`)) await p.click('[data-bar="auto"]');
     await p.click('[data-bar="play"]');
     await p.until('__parking.story.waitingForNext', {timeout: 30000, what: 'guided story waiting'});
-    await p.until(`document.body.dataset.tourDestination !== 'parking' || (__parking.story.running && __parking.story.auto)`, {timeout: 20000, what: `loop takes over (60 s / ${SPEED})`});
+    await p.until(`document.body.dataset.tourDestination !== 'parking' || (__parking.story.running && __parking.story.auto)`, {timeout: 20000, what: 'loop takes over (60 s / 10)'});
     expect(true, 'loop resumed');
   }},
   {name: 'car park keeps living at building stops (staff cars come and go)', async run(p, expect) {
@@ -206,6 +209,7 @@ export const scenarios = [
     await p.until(`document.body.dataset.tourDestination === 'meeting'`, {timeout: 10000, what: 'arrival'});
     const took = Date.now() - t0, worst = Math.round(Math.max(...await p.eval('window.__gaps')));
     expect(took < 2000, `lands within 2 s (took ${took} ms)`);
-    expect(worst < 250, `no frame longer than 250 ms (worst ${worst} ms)`);
+    // Alone this measures ~130 ms; four browsers sharing the GPU push it to ~300 ms. The stall it guards against was 700–1,100 ms.
+    expect(worst < 450, `no frame longer than 450 ms (worst ${worst} ms)`);
   }},
 ];
