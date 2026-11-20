@@ -134,13 +134,17 @@ try {
     let frames = 0, since = performance.now();
     return () => { frames++; const now = performance.now(); if (now - since >= 1000) { el.textContent = `${Math.round(frames * 1000 / (now - since))} fps`; frames = 0; since = now; } };
   })() : null;
+  // Every draw of the main view also draws the extra views, or the LPR pop-up would show the main scene for a frame.
+  function draw() {
+    renderer.render(scene, camera);
+    for (const extra of afterRender) extra();
+  }
   function schedule() {
     if (frame || disposed || document.hidden) return;
     frame = requestAnimationFrame(time => {
       frame = 0;
       if (disposed || warming) return;
-      renderer.render(scene, camera);
-      for (const draw of afterRender) draw();
+      draw();
       fpsMeter?.();
       adaptResolution(time);
     });
@@ -152,7 +156,7 @@ try {
   function applyPixelRatio() {
     renderer.setPixelRatio(inMotion ? Math.max(.6, pixelRatio * .7) : pixelRatio);
     renderer.setSize(Math.max(viewport.clientWidth, 1), Math.max(viewport.clientHeight, 1), false);
-    renderer.render(scene, camera); // resizing clears the canvas: redraw at once so no blank frame shows
+    draw(); // resizing clears the canvas: redraw at once so no blank frame shows
   }
   function setInMotion(value) {
     if (value === inMotion || !renderKit) return;

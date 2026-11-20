@@ -427,4 +427,21 @@ export const scenarios = [
     const bad = await p.eval(`__parking.sim.state.vehicles.map(v=>v.plate).filter(p=>/ศพ|ชน|ตก|ตด|จม|ยม|รก/.test(p)).join(', ')`);
     expect(!bad, `unlucky plates: ${bad}`);
   }},
+  {name: 'LPR pop-up never shows the main view: camera flights redraw the inset too', async run(p, expect) {
+    await p.goto('?dest=parking&debug=1&speed=5');
+    await p.until(ready, {timeout: 40000});
+    // Count main-view draws to the screen while the pop-up is visible that no inset draw follows in the same task.
+    await p.eval(`(()=>{const R=__renderer,draw=R.render.bind(R);let pending=false;window.__bare=0;
+      R.render=(s,c)=>{draw(s,c);if(R.getRenderTarget())return;
+        if(c!==__camera){pending=false;return}
+        const hole=document.querySelector('.pk-feed:not([hidden]) .pk-feed-img.live');
+        if(!hole||hole.getBoundingClientRect().width<4)return;
+        pending=true;setTimeout(()=>{if(pending)__bare++;pending=false},0)}})()`);
+    await p.eval(`void __parking.traffic.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:5,fromX:-40})`);
+    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='1กก 1111')`, {timeout: 30000, what: 'car at the gate'});
+    // Each flight starts and ends with a resolution switch that redraws the view at once.
+    await p.click('[data-destination="access"]'); await p.sleep(400);
+    await p.click('[data-destination="parking"]'); await p.sleep(600);
+    expect(await p.eval('__bare') === 0, `frames with the main view in the pop-up: ${await p.eval('__bare')}`);
+  }},
 ];
