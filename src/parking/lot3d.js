@@ -73,6 +73,12 @@ export function createLot({scene, stalls, schedule}) {
   // Gate mouth: entry keeps to the west half, exit to the east half.
   const divide = (GATE.entryX + GATE.exitX) / 2;
   for (let z = DRIVE.north + 1.6; z < STREET.north - .4; z += 1.6) line(divide, z, divide, Math.min(z + .9, STREET.north - .4), .1);
+  // Driveway centre line between the inbound (west) and outbound (east) lanes, broken where the gate and
+  // the building's aisle cross it.
+  for (let x = DRIVE.west; x < DRIVE.east - 1; x += 2.4) {
+    if ((x > GATE.west - 1.5 && x < GATE.east + 1) || x > RAMP.west - .5) continue;
+    line(x, DRIVE.z, Math.min(x + 1.4, DRIVE.east), DRIVE.z, .1);
+  }
   line(GATE.west + .1, GATE.entryStopZ - 2.45, divide - .15, GATE.entryStopZ - 2.45, .25);   // entry stop line, outside the boom
   line(divide + .15, GATE.exitStopZ + 2.45, GATE.east - .1, GATE.exitStopZ + 2.45, .25);     // exit stop line, inside the boom
   // Detector loops: one rectangle per lane, under where each car stops.
@@ -89,6 +95,11 @@ export function createLot({scene, stalls, schedule}) {
   const arrows = [];
   for (const x of [-31, -43, -55]) arrows.push(strokeArrow(x, 17.6, -Math.PI / 2));   // westbound, into the lot
   for (const x of [-27, -39, -51]) arrows.push(strokeArrow(x, 14.8, Math.PI / 2));    // eastbound, towards the exit
+  // Each P2 aisle opens onto the driveway: an arrow in (north) and an arrow out (south) at its mouth.
+  for (const x of new Set(stalls.filter(s => s.zone === 'P2').map(s => s.aisleX))) {
+    arrows.push(strokeArrow(x - 1.3, DRIVE.north - 2.2, Math.PI));
+    arrows.push(strokeArrow(x + 1.3, DRIVE.north - 2.2, 0));
+  }
   arrows.push(strokeArrow(GATE.entryX, DRIVE.south - 1.5, Math.PI));                    // entry lane, just past the boom
   arrows.push(strokeArrow(GATE.exitX, STREET.north - 1.2, 0));                          // exit lane, out to the street
   put(mergeGeometries([...lines, ...arrows]), paint);
@@ -147,7 +158,7 @@ export function createLot({scene, stalls, schedule}) {
   const lampMat = new THREE.MeshStandardMaterial({color: '#f6f1df', emissive: '#ffe7a6', emissiveIntensity: 0});
   materials.push(lampMat);
   const poles = [], lamps = [];
-  for (const [x, z] of [[-31.2, -4], [-31.2, 8], [-47.4, -4], [-47.4, 8], [-40, 18.8], [-52, 18.8], [-28, 18.8]]) {
+  for (const [x, z] of [[-31.2, -4], [-31.2, 8], [-47.4, -4], [-47.4, 8], [-40, 19.45], [-52, 19.45], [-34, 19.45]]) {
     poles.push(new THREE.CylinderGeometry(.07, .09, 6, 8).translate(x, Y.road + 3, z));
     lamps.push(new THREE.BoxGeometry(.9, .14, .34).translate(x + .35, Y.road + 6, z));
   }
@@ -191,7 +202,8 @@ export function createLot({scene, stalls, schedule}) {
   const camOut = lprCamera('LPR-OUT', [GATE.exitX + 1.9, 22.3], [GATE.exitX, Y.road + .55, GATE.exitStopZ + 2.2]);
 
   // Guard booth
-  const booth = new THREE.Group(); booth.position.set(GATE.west - 2.6, Y.road, GATE.z - 1.5); gate.add(booth);
+  // On the pavement beside the gate, outside every lane (it used to stand on the driveway, in the entry route).
+  const booth = new THREE.Group(); booth.position.set(GATE.west - 2.2, Y.road + .05, (DRIVE.south + STREET.north) / 2); gate.add(booth);
   put(new THREE.BoxGeometry(2, .9, 2).translate(0, .45, 0), mat({color: '#dfe3df'}), {parent: booth, shadow: true});
   put(new THREE.BoxGeometry(2, 1.2, 2).translate(0, 1.5, 0), mat({color: '#7fa3b5', roughness: .1, metalness: .3, transparent: true, opacity: .55}), {parent: booth});
   put(new THREE.BoxGeometry(2.5, .16, 2.5).translate(0, 2.18, 0), mat({color: '#465560'}), {parent: booth, shadow: true});
@@ -199,7 +211,7 @@ export function createLot({scene, stalls, schedule}) {
   // Free-space sign at the gate, facing the street.
   const signCanvas = document.createElement('canvas'); signCanvas.width = 512; signCanvas.height = 256;
   const signTexture = new THREE.CanvasTexture(signCanvas); signTexture.colorSpace = THREE.SRGBColorSpace; textures.push(signTexture);
-  const sign = new THREE.Group(); sign.position.set(GATE.west - 4.6, Y.road, STREET.north - .6); gate.add(sign);
+  const sign = new THREE.Group(); sign.position.set(GATE.west - 6.2, Y.road, STREET.north - .6); gate.add(sign);
   put(mergeGeometries([new THREE.BoxGeometry(.1, 2.3, .1).translate(-.95, 1.15, 0), new THREE.BoxGeometry(.1, 2.3, .1).translate(.95, 1.15, 0)]), poleMat, {parent: sign});
   put(new THREE.BoxGeometry(2.3, 1.2, .14).translate(0, 2.55, 0), mat({color: '#24323f'}), {parent: sign, shadow: true});
   put(new THREE.PlaneGeometry(2.16, 1.08).translate(0, 2.55, .072), basic({map: signTexture, toneMapped: false}), {parent: sign});

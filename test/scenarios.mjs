@@ -310,4 +310,23 @@ export const scenarios = [
     const heights = await p.eval(`import('/src/parking/layout.js').then(m=>[13.0,13.8,14.7].map(z=>m.groundY(-14.16,z)))`);
     expect(heights[0] > heights[1] && heights[1] > heights[2], `cars ride down a ramp at the aisle mouth (${heights.map(h => h.toFixed(2)).join(' > ')})`);
   }},
+  {name: 'nothing stands in the driveway: booth and light poles are clear of the lanes', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    // Solid things taller than kerb height whose footprint overlaps the driveway's lanes (z 13.6..18.8, x -58..-12),
+    // except the barrier itself and its plate cameras, which stand at the lane edges by design.
+    const blocking = await p.eval(`(()=>{const out=[];const gate=__scene.getObjectByName('Demo_main_barrier');const V=__camera.position.constructor;
+      __parking.lot.root.traverse(o=>{if(!o.isMesh||o.isInstancedMesh||o.name.startsWith('Demo_car')||o.parent?.name?.startsWith('Demo_car'))return;
+        let inCar=false;for(let q=o;q;q=q.parent)if(q.name?.startsWith('Demo_car'))inCar=true;if(inCar)return;
+        o.geometry.computeBoundingBox();const b=o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);
+        if(b.max.y-b.min.y<.5)return;
+        let inGate=false;for(let q=o;q;q=q.parent)if(q===gate)inGate=true;
+        const lpr=inGate&&(b.max.x-b.min.x)<.5&&(b.max.z-b.min.z)<.6;
+        const boom=inGate&&(b.max.x-b.min.x)>4;
+        if(lpr||boom)return;
+        // Vertex by vertex: several poles share one merged mesh, so the mesh's box alone says nothing.
+        const pos=o.geometry.attributes.position,v=new V();
+        for(let i=0;i<pos.count;i++){v.fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld);if(v.y>.8&&v.z>13.6&&v.z<18.8&&v.x>-58&&v.x<-12){out.push((o.name||'mesh')+' at x'+v.x.toFixed(1)+' z'+v.z.toFixed(1));break;}}});return out})()`);
+    expect(blocking.length === 0, `no obstacle in the lanes (${blocking.join('; ')})`);
+  }},
 ];
