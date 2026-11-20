@@ -181,7 +181,7 @@ const S = {
   'lpr.confidence': ['ความมั่นใจ', 'Confidence'],
   'lpr.match': ['อนุญาต', 'Allowed'],
   'lpr.nomatch': ['ไม่อยู่ในรายการ', 'Not on the list'],
-  'lpr.exit': ['ขาออก · เปิดอัตโนมัติ', 'Exit · opens automatically'],
+  'lpr.exit': ['ขาออก · เปิดอัตโนมัติ', 'Exit · auto-open'],
   'lpr.validUntil': ['สิทธิ์ถึง', 'Valid until'],
 
   // vehicles
