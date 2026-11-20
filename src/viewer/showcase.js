@@ -35,6 +35,7 @@ const pageText={
  panel:['ข้อมูลประกอบจุดที่เลือก','Details for the selected spot'],'panel.title':['ภาพรวมอาคาร','Building overview'],'panel.status':['พร้อมพาชม','Ready to tour'],
  incidents:['จุดที่ควรดู','Worth a look'],'incidents.loading':['กำลังเตรียมเหตุการณ์…','Preparing events…'],
  'replay.notice':['กำลังดูย้อนหลัง · กลับโหมดทดลองเพื่อปรับอุปกรณ์','Viewing a replay · go back to hands-on to adjust devices'],'panel.loading':['กำลังเตรียมข้อมูลจำลอง…','Preparing simulated data…'],
+ 'view.group':['ควบคุมมุมมอง','View controls'],'view.zoomIn':['ซูมเข้า','Zoom in'],'view.zoomOut':['ซูมออก','Zoom out'],'view.reset':['มุมเริ่มต้น','Reset view'],'view.orbit':['หมุนเมื่อว่าง','Idle orbit'],'view.orbit.title':['หมุนมุมกล้องช้า ๆ เมื่อไม่มีการใช้งาน','Slowly circle the view when nobody is using it'],
  'tour.play':['เริ่มพาชม','Start tour'],'tour.reset':['เริ่มใหม่','Start over'],'tour.progress':['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around'],
  kiosk:()=>pt('story.kiosk'),disclosure:()=>pt('sim.disclosure')
 };
@@ -166,5 +167,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  void select('overview',{instant:true});
  if(new URLSearchParams(location.search).get('kiosk')==='1')setTimeout(()=>setKiosk(true),600);
  else{const params=new URLSearchParams(location.search),dest=params.get('dest');if(dest&&destinations[dest])setTimeout(async()=>{const arrived=await select(dest);if(arrived&&dest==='parking'&&params.get('story')==='1')void parking?.playStory({auto:params.get('auto')!=='0'});},300);}
- return {dispose(){disposed=true;sequence++;insights?.dispose();stopTour();stopScenario();unsubscribe();simulation.setInteractionFilter(()=>true);abort.abort();effects.dispose();},getState(){return{insights:insights?.getState(),destination,traveling,pendingDestination,touring,scenario:state.scenario,...state};}};
+ // Back to the current stop's own camera pose (the view controls and the R key use this).
+ function resetView(){if(disposed||traveling)return;cancelFlight();void navigate(destination,{});}
+ return {resetView,dispose(){disposed=true;sequence++;insights?.dispose();stopTour();stopScenario();unsubscribe();simulation.setInteractionFilter(()=>true);abort.abort();effects.dispose();},getState(){return{insights:insights?.getState(),destination,traveling,pendingDestination,touring,scenario:state.scenario,...state};}};
 }

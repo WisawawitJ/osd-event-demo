@@ -254,7 +254,7 @@ try {
   stairsButton.addEventListener('click',()=>interiorCamera('stairs'));
   canvas.addEventListener('keydown', event => {
     if (!model) return;
-    if (event.key.toLowerCase() === 'r') frameVisible();
+    if (event.key.toLowerCase() === 'r') { if (showcase) showcase.resetView(); else frameVisible(); }
     else if (['+', '=', '-'].includes(event.key)) {
       event.preventDefault();
       const offset = camera.position.clone().sub(controls.target);
@@ -458,6 +458,45 @@ try {
           return arrived;
         }
        });
+       // View controls: zoom, back to the stop's own view, and a slow orbit when nobody is using the screen.
+       const userMove=()=>{controls.dispatchEvent({type:'start'});controls.dispatchEvent({type:'end'});};
+       let zoomFrame=0;
+       function zoomBy(factor){
+        userMove();cancelAnimationFrame(zoomFrame);
+        const offset=camera.position.clone().sub(controls.target),from=offset.length(),to=THREE.MathUtils.clamp(from*factor,controls.minDistance,controls.maxDistance),start=performance.now();
+        const step=time=>{const t=Math.min(1,(time-start)/260),e=t*(2-t);camera.position.copy(controls.target).add(offset.setLength(from+(to-from)*e));controls.update();schedule();if(t<1)zoomFrame=requestAnimationFrame(step);};
+        zoomFrame=requestAnimationFrame(step);
+       }
+       document.querySelector('#view-zoom-in').addEventListener('click',()=>zoomBy(1/1.3),{signal:abort.signal});
+       document.querySelector('#view-zoom-out').addEventListener('click',()=>zoomBy(1.3),{signal:abort.signal});
+       document.querySelector('#view-reset').addEventListener('click',()=>{userMove();showcase.resetView();},{signal:abort.signal});
+       const orbitButton=document.querySelector('#view-orbit');
+       let orbitEnabled=true;try{orbitEnabled=localStorage.getItem('osd-demo-orbit')!=='off';}catch{}
+       orbitButton.setAttribute('aria-pressed',String(orbitEnabled));
+       orbitButton.addEventListener('click',()=>{orbitEnabled=!orbitEnabled;orbitButton.setAttribute('aria-pressed',String(orbitEnabled));try{localStorage.setItem('osd-demo-orbit',orbitEnabled?'on':'off');}catch{}if(!orbitEnabled)stopOrbit();},{signal:abort.signal});
+       // Idle: 20 s with no input in free use, or 2.5 s into a building stop of the tour/loop. Never while
+       // the camera is flying or the parking story is directing it.
+       let lastInput=performance.now(),orbitFrame=0;
+       const ORBIT_DEG_PER_S=3.5,IDLE_FREE_MS=20000,IDLE_TOUR_MS=2500;
+       function stopOrbit(){if(orbitFrame)cancelAnimationFrame(orbitFrame);orbitFrame=0;}
+       for(const type of ['pointerdown','wheel','keydown'])document.addEventListener(type,event=>{if(event.target.closest?.('#view-orbit'))return;lastInput=performance.now();stopOrbit();},{capture:true,signal:abort.signal});
+       const orbitAllowed=()=>{const st=showcase.getState();if(!orbitEnabled||disposed||document.hidden||flight.running||st.traveling||parking?.story.running)return false;return performance.now()-lastInput>(st.touring?IDLE_TOUR_MS:IDLE_FREE_MS);};
+       let flightWasRunning=false;
+       const orbitWatch=setInterval(()=>{
+        // A tour stop counts as idle only from the moment its flight lands.
+        if(flight.running){flightWasRunning=true;return;}
+        if(flightWasRunning){flightWasRunning=false;if(showcase.getState().touring)lastInput=performance.now();}
+        if(orbitFrame||!orbitAllowed())return;
+        let last=performance.now();const up=new THREE.Vector3(0,1,0);
+        const tick=time=>{
+         if(!orbitAllowed()){orbitFrame=0;return;}
+         const dt=Math.min(.1,(time-last)/1000);last=time;
+         camera.position.sub(controls.target).applyAxisAngle(up,-THREE.MathUtils.degToRad(ORBIT_DEG_PER_S)*dt).add(controls.target);
+         controls.update();schedule();orbitFrame=requestAnimationFrame(tick);
+        };
+        orbitFrame=requestAnimationFrame(tick);
+       },500);
+       abort.signal.addEventListener('abort',()=>{clearInterval(orbitWatch);stopOrbit();},{once:true});
       }
       if(isAtom){
        // The ATOM page (React, web/) takes the scene API through window.atomBoot.

@@ -73,17 +73,32 @@ export function createParking({scene, schedule, capture, fly, onStoryChange = ()
       const presence = sim.state.presence;
       const parkedIds = new Set([...presence.values()].map(p => p.vehicleId));
       const pickOne = list => list[Math.floor(Math.random() * list.length)];
+      // Every button press says what happens, including when the car has to queue.
+      const say = (key, plate) => { if (!quiet) overlays.toast(`${icon('car')}<span>${esc(t(key, {plate}))}${traffic.queued > 1 ? ` · ${esc(t('gate.sim.queued'))}` : ''}</span>`, 'info'); };
+      const blocked = () => { if (!quiet && sim.state.alerts.some(a => a.status === 'open')) overlays.toast(`${icon('alert')}<span>${esc(t('gate.sim.waitingAlert'))}</span>`); };
       if (kind === 'exit') {
         const keys = traffic.parkedKeys().filter(k => presence.get(k)?.type !== 'vip');
-        if (keys.length) traffic.leave(pickOne(keys));
+        if (!keys.length) return;
+        const k = pickOne(keys);
+        traffic.leave(k);
+        if (!quiet) overlays.toast(`${icon('arrowOut')}<span>${esc(t('gate.sim.leaving', {plate: presence.get(k)?.plate}))}</span>`, 'info');
+        blocked();
         return;
       }
-      if (traffic.busy && !quiet) overlays.toast(esc(t('gate.busy')));
-      if (kind === 'unknown') { const [plate, province] = pickOne(UNKNOWN_PLATES); traffic.arrive({plate, province, color: Math.floor(Math.random() * 9), fromX}); return; }
-      const pool = sim.state.vehicles.filter(v => v.enabled && v.sync === 'synced' && !parkedIds.has(v.id) && (kind === 'visitor' ? v.type === 'guest' && v.validFrom <= sim.now() && v.validTo >= sim.now() : v.type === 'staff'));
+      if (kind === 'unknown') {
+        const free = UNKNOWN_PLATES.filter(([p, pr]) => !traffic.isArriving(sim.key(p, pr)));
+        if (!free.length) return;
+        const [plate, province] = pickOne(free);
+        traffic.arrive({plate, province, color: Math.floor(Math.random() * 9), fromX});
+        say('gate.sim.coming', plate); blocked();
+        return;
+      }
+      const pool = sim.state.vehicles.filter(v => v.enabled && v.sync === 'synced' && !parkedIds.has(v.id) && !traffic.isArriving(sim.key(v.plate, v.province)) && (kind === 'visitor' ? v.type === 'guest' && v.validFrom <= sim.now() && v.validTo >= sim.now() : v.type === 'staff'));
       // The newest approved visitor drives up first, so a request made on the phone can be followed to the gate.
       const v = kind === 'visitor' ? pool[pool.length - 1] : pickOne(pool);
-      if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX});
+      if (!v) { if (!quiet) overlays.toast(`${icon('user')}<span>${esc(t(kind === 'visitor' ? 'gate.sim.noVisitor' : 'gate.sim.noStaff'))}</span>`); return; }
+      traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX});
+      say('gate.sim.coming', v.plate); blocked();
     },
   };
 
@@ -165,16 +180,18 @@ export function createParking({scene, schedule, capture, fly, onStoryChange = ()
   }
   function schedulePass() {
     clearTimeout(passTimer);
-    passTimer = setTimeout(() => { if (active && document.visibilityState === 'visible') traffic.passBy(); schedulePass(); }, 5000 + Math.random() * 7000);
+    // Through-traffic runs whenever the street is on screen (overview and car park), not only in the parking stop.
+    passTimer = setTimeout(() => { if (lot.root.visible && document.visibilityState === 'visible') traffic.passBy(); schedulePass(); }, 1800 + Math.random() * 3200);
   }
   // Unknown cars that nobody answers are turned away after a while in free play.
   setInterval(() => {
     if (story.running) return;
-    for (const a of sim.state.alerts) if (a.status === 'open' && sim.now() - a.at > 75000) sim.resolveAlert(a.id, 'deny', undefined, 'staff.guard');
+    for (const a of sim.state.alerts) if (a.status === 'open' && sim.now() - a.at > 45000) sim.resolveAlert(a.id, 'deny', undefined, 'staff.guard');
   }, 5000);
 
   onLang(() => { panel.render(); phone.render(); overlays.refresh(); story.refreshCaption(); renderBar(); });
   traffic.syncParked();
+  schedulePass();
   renderBar();
   panel.render();
 
@@ -185,7 +202,7 @@ export function createParking({scene, schedule, capture, fly, onStoryChange = ()
       document.body.classList.add('parking-active');
       layer.hidden = false; panelRoot.hidden = false; bar.hidden = false;
       panel.render(); renderBar();
-      scheduleAmbient(); schedulePass();
+      scheduleAmbient();
     },
     exit() {
       active = false;
@@ -193,7 +210,7 @@ export function createParking({scene, schedule, capture, fly, onStoryChange = ()
       document.body.classList.remove('parking-active');
       layer.hidden = true; panelRoot.hidden = true; bar.hidden = true;
       phone.setOpen(false);
-      clearTimeout(ambientTimer); clearTimeout(passTimer);
+      clearTimeout(ambientTimer);
     },
     get active() { return active; },
     // Runs the story once (the showcase loop calls this) and resolves when it ends or stops.

@@ -33,6 +33,8 @@ class Route {
 }
 
 // Routes ----------------------------------------------------------------
+// A queued arrival waits on the street at holdX, clear of the turn into the gate.
+const streetToHold = (fromX, holdX) => new Route(fromX, STREET.laneEast, EAST).toX(holdX).build();
 const streetToGate = (fromX = -95) => new Route(fromX, STREET.laneEast, EAST).toX(GATE.entryX - 2.6).arc(2.6, Math.PI / 2).build();
 function gateToStall(stall) {
   const r = new Route(GATE.entryX, GATE.entryStopZ, NORTH);
@@ -53,7 +55,7 @@ function aisleToExit(stall) {
   else r.toZ(LANE_OUT - 2).arc(2, Math.PI / 2).toX(GATE.exitX - 1.8).arc(1.8, -Math.PI / 2);
   return r.toZ(GATE.exitStopZ).build();
 }
-const exitToStreet = () => new Route(GATE.exitX, GATE.exitStopZ, SOUTH).toZ(STREET.laneEast - 2.6).arc(2.6, Math.PI / 2).toX(70).build();
+const exitToStreet = () => new Route(GATE.exitX, GATE.exitStopZ, SOUTH).toZ(STREET.laneEast - 2.6).arc(2.6, Math.PI / 2).toX(98).build();
 const gateBackOut = () => new Route(GATE.entryX, GATE.entryStopZ, SOUTH).arc(2.6, -Math.PI / 2).build();
 const awayEast = () => new Route(GATE.entryX - 2.6, STREET.laneEast, EAST).toX(98).build();
 const passing = dir => (dir > 0 ? new Route(-98, STREET.laneEast, EAST).toX(98) : new Route(98, STREET.laneWest, WEST).toX(-98)).build();
@@ -64,6 +66,15 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   const ambientCars = new Set();
   let gateQueue = Promise.resolve(), entryLane = Promise.resolve(), exitLane = Promise.resolve();
   let generation = 0, frame = 0, last = 0;
+  // Street discipline: through-traffic keeps one speed per lane, yields to cars joining the eastbound lane,
+  // and does not spawn into it while a car is driving up to the gate or pulling out.
+  let entryPending = 0, streetArrivals = 0, exitingStreet = 0;
+  const arriving = new Set(); // presence keys of cars on their way in
+  const streetCars = new Set(); // arrival agents currently on the street
+  const streetClear = (x0, x1) => ![...streetCars].some(a => a.car.visible && a.car.position.x > x0 && a.car.position.x < x1);
+  const LANE_SPEED = {1: 7, [-1]: 9};
+  const lastSpawn = {1: 0, [-1]: 0};
+  const eastClear = (x0, x1) => ![...ambientCars].some(a => a.dir > 0 && a.car.position.x > x0 && a.car.position.x < x1);
 
   function place(agent, p, reverse = false) {
     agent.car.position.set(p.x, groundY(p.x, p.z), p.z);
@@ -119,6 +130,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     for (const a of [...agents.values(), ...ambientCars]) removeAgent(a);
     agents.clear(); ambientCars.clear();
     gateQueue = entryLane = exitLane = Promise.resolve();
+    entryPending = streetArrivals = exitingStreet = 0;
+    arriving.clear(); streetCars.clear();
     lot.setBoom(false); kick();
     for (const [k, p] of sim.state.presence) {
       const stall = sim.state.stalls.find(s => s.id === p.stallId);
@@ -142,15 +155,34 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     const agent = makeAgent({plate, province, type: 'unknown', color});
     agent.car.visible = false;
     const k = sim.key(plate, province);
-    let releaseLane;
+    let resolveLane, released = false, onStreet = false;
     const previous = entryLane;
-    entryLane = new Promise(r => { releaseLane = r; });
+    entryLane = new Promise(r => { resolveLane = r; });
+    const ahead = entryPending++;
+    arriving.add(k);
+    const releaseLane = () => { if (!released) { released = true; entryPending--; resolveLane(); } };
+    const offStreet = () => { if (onStreet) { onStreet = false; streetArrivals--; streetCars.delete(agent); } };
     return guard(agent, async () => {
       try {
-        await previous;
+        // With cars ahead, this one queues visibly on the street; otherwise it drives straight to the barrier.
+        const holdX = -33 - 6.5 * Math.max(0, ahead - 1);
+        const queue = ahead > 0 && holdX > fromX + 2;
+        if (ahead > 0 && !queue) await previous;
+        // Appear only once the spawn point is clear of through-traffic and of the previous arrival.
+        await waitFor(() => eastClear(fromX - 14, fromX + 30) && streetClear(fromX - 6, fromX + 9));
+        place(agent, {x: fromX, z: STREET.laneEast, h: EAST});
         agent.car.visible = true;
+        onStreet = true; streetArrivals++; streetCars.add(agent);
         hooks.onApproach?.(agent);
-        await drive(agent, streetToGate(fromX), {startMoving: fromX > -90});
+        if (queue) {
+          await drive(agent, streetToHold(fromX, holdX), {startMoving: fromX > -90});
+          await previous;
+          await drive(agent, streetToGate(holdX));
+        } else {
+          await previous;
+          await drive(agent, streetToGate(fromX), {startMoving: fromX > -90});
+        }
+        offStreet();
         return await withGate(async () => {
           hooks.onAtGate?.('in', agent);
           const verdict = sim.decide(plate, province);
@@ -163,8 +195,11 @@ export function createTraffic({lot, sim, schedule, hooks}) {
             if (alert.status === 'denied') {
               hooks.onLeaveGate?.('in', agent, 'denied');
               releaseLane();
+              await waitFor(() => eastClear(-70, -12));
+              exitingStreet++;
               await drive(agent, gateBackOut(), {reverse: true});
-              await drive(agent, awayEast(), {speed: 8});
+              await drive(agent, awayEast(), {speed: LANE_SPEED[1]});
+              exitingStreet--;
               removeAgent(agent);
               return 'denied';
             }
@@ -187,7 +222,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           schedule();
           return manual ? 'manual' : 'allowed';
         });
-      } finally { releaseLane(); }
+      } finally { releaseLane(); offStreet(); arriving.delete(k); }
     });
   }
 
@@ -196,22 +231,26 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     if (!agent || agent.leaving || !agent.stall) return Promise.resolve(false);
     agent.leaving = true;
     const stall = agent.stall;
-    let releaseLane;
+    let releaseLane, joined = false;
     const previous = exitLane;
     exitLane = new Promise(r => { releaseLane = r; });
     return guard(agent, async () => {
       try {
         await drive(agent, stallBackOut(stall), {reverse: true});
-        await drive(agent, aisleToExit(stall));
+        // The next car out waits in its aisle until the one ahead has cleared the exit lane.
         await previous;
+        await drive(agent, aisleToExit(stall));
         return await withGate(async () => {
           hooks.onAtGate?.('out', agent);
           await hooks.readPlate?.('out', agent, {allow: true, type: agent.type, exit: true});
+          // Wait for a gap in the eastbound lane before lifting the barrier.
+          await waitFor(() => eastClear(-68, -12));
+          exitingStreet++; joined = true;
           await openBoom();
           sim.recordExit({plate: agent.plate, province: agent.province});
           agents.delete(k);
           refreshBays();
-          const going = drive(agent, exitToStreet(), {speed: 7});
+          const going = drive(agent, exitToStreet(), {speed: LANE_SPEED[1]});
           await waitFor(() => passed(agent, 6));
           hooks.onLeaveGate?.('out', agent, 'exit');
           releaseLane();
@@ -221,7 +260,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           removeAgent(agent);
           return true;
         });
-      } finally { releaseLane(); }
+      } finally { releaseLane(); if (joined) { joined = false; exitingStreet--; } }
     });
   }
 
@@ -229,11 +268,18 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   function vanish(k) { const a = agents.get(k); if (a) { removeAgent(a); agents.delete(k); refreshBays(); schedule(); } }
 
   // Cosmetic through-traffic on the street.
-  function passBy() {
+  function passBy(preferDir = Math.random() < .5 ? 1 : -1) {
+    const now = performance.now();
+    const ok = dir => now - lastSpawn[dir] > 4200 && (dir < 0 || (!streetArrivals && !exitingStreet && eastClear(-99, -84)));
+    const dir = ok(preferDir) ? preferDir : ok(-preferDir) ? -preferDir : 0;
+    if (!dir) return false;
+    lastSpawn[dir] = now;
     const agent = makeAgent({plate: '', province: '', type: 'unknown', color: Math.floor(Math.random() * 9)});
+    agent.dir = dir;
     ambientCars.add(agent);
-    drive(agent, passing(Math.random() < .5 ? 1 : -1), {speed: 9 + Math.random() * 3, startMoving: true})
+    drive(agent, passing(dir), {speed: LANE_SPEED[dir], startMoving: true})
       .catch(() => {}).finally(() => { removeAgent(agent); ambientCars.delete(agent); });
+    return true;
   }
 
   // Frame loop: runs only while something moves.
@@ -263,5 +309,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     parkedKeys: () => [...agents.entries()].filter(([, a]) => !a.leaving && a.stall).map(([k]) => k),
     agentFor: k => agents.get(k),
     get busy() { return movers.size > ambientCars.size; },
+    get queued() { return entryPending; },
+    isArriving: k => arriving.has(k),
   };
 }

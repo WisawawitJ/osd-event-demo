@@ -35,7 +35,8 @@ Useful URLs:
   **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
 - **EN / TH** in the header switches the whole showcase page (building and parking) between Thai and English. Names, plates and provinces stay as entered. The `#explore` page stays in Thai.
-- **Night** in the header switches the whole scene, car park lamps included.
+- **Night** in the header switches the whole scene, car park lamps and headlights included.
+- **View controls** at the bottom right of the 3D view: zoom in, zoom out, **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
 
 ### The parking story (10 steps, about 2½ minutes on auto)
 
@@ -61,7 +62,9 @@ In the staff console:
 - **Reports**: download the event and audit CSVs, or set the capacity.
 
 The visitor's phone form can be filled in by hand. The car photo reads a sample plate.
-Staff and visitor cars also come and go by themselves while the car park is on screen.
+Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street, and leaving cars wait in their aisle.
+Staff and visitor cars also come and go by themselves while the car park is on screen. Through-traffic drives both lanes of the
+street whenever it is in view; it keeps to one speed per lane and gives way to cars turning in or pulling out.
 
 ## What is real and what is imagined
 

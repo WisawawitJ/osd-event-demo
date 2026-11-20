@@ -158,6 +158,12 @@ const S = {
   'gate.sim.visitor': ['รถผู้มาติดต่อ', 'Approved visitor'],
   'gate.sim.unknown': ['รถไม่รู้จัก', 'Unknown car'],
   'gate.sim.exit': ['รถออก', 'A car leaves'],
+  'gate.sim.coming': ['{plate} กำลังขับมาที่ไม้กั้น', '{plate} is driving to the barrier'],
+  'gate.sim.leaving': ['{plate} กำลังออกจากที่จอด', '{plate} is leaving its bay'],
+  'gate.sim.queued': ['ต่อคิวหลังรถคันก่อน', 'queued behind the car ahead'],
+  'gate.sim.noVisitor': ['ไม่มีผู้มาติดต่อที่อนุมัติสำหรับวันนี้และยังไม่มาถึง · ส่งคำขอจากมือถือแล้วกดอนุมัติก่อน', 'No approved visitor is still due today · send a request from the phone and approve it first'],
+  'gate.sim.noStaff': ['รถพนักงานทุกคันจอดอยู่แล้ว', 'Every staff car is already parked'],
+  'gate.sim.waitingAlert': ['มีรถไม่รู้จักรอการตัดสินใจที่ไม้กั้น · เลือกเปิดหรือไม่ให้เข้าก่อน', 'An unknown car is waiting at the barrier · choose Open or Deny first'],
   'gate.busy': ['มีรถอยู่ที่ไม้กั้น รอสักครู่', 'A car is at the barrier, one moment'],
 
   // events
