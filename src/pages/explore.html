@@ -1,0 +1,28 @@
+<header class="header">
+    <div class="identity"><h1>OSD</h1><span>THE OFFICE · 3D</span></div>
+    <a class="download" href="./model/osd-building.glb" download="osd-building.glb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/></svg><span>ดาวน์โหลด GLB</span></a>
+  </header>
+  <main>
+    <div class="toolbar">
+      <nav class="floors" aria-label="เลือกชั้น">
+        <button type="button" data-floor="all" aria-pressed="true" disabled>ทั้งอาคาร</button>
+        <button type="button" data-floor="1" aria-pressed="false" disabled>ชั้น 1</button>
+        <button type="button" data-floor="2" aria-pressed="false" disabled>ชั้น 2</button>
+        <button type="button" data-floor="3" aria-pressed="false" disabled>ชั้น 3</button>
+        <button type="button" data-floor="4" aria-pressed="false" disabled>ชั้น 4</button>
+        <button type="button" data-floor="5" aria-pressed="false" disabled>ดาดฟ้า</button>
+      </nav>
+      <div class="tools" role="group" aria-label="รูปแบบการดู">
+        <button id="exterior" type="button" aria-pressed="true" disabled>เปลือกอาคารและสวน</button>
+        <button id="explode" type="button" aria-pressed="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 8 9-5 9 5-9 5-9-5Zm0 5 9 5 9-5M3 18l9 5 9-5"/></svg>แยกชั้น</button>
+        <button id="cutaway" type="button" aria-pressed="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10V4h16v6M4 15v5h16v-5M2 12h20"/></svg>ตัดผนัง</button>
+        <button id="reset" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 3v7h7"/></svg>คืนมุมมอง</button>
+      </div>
+    </div>
+    <div class="camera-presets" role="group" aria-label="มุมกล้อง"><span>สำรวจอาคาร</span><button id="camera-front" type="button" disabled>มุมหลัก</button><button id="camera-side" type="button" disabled>อีกมุม</button><button id="lift" type="button" disabled>ดูลิฟต์</button><button id="courtyard" type="button" disabled>บ่อปลา</button><button id="office" type="button" disabled>สำนักงาน</button><button id="arrival" type="button" disabled>ลานวนรถ</button><button id="reception" type="button" disabled>ต้อนรับ</button><button id="services" type="button" disabled>ห้องบริการ</button><button id="parking" type="button" disabled>ที่จอดรถ</button><button id="stairs" type="button" disabled>บันได</button></div>
+    <section id="viewport" aria-label="โมเดลอาคาร OSD">
+      <div class="stage-message"><p id="status" role="status" data-state="loading">กำลังโหลดโมเดลอาคาร…</p><button type="button" id="retry" hidden>ลองโหลดใหม่</button></div>
+    </section>
+    <div class="help"><span>ลากเพื่อหมุน · ลากปุ่มขวาเพื่อเลื่อน · เลื่อนล้อเมาส์หรือใช้สองนิ้วเพื่อซูม</span><span id="view-label">ทั้งอาคาร</span></div>
+  </main>
+  <footer><strong>โมเดลสำหรับนำเสนอ</strong><span>อ้างอิงแปลนและภาพถ่าย · วัสดุ เปลือกอาคาร และสวนเป็นภาพจำลอง</span></footer>

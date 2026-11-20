@@ -1,0 +1,1952 @@
+{
+  "version": 2,
+  "mode": "simulation",
+  "rooms": [
+    {
+      "id": "f1_meeting_1",
+      "layoutId": "meeting-ground-1",
+      "label": "ห้องประชุมเล็ก 1",
+      "floor": 1,
+      "center": [
+        18.69749288120679,
+        0,
+        -5.068131609914878
+      ],
+      "lightPosition": [
+        19.797492881206793,
+        2.65,
+        -5.068131609914878
+      ],
+      "lightRadius": 2.3658710541170107,
+      "doorIds": [
+        "ground-meeting-1"
+      ],
+      "acUnits": [
+        "FCU 1-1"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          null
+        ],
+        "doors": {
+          "ground-meeting-1": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f1_meeting_2",
+      "layoutId": "meeting-ground-2",
+      "label": "ห้องประชุมเล็ก 2",
+      "floor": 1,
+      "center": [
+        24.750881028976643,
+        0,
+        -3.005495780550484
+      ],
+      "lightPosition": [
+        23.65088102897664,
+        2.65,
+        -3.005495780550484
+      ],
+      "lightRadius": 2.334579243038636,
+      "doorIds": [
+        "ground-meeting-2"
+      ],
+      "acUnits": [
+        "FCU 1-2"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          null
+        ],
+        "doors": {
+          "ground-meeting-2": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f1_guest",
+      "layoutId": "guest-ground",
+      "label": "ห้องรับแขก",
+      "floor": 1,
+      "center": [
+        19.19948822107286,
+        0,
+        8.731006669773274
+      ],
+      "lightPosition": [
+        20.29948822107286,
+        2.65,
+        8.731006669773274
+      ],
+      "lightRadius": 3.471106159841928,
+      "doorIds": [
+        "ground-guest"
+      ],
+      "acUnits": [
+        "FCU 1-4"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_1_4"
+        ],
+        "doors": {
+          "ground-guest": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f1_lobby",
+      "layoutId": "reception",
+      "label": "โถงพักคอย",
+      "floor": 1,
+      "center": [
+        13.513898423814217,
+        0,
+        3.053987460176219
+      ],
+      "lightPosition": [
+        13.513898423814217,
+        2.65,
+        3.053987460176219
+      ],
+      "lightRadius": 6,
+      "doorIds": [
+        "ground-core"
+      ],
+      "acUnits": [],
+      "entities": {
+        "light": null,
+        "climate": [],
+        "doors": {
+          "ground-core": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": false,
+        "door": true
+      },
+      "lightPositions": [
+        [
+          13.513898423814217,
+          2.65,
+          3.053987460176219
+        ],
+        [
+          -1.8212923008422846,
+          3.7,
+          6.747729655073356
+        ],
+        [
+          4.178707699157716,
+          3.7,
+          6.747729655073356
+        ]
+      ]
+    },
+    {
+      "id": "f1_billing",
+      "layoutId": "guard",
+      "label": "ห้องรับเช็ค–วางบิล",
+      "floor": 1,
+      "center": [
+        12.832396173833187,
+        0,
+        10.032570499981878
+      ],
+      "lightPosition": [
+        13.932396173833187,
+        2.65,
+        10.032570499981878
+      ],
+      "lightRadius": 2.2550677752274053,
+      "doorIds": [],
+      "acUnits": [
+        "FCU 1-3"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_1_3"
+        ],
+        "doors": {}
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": false
+      }
+    },
+    {
+      "id": "f2_admin_manager",
+      "layoutId": "admin-manager",
+      "label": "ห้องผู้จัดการฝ่ายธุรการ",
+      "floor": 2,
+      "center": [
+        1.650349379119586,
+        0,
+        -6.30787678245645
+      ],
+      "lightPosition": [
+        1.650349379119586,
+        2.65,
+        -6.30787678245645
+      ],
+      "lightRadius": 1.9573954378820777,
+      "doorIds": [
+        "admin-manager"
+      ],
+      "acUnits": [
+        "FCU 2-1"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_2_1"
+        ],
+        "doors": {
+          "admin-manager": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f2_admin",
+      "layoutId": "admin",
+      "label": "ฝ่ายธุรการ",
+      "floor": 2,
+      "center": [
+        3.218674094426786,
+        0,
+        -2.793049760916901
+      ],
+      "lightPosition": [
+        3.218674094426786,
+        2.65,
+        -2.793049760916901
+      ],
+      "lightRadius": 4.627900341711651,
+      "doorIds": [
+        "admin",
+        "admin-manager"
+      ],
+      "acUnits": [
+        "FCU 2-3",
+        "FCU 2-4"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_2_3",
+          "climate.fcu_2_4"
+        ],
+        "doors": {
+          "admin": null,
+          "admin-manager": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f2_sales",
+      "layoutId": "sales",
+      "label": "ฝ่ายขาย",
+      "floor": 2,
+      "center": [
+        2.606916226753767,
+        0,
+        7.017321862494114
+      ],
+      "lightPosition": [
+        2.606916226753767,
+        2.65,
+        7.017321862494114
+      ],
+      "lightRadius": 6,
+      "doorIds": [
+        "sales-west",
+        "sales-east"
+      ],
+      "acUnits": [
+        "FCU 2-7",
+        "FCU 2-8"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_2_7",
+          "climate.fcu_2_8"
+        ],
+        "doors": {
+          "sales-west": null,
+          "sales-east": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f2_sales_manager_1",
+      "layoutId": "sales-manager-1",
+      "label": "ห้องผู้จัดการฝ่ายขาย 1",
+      "floor": 2,
+      "center": [
+        -4.356000594397363,
+        0,
+        5.148679648511064
+      ],
+      "lightPosition": [
+        -4.356000594397363,
+        2.65,
+        5.148679648511064
+      ],
+      "lightRadius": 2.08222538791563,
+      "doorIds": [
+        "sales-manager-1"
+      ],
+      "acUnits": [
+        "FCU 2-5"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_2_5"
+        ],
+        "doors": {
+          "sales-manager-1": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f2_sales_manager_2",
+      "layoutId": "sales-manager-2",
+      "label": "ห้องผู้จัดการฝ่ายขาย 2",
+      "floor": 2,
+      "center": [
+        -4.356000594397362,
+        0,
+        8.874841206155834
+      ],
+      "lightPosition": [
+        -4.356000594397362,
+        2.65,
+        8.874841206155834
+      ],
+      "lightRadius": 2.090271157443459,
+      "doorIds": [
+        "sales-manager-2"
+      ],
+      "acUnits": [
+        "FCU 2-6"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_2_6"
+        ],
+        "doors": {
+          "sales-manager-2": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f2_customer",
+      "layoutId": "client-team",
+      "label": "ฝ่ายลูกค้าสัมพันธ์",
+      "floor": 2,
+      "center": [
+        10.137099434292614,
+        0,
+        7.829291395951036
+      ],
+      "lightPosition": [
+        10.137099434292614,
+        2.65,
+        7.829291395951036
+      ],
+      "lightRadius": 3.1374036835277948,
+      "doorIds": [],
+      "acUnits": [
+        "FCU 2-9"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_2_9"
+        ],
+        "doors": {}
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": false
+      }
+    },
+    {
+      "id": "f2_executive_1",
+      "layoutId": "executive-1",
+      "label": "ห้องผู้บริหาร 1",
+      "floor": 2,
+      "center": [
+        19.480310504207868,
+        0,
+        -4.194531421404191
+      ],
+      "lightPosition": [
+        19.480310504207868,
+        2.65,
+        -4.194531421404191
+      ],
+      "lightRadius": 3.2147846962857867,
+      "doorIds": [
+        "executive-1",
+        "executive-lobby"
+      ],
+      "acUnits": [
+        "FCU 2-13"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          null
+        ],
+        "doors": {
+          "executive-1": null,
+          "executive-lobby": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f2_executive_2",
+      "layoutId": "executive-2",
+      "label": "ห้องผู้บริหาร 2",
+      "floor": 2,
+      "center": [
+        19.480310504207864,
+        0,
+        7.829291395951036
+      ],
+      "lightPosition": [
+        19.480310504207864,
+        2.65,
+        7.829291395951036
+      ],
+      "lightRadius": 3.4159566182307928,
+      "doorIds": [
+        "executive-2",
+        "executive-lobby"
+      ],
+      "acUnits": [
+        "FCU 2-11"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          null
+        ],
+        "doors": {
+          "executive-2": null,
+          "executive-lobby": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f2_guest_meeting",
+      "layoutId": "executive-meeting",
+      "label": "ส่วนรับแขก/ประชุมย่อย",
+      "floor": 2,
+      "center": [
+        19.68052216999176,
+        0,
+        1.700589848899482
+      ],
+      "lightPosition": [
+        20.780522169991762,
+        2.65,
+        1.700589848899482
+      ],
+      "lightRadius": 3.1697054149653487,
+      "doorIds": [
+        "executive-lobby"
+      ],
+      "acUnits": [
+        "FCU 2-12"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          null
+        ],
+        "doors": {
+          "executive-lobby": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f2_documents",
+      "layoutId": "documents",
+      "label": "ห้องเก็บเอกสาร",
+      "floor": 2,
+      "center": [
+        6.255217692149246,
+        0,
+        -6.318999652777776
+      ],
+      "lightPosition": [
+        6.255217692149246,
+        2.65,
+        -6.318999652777776
+      ],
+      "lightRadius": 1.9046433671411291,
+      "doorIds": [],
+      "acUnits": [
+        "FCU 2-2"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_2_2"
+        ],
+        "doors": {}
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": false
+      }
+    },
+    {
+      "id": "f2_secretary",
+      "layoutId": "secretary",
+      "label": "เลขานุการ",
+      "floor": 2,
+      "center": [
+        14.508387470574387,
+        0,
+        5.7826832568267434
+      ],
+      "lightPosition": [
+        14.508387470574387,
+        2.65,
+        5.7826832568267434
+      ],
+      "lightRadius": 2.6161161243223905,
+      "doorIds": [],
+      "acUnits": [
+        "FCU 2-10"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_2_10"
+        ],
+        "doors": {}
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": false
+      }
+    },
+    {
+      "id": "f3_rnd",
+      "layoutId": "rnd",
+      "label": "ฝ่าย R&D",
+      "floor": 3,
+      "center": [
+        0.9558807594556107,
+        0,
+        -4.680779765513609
+      ],
+      "lightPosition": [
+        -0.1441192405443894,
+        2.65,
+        -4.680779765513609
+      ],
+      "lightRadius": 3.1011540634177623,
+      "doorIds": [
+        "rnd"
+      ],
+      "acUnits": [
+        "FCU 3-2"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_3_2"
+        ],
+        "doors": {
+          "rnd": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f3_monitor",
+      "layoutId": "monitor",
+      "label": "ห้อง Monitor",
+      "floor": 3,
+      "center": [
+        6.211199768669452,
+        0,
+        -5.994609517817071
+      ],
+      "lightPosition": [
+        6.211199768669452,
+        2.65,
+        -5.994609517817071
+      ],
+      "lightRadius": 2.09101946656007,
+      "doorIds": [
+        "monitor"
+      ],
+      "acUnits": [
+        "FCU 3-12"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_3_12"
+        ],
+        "doors": {
+          "monitor": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f3_server",
+      "layoutId": "server",
+      "label": "ห้อง Server",
+      "floor": 3,
+      "center": [
+        6.260778249888452,
+        0,
+        -2.4621427309634254
+      ],
+      "lightPosition": [
+        6.260778249888452,
+        2.65,
+        -2.4621427309634254
+      ],
+      "lightRadius": 2.211367694564977,
+      "doorIds": [
+        "server"
+      ],
+      "acUnits": [
+        "FCU 3-1"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          null
+        ],
+        "doors": {
+          "server": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f3_engineering",
+      "layoutId": "engineering",
+      "label": "ฝ่ายช่าง",
+      "floor": 3,
+      "center": [
+        5.647888426611394,
+        0,
+        7.2737601046098845
+      ],
+      "lightPosition": [
+        5.647888426611394,
+        2.65,
+        7.2737601046098845
+      ],
+      "lightRadius": 6,
+      "doorIds": [
+        "engineering"
+      ],
+      "acUnits": [
+        "FCU 3-5",
+        "FCU 3-6",
+        "FCU 3-7"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_3_5",
+          "climate.fcu_3_6",
+          "climate.fcu_3_7"
+        ],
+        "doors": {
+          "engineering": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f3_tech_manager_1",
+      "layoutId": "technical-manager-1",
+      "label": "ห้องผู้จัดการฝ่ายช่าง 1",
+      "floor": 3,
+      "center": [
+        -4.212675907624984,
+        0,
+        5.272100339200341
+      ],
+      "lightPosition": [
+        -4.212675907624984,
+        2.65,
+        5.272100339200341
+      ],
+      "lightRadius": 2.113865701235765,
+      "doorIds": [
+        "technical-manager-1"
+      ],
+      "acUnits": [
+        "FCU 3-3"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_3_3"
+        ],
+        "doors": {
+          "technical-manager-1": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f3_tech_manager_2",
+      "layoutId": "technical-manager-2",
+      "label": "ห้องผู้จัดการฝ่ายช่าง 2",
+      "floor": 3,
+      "center": [
+        -4.212675907624984,
+        0,
+        8.903724088491982
+      ],
+      "lightPosition": [
+        -4.212675907624984,
+        2.65,
+        8.903724088491982
+      ],
+      "lightRadius": 2.1224136099481408,
+      "doorIds": [
+        "technical-manager-2"
+      ],
+      "acUnits": [
+        "FCU 3-4"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_3_4"
+        ],
+        "doors": {
+          "technical-manager-2": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f3_lab",
+      "layoutId": "testing",
+      "label": "ห้องทดสอบอุปกรณ์",
+      "floor": 3,
+      "center": [
+        19.423865013532556,
+        0,
+        1.3801895635089587
+      ],
+      "lightPosition": [
+        20.523865013532557,
+        2.65,
+        1.3801895635089587
+      ],
+      "lightRadius": 3.6811684268455127,
+      "doorIds": [],
+      "acUnits": [
+        "FCU 3-11"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_3_11"
+        ],
+        "doors": {}
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": false
+      }
+    },
+    {
+      "id": "f3_tech_manager_3",
+      "layoutId": "technical-manager-3",
+      "label": "ห้องผู้จัดการฝ่ายช่าง 3",
+      "floor": 3,
+      "center": [
+        18.82892323890457,
+        0,
+        6.263669963580312
+      ],
+      "lightPosition": [
+        18.82892323890457,
+        2.65,
+        6.263669963580312
+      ],
+      "lightRadius": 2.1320656474916713,
+      "doorIds": [
+        "technical-manager-3"
+      ],
+      "acUnits": [
+        "FCU 3-10"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_3_10"
+        ],
+        "doors": {
+          "technical-manager-3": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f3_director",
+      "layoutId": "director-3",
+      "label": "ห้องผู้อำนวยการ ชั้น 3",
+      "floor": 3,
+      "center": [
+        18.283559945495597,
+        0,
+        9.151616494586978
+      ],
+      "lightPosition": [
+        19.3835599454956,
+        2.65,
+        9.151616494586978
+      ],
+      "lightRadius": 2.684224084748259,
+      "doorIds": [
+        "director-3"
+      ],
+      "acUnits": [
+        "FCU 3-9"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_3_9"
+        ],
+        "doors": {
+          "director-3": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f3_meeting",
+      "layoutId": "meeting-3",
+      "label": "ห้องประชุม ชั้น 3",
+      "floor": 3,
+      "center": [
+        12.408509921044267,
+        0,
+        2.817965518859917
+      ],
+      "lightPosition": [
+        13.508509921044267,
+        2.65,
+        2.817965518859917
+      ],
+      "lightRadius": 2.8319605386020927,
+      "doorIds": [
+        "meeting-3"
+      ],
+      "acUnits": [
+        "FCU 3-8"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_3_8"
+        ],
+        "doors": {
+          "meeting-3": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f4_seminar",
+      "layoutId": "seminar",
+      "label": "ห้องประชุมสัมมนา",
+      "floor": 4,
+      "center": [
+        3.4227274782469572,
+        0,
+        -2.4273513483410225
+      ],
+      "lightPosition": [
+        3.4227274782469572,
+        2.65,
+        -2.4273513483410225
+      ],
+      "lightRadius": 5.135762466266213,
+      "doorIds": [
+        "seminar-west",
+        "seminar-east"
+      ],
+      "acUnits": [
+        "FCU 4-1",
+        "FCU 4-2"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          null,
+          null
+        ],
+        "doors": {
+          "seminar-west": null,
+          "seminar-east": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f4_accounting",
+      "layoutId": "accounting",
+      "label": "ฝ่ายบัญชี",
+      "floor": 4,
+      "center": [
+        16.189132050799248,
+        0,
+        7.603395101521489
+      ],
+      "lightPosition": [
+        16.189132050799248,
+        2.65,
+        7.603395101521489
+      ],
+      "lightRadius": 4.9532584600810186,
+      "doorIds": [],
+      "acUnits": [
+        "FCU 4-5",
+        "FCU 4-6"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_4_5",
+          "climate.fcu_4_6"
+        ],
+        "doors": {}
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": false
+      }
+    },
+    {
+      "id": "f4_accounting_manager_2",
+      "layoutId": "accounting-manager-2",
+      "label": "ห้องผู้จัดการบัญชี 2",
+      "floor": 4,
+      "center": [
+        15.440917863396914,
+        0,
+        2.9972015103258833
+      ],
+      "lightPosition": [
+        15.440917863396914,
+        2.65,
+        2.9972015103258833
+      ],
+      "lightRadius": 1.8754136893604356,
+      "doorIds": [],
+      "acUnits": [],
+      "entities": {
+        "light": null,
+        "climate": [],
+        "doors": {}
+      },
+      "capabilities": {
+        "light": true,
+        "climate": false,
+        "door": false
+      }
+    },
+    {
+      "id": "f4_accounting_manager_1",
+      "layoutId": "accounting-manager-1",
+      "label": "ห้องผู้จัดการบัญชี 1",
+      "floor": 4,
+      "center": [
+        20.26923754147758,
+        0,
+        2.7984571167971386
+      ],
+      "lightPosition": [
+        20.26923754147758,
+        2.65,
+        2.7984571167971386
+      ],
+      "lightRadius": 1.9361185735040687,
+      "doorIds": [],
+      "acUnits": [],
+      "entities": {
+        "light": null,
+        "climate": [],
+        "doors": {}
+      },
+      "capabilities": {
+        "light": true,
+        "climate": false,
+        "door": false
+      }
+    },
+    {
+      "id": "f4_director",
+      "layoutId": "director-4",
+      "label": "ห้องผู้อำนวยการ ชั้น 4",
+      "floor": 4,
+      "center": [
+        20.269237541477583,
+        0,
+        -0.8490870467892276
+      ],
+      "lightPosition": [
+        21.369237541477585,
+        2.65,
+        -0.8490870467892276
+      ],
+      "lightRadius": 2.5884389959120044,
+      "doorIds": [
+        "director-4"
+      ],
+      "acUnits": [
+        "FCU 4-7"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_4_7"
+        ],
+        "doors": {
+          "director-4": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f4_meeting_2",
+      "layoutId": "meeting-4",
+      "label": "ห้องประชุมย่อย 2",
+      "floor": 4,
+      "center": [
+        -3.7905249221786477,
+        0,
+        9.368712949923864
+      ],
+      "lightPosition": [
+        -3.7905249221786477,
+        2.65,
+        9.368712949923864
+      ],
+      "lightRadius": 3.250526340544844,
+      "doorIds": [
+        "meeting-4"
+      ],
+      "acUnits": [
+        "FCU 4-3"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_4_3"
+        ],
+        "doors": {
+          "meeting-4": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "f4_recreation",
+      "layoutId": "lounge-4",
+      "label": "ส่วนสันทนาการ",
+      "floor": 4,
+      "center": [
+        3.2707464714308605,
+        0,
+        9.228422789785931
+      ],
+      "lightPosition": [
+        3.2707464714308605,
+        2.65,
+        9.228422789785931
+      ],
+      "lightRadius": 3.2252247094409383,
+      "doorIds": [],
+      "acUnits": [],
+      "entities": {
+        "light": null,
+        "climate": [],
+        "doors": {}
+      },
+      "capabilities": {
+        "light": true,
+        "climate": false,
+        "door": false
+      }
+    },
+    {
+      "id": "f4_kids",
+      "layoutId": "rest",
+      "label": "ห้องเด็ก",
+      "floor": 4,
+      "center": [
+        9.338295897396641,
+        0,
+        8.562044529130723
+      ],
+      "lightPosition": [
+        8.238295897396641,
+        2.65,
+        8.562044529130723
+      ],
+      "lightRadius": 2.3864228397801344,
+      "doorIds": [
+        "rest"
+      ],
+      "acUnits": [
+        "FCU 4-4"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_4_4"
+        ],
+        "doors": {
+          "rest": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    },
+    {
+      "id": "roof_stair",
+      "layoutId": "roof-stair",
+      "label": "โถงบันได",
+      "floor": 5,
+      "center": [
+        13.428569999999999,
+        0,
+        -4.848575
+      ],
+      "lightPosition": [
+        13.428569999999999,
+        2.65,
+        -4.848575
+      ],
+      "lightRadius": 4.809051731217626,
+      "doorIds": [
+        "roof-stair"
+      ],
+      "acUnits": [],
+      "entities": {
+        "light": null,
+        "climate": [],
+        "doors": {
+          "roof-stair": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": false,
+        "door": true
+      }
+    },
+    {
+      "id": "roof_gym",
+      "layoutId": "roof-gym",
+      "label": "ห้องออกกำลังกาย",
+      "floor": 5,
+      "center": [
+        11.462183862626532,
+        0,
+        2.9524722240613235
+      ],
+      "lightPosition": [
+        12.562183862626531,
+        2.65,
+        2.9524722240613235
+      ],
+      "lightRadius": 3.7707839831251384,
+      "doorIds": [
+        "roof-gym"
+      ],
+      "acUnits": [
+        "FCU 4-8"
+      ],
+      "entities": {
+        "light": null,
+        "climate": [
+          "climate.fcu_4_8"
+        ],
+        "doors": {
+          "roof-gym": null
+        }
+      },
+      "capabilities": {
+        "light": true,
+        "climate": true,
+        "door": true
+      }
+    }
+  ],
+  "acUnits": [
+    {
+      "id": "FCU 1-1",
+      "entity": null,
+      "model": null,
+      "type": "cassette",
+      "floor": 1,
+      "room": "f1_meeting_1",
+      "position": [
+        18.4,
+        2.65,
+        -5.39
+      ],
+      "planPx": [
+        1023,
+        187
+      ]
+    },
+    {
+      "id": "FCU 1-2",
+      "entity": null,
+      "model": null,
+      "type": "cassette",
+      "floor": 1,
+      "room": "f1_meeting_2",
+      "position": [
+        24.78,
+        2.65,
+        -3
+      ],
+      "planPx": [
+        1229,
+        265
+      ]
+    },
+    {
+      "id": "FCU 1-4",
+      "entity": "climate.fcu_1_4",
+      "model": "FXFQ63AVS",
+      "type": "cassette",
+      "floor": 1,
+      "room": "f1_guest",
+      "position": [
+        18.77,
+        2.65,
+        8.86
+      ],
+      "planPx": [
+        1035,
+        652
+      ]
+    },
+    {
+      "id": "FCU 1-3",
+      "entity": "climate.fcu_1_3",
+      "model": "FXZQ32MVES",
+      "type": "cassette",
+      "floor": 1,
+      "room": "f1_billing",
+      "position": [
+        12.79,
+        2.65,
+        9.1
+      ],
+      "planPx": [
+        842,
+        660
+      ]
+    },
+    {
+      "id": "FCU 2-1",
+      "entity": "climate.fcu_2_1",
+      "model": "FXAQ32PVES",
+      "type": "wall",
+      "floor": 2,
+      "room": "f2_admin_manager",
+      "position": [
+        1.68,
+        2.35,
+        -7.55
+      ],
+      "planPx": [
+        417,
+        163
+      ]
+    },
+    {
+      "id": "FCU 2-3",
+      "entity": "climate.fcu_2_3",
+      "model": "FXFQ50AVS",
+      "type": "cassette",
+      "floor": 2,
+      "room": "f2_admin",
+      "position": [
+        1.46,
+        2.65,
+        -2.8
+      ],
+      "planPx": [
+        408,
+        333
+      ]
+    },
+    {
+      "id": "FCU 2-4",
+      "entity": "climate.fcu_2_4",
+      "model": "FXFQ50AVS",
+      "type": "cassette",
+      "floor": 2,
+      "room": "f2_admin",
+      "position": [
+        6.56,
+        2.65,
+        -2.8
+      ],
+      "planPx": [
+        612,
+        333
+      ]
+    },
+    {
+      "id": "FCU 2-7",
+      "entity": "climate.fcu_2_7",
+      "model": "FXFQ100AVS",
+      "type": "cassette",
+      "floor": 2,
+      "room": "f2_sales",
+      "position": [
+        1.26,
+        2.65,
+        6.92
+      ],
+      "planPx": [
+        400,
+        708
+      ]
+    },
+    {
+      "id": "FCU 2-8",
+      "entity": "climate.fcu_2_8",
+      "model": "FXFQ100AVS",
+      "type": "cassette",
+      "floor": 2,
+      "room": "f2_sales",
+      "position": [
+        5.71,
+        2.65,
+        6.92
+      ],
+      "planPx": [
+        578,
+        708
+      ]
+    },
+    {
+      "id": "FCU 2-5",
+      "entity": "climate.fcu_2_5",
+      "model": "FXAQ32PVES",
+      "type": "wall",
+      "floor": 2,
+      "room": "f2_sales_manager_1",
+      "position": [
+        -4.25,
+        2.35,
+        6.88
+      ],
+      "planPx": [
+        180,
+        686
+      ]
+    },
+    {
+      "id": "FCU 2-6",
+      "entity": "climate.fcu_2_6",
+      "model": "FXAQ32PVES",
+      "type": "wall",
+      "floor": 2,
+      "room": "f2_sales_manager_2",
+      "position": [
+        -4.3,
+        2.35,
+        7.14
+      ],
+      "planPx": [
+        178,
+        737
+      ]
+    },
+    {
+      "id": "FCU 2-9",
+      "entity": "climate.fcu_2_9",
+      "model": "FXFQ100AVS",
+      "type": "cassette",
+      "floor": 2,
+      "room": "f2_customer",
+      "position": [
+        10.26,
+        2.65,
+        6.64
+      ],
+      "planPx": [
+        760,
+        697
+      ]
+    },
+    {
+      "id": "FCU 2-13",
+      "entity": null,
+      "model": null,
+      "type": "cassette",
+      "floor": 2,
+      "room": "f2_executive_1",
+      "position": [
+        19.67,
+        2.65,
+        -5.26
+      ],
+      "planPx": [
+        1136,
+        238
+      ]
+    },
+    {
+      "id": "FCU 2-11",
+      "entity": null,
+      "model": null,
+      "type": "one-way",
+      "floor": 2,
+      "room": "f2_executive_2",
+      "position": [
+        19.42,
+        2.65,
+        6.41
+      ],
+      "planPx": [
+        1126,
+        688
+      ]
+    },
+    {
+      "id": "FCU 2-12",
+      "entity": null,
+      "model": null,
+      "type": "cassette",
+      "floor": 2,
+      "room": "f2_guest_meeting",
+      "position": [
+        19.37,
+        2.65,
+        1.38
+      ],
+      "planPx": [
+        1124,
+        494
+      ]
+    },
+    {
+      "id": "FCU 2-2",
+      "entity": "climate.fcu_2_2",
+      "model": "FXAQ32PVES",
+      "type": "wall",
+      "floor": 2,
+      "room": "f2_documents",
+      "position": [
+        6.56,
+        2.35,
+        -7.55
+      ],
+      "planPx": [
+        612,
+        163
+      ]
+    },
+    {
+      "id": "FCU 2-10",
+      "entity": "climate.fcu_2_10",
+      "model": "FXMQ125PAVS",
+      "type": "duct",
+      "floor": 2,
+      "room": "f2_secretary",
+      "position": [
+        13.77,
+        2.65,
+        4.67
+      ],
+      "planPx": [
+        900,
+        621
+      ]
+    },
+    {
+      "id": "FCU 3-2",
+      "entity": "climate.fcu_3_2",
+      "model": "FXFQ63AVS",
+      "type": "cassette",
+      "floor": 3,
+      "room": "f3_rnd",
+      "position": [
+        1.99,
+        2.65,
+        -4.86
+      ],
+      "planPx": [
+        415,
+        239
+      ]
+    },
+    {
+      "id": "FCU 3-12",
+      "entity": "climate.fcu_3_12",
+      "model": "FXZQ32MVES",
+      "type": "cassette",
+      "floor": 3,
+      "room": "f3_monitor",
+      "position": [
+        6.32,
+        2.65,
+        -7.06
+      ],
+      "planPx": [
+        592,
+        149
+      ]
+    },
+    {
+      "id": "FCU 3-1",
+      "entity": null,
+      "model": null,
+      "type": "duct",
+      "floor": 3,
+      "room": "f3_server",
+      "position": [
+        5.58,
+        2.65,
+        -3.71
+      ],
+      "planPx": [
+        562,
+        286
+      ]
+    },
+    {
+      "id": "FCU 3-5",
+      "entity": "climate.fcu_3_5",
+      "model": "FXFQ125AVS",
+      "type": "cassette",
+      "floor": 3,
+      "room": "f3_engineering",
+      "position": [
+        2.11,
+        2.65,
+        6.66
+      ],
+      "planPx": [
+        420,
+        710
+      ]
+    },
+    {
+      "id": "FCU 3-6",
+      "entity": "climate.fcu_3_6",
+      "model": "FXFQ125AVS",
+      "type": "cassette",
+      "floor": 3,
+      "room": "f3_engineering",
+      "position": [
+        7.81,
+        2.65,
+        6.76
+      ],
+      "planPx": [
+        653,
+        714
+      ]
+    },
+    {
+      "id": "FCU 3-7",
+      "entity": "climate.fcu_3_7",
+      "model": "FXFQ125AVS",
+      "type": "cassette",
+      "floor": 3,
+      "room": "f3_engineering",
+      "position": [
+        12.5,
+        2.65,
+        6.76
+      ],
+      "planPx": [
+        845,
+        714
+      ]
+    },
+    {
+      "id": "FCU 3-3",
+      "entity": "climate.fcu_3_3",
+      "model": "FXAQ32PVES",
+      "type": "wall",
+      "floor": 3,
+      "room": "f3_tech_manager_1",
+      "position": [
+        -4.25,
+        2.35,
+        6.94
+      ],
+      "planPx": [
+        160,
+        700
+      ]
+    },
+    {
+      "id": "FCU 3-4",
+      "entity": "climate.fcu_3_4",
+      "model": "FXAQ32PVES",
+      "type": "wall",
+      "floor": 3,
+      "room": "f3_tech_manager_2",
+      "position": [
+        -4.25,
+        2.35,
+        7.22
+      ],
+      "planPx": [
+        160,
+        750
+      ]
+    },
+    {
+      "id": "FCU 3-11",
+      "entity": "climate.fcu_3_11",
+      "model": "FXFQ100AVS",
+      "type": "cassette",
+      "floor": 3,
+      "room": "f3_lab",
+      "position": [
+        19.11,
+        2.65,
+        1.11
+      ],
+      "planPx": [
+        1115,
+        483
+      ]
+    },
+    {
+      "id": "FCU 3-10",
+      "entity": "climate.fcu_3_10",
+      "model": "FXAQ32PVES",
+      "type": "wall",
+      "floor": 3,
+      "room": "f3_tech_manager_3",
+      "position": [
+        18.93,
+        2.35,
+        5.12
+      ],
+      "planPx": [
+        1108,
+        651
+      ]
+    },
+    {
+      "id": "FCU 3-9",
+      "entity": "climate.fcu_3_9",
+      "model": "FXFQ50AVS",
+      "type": "cassette",
+      "floor": 3,
+      "room": "f3_director",
+      "position": [
+        17.76,
+        2.65,
+        8.57
+      ],
+      "planPx": [
+        1060,
+        788
+      ]
+    },
+    {
+      "id": "FCU 3-8",
+      "entity": "climate.fcu_3_8",
+      "model": "FXFQ80AVS",
+      "type": "cassette",
+      "floor": 3,
+      "room": "f3_meeting",
+      "position": [
+        12.01,
+        2.65,
+        2.16
+      ],
+      "planPx": [
+        825,
+        526
+      ]
+    },
+    {
+      "id": "FCU 4-1",
+      "entity": null,
+      "model": null,
+      "type": "duct",
+      "floor": 4,
+      "room": "f4_seminar",
+      "position": [
+        1.82,
+        2.65,
+        -0.13
+      ],
+      "planPx": [
+        398,
+        370
+      ]
+    },
+    {
+      "id": "FCU 4-2",
+      "entity": null,
+      "model": null,
+      "type": "duct",
+      "floor": 4,
+      "room": "f4_seminar",
+      "position": [
+        4.44,
+        2.65,
+        -0.13
+      ],
+      "planPx": [
+        507,
+        370
+      ]
+    },
+    {
+      "id": "FCU 4-5",
+      "entity": "climate.fcu_4_5",
+      "model": "FXEQ63AV36",
+      "type": "one-way",
+      "floor": 4,
+      "room": "f4_accounting",
+      "position": [
+        12.37,
+        2.65,
+        7.04
+      ],
+      "planPx": [
+        837,
+        667
+      ]
+    },
+    {
+      "id": "FCU 4-6",
+      "entity": "climate.fcu_4_6",
+      "model": "FXFQ125AVS",
+      "type": "cassette",
+      "floor": 4,
+      "room": "f4_accounting",
+      "position": [
+        17.8,
+        2.65,
+        5.18
+      ],
+      "planPx": [
+        1063,
+        590
+      ]
+    },
+    {
+      "id": "FCU 4-7",
+      "entity": "climate.fcu_4_7",
+      "model": "FXEQ40AV36",
+      "type": "one-way",
+      "floor": 4,
+      "room": "f4_director",
+      "position": [
+        20.08,
+        2.65,
+        -1.27
+      ],
+      "planPx": [
+        1158,
+        323
+      ]
+    },
+    {
+      "id": "FCU 4-3",
+      "entity": "climate.fcu_4_3",
+      "model": "FXCQ125MV19",
+      "type": "two-way",
+      "floor": 4,
+      "room": "f4_meeting_2",
+      "position": [
+        -4.09,
+        2.65,
+        7.84
+      ],
+      "planPx": [
+        152,
+        700
+      ]
+    },
+    {
+      "id": "FCU 4-4",
+      "entity": "climate.fcu_4_4",
+      "model": "FXFQ63AVS",
+      "type": "cassette",
+      "floor": 4,
+      "room": "f4_kids",
+      "position": [
+        9.44,
+        2.65,
+        8.28
+      ],
+      "planPx": [
+        715,
+        718
+      ]
+    },
+    {
+      "id": "FCU 4-8",
+      "entity": "climate.fcu_4_8",
+      "model": "FXFQ125AVS",
+      "type": "cassette",
+      "floor": 5,
+      "room": "roof_gym",
+      "position": [
+        11.46,
+        2.65,
+        2.95
+      ],
+      "planPx": [
+        771,
+        520
+      ]
+    }
+  ]
+}
