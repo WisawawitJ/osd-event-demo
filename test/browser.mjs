@@ -73,6 +73,8 @@ export async function open({gpu = process.env.GPU || 'auto', shots = join(root, 
   let shot = 0;
   const page = {
     renderer, logs, url: server.url, sleep,
+    cdp: send, // raw DevTools protocol, e.g. for profiling
+
     async goto(path) { logs.length = 0; await send('Page.navigate', {url: server.url + path.replace(/^\//, '')}); await sleep(300); },
     async eval(expression) {
       const r = await send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true});

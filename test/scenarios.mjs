@@ -183,4 +183,29 @@ export const scenarios = [
     expect(changed.length > 0 && changed.every(id => id === 'f4_meeting_2'), `only the meeting room's spot changed (changed: ${changed.join(', ') || 'none'})`);
     await p.click('#tour-night');
   }},
+  {name: 'a leaving car gets out even with busy street traffic', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    // Keep the eastbound lane as busy as spacing allows, then send a car out: it must get a gap and leave,
+    // not wait at the barrier for good (the bug: through-traffic never left a long enough gap).
+    await p.eval('window.__pump=setInterval(()=>__parking.traffic.passBy(1),30)');
+    await p.sleep(1500);
+    const key = await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');void __parking.traffic.leave(k);return k})()`);
+    try { await p.until(`!__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 12000, what: 'exit through the barrier (6 min of demo time)'}); }
+    finally { await p.eval('clearInterval(window.__pump)'); }
+    expect(true, 'car left');
+  }},
+
+  {name: 'dock: first visit to the meeting room is quick and does not stall', async run(p, expect) {
+    // Real speed and no ?debug, as visitors get it.
+    await p.goto('?probe=1');
+    await p.until(`document.documentElement.dataset.warm === 'done'`, {timeout: 40000, what: 'startup warm-up'});
+    await p.eval(`(()=>{window.__gaps=[];let last=performance.now();const f=t=>{window.__gaps.push(t-last);last=t;requestAnimationFrame(f)};requestAnimationFrame(f)})()`);
+    const t0 = Date.now();
+    await p.click('[data-destination="meeting"]');
+    await p.until(`document.body.dataset.tourDestination === 'meeting'`, {timeout: 10000, what: 'arrival'});
+    const took = Date.now() - t0, worst = Math.round(Math.max(...await p.eval('window.__gaps')));
+    expect(took < 2000, `lands within 2 s (took ${took} ms)`);
+    expect(worst < 250, `no frame longer than 250 ms (worst ${worst} ms)`);
+  }},
 ];

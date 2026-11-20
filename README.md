@@ -32,7 +32,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all 16 behaviour checks, about 14 s
+npm test                 # all 18 behaviour checks, about 20 s
 npm test -- kiosk night  # only checks whose names match
 ```
 
@@ -106,6 +106,9 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
 - The near clipping plane follows the viewing distance, and road paint, bay tints and car shadows use a depth offset,
   so nothing flickers against the surface underneath while the camera moves.
 - The resolution only ever steps down, and redraws in the same frame, so the picture never pops between sharp and soft.
+- Dock switches take about 2 s (1.2 s to the meeting room), with no first-visit stall. At load, every shader is compiled
+  both opaque and transparent (the flight's floor fades use transparent copies), textures are uploaded, and one tiny
+  off-screen frame is drawn. The meeting-room cutaway moves a permanent clipping plane instead of swapping shaders.
 - Car movement runs in real time at any frame rate. Add `?fps=1` to see the frame rate.
 
 ## What is real and what is imagined

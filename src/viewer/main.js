@@ -61,11 +61,15 @@ try {
   // and step down (never back up) towards 1x while continuous rendering stays under ~38 fps.
   const maxPixelRatio = Math.min(devicePixelRatio, 1.5), minPixelRatio = Math.min(1, maxPixelRatio);
   let pixelRatio = maxPixelRatio, slowFrames = 0, lastFrameAt = 0;
+  let warming = false; // the startup shader warm-up holds normal frames so its temporary states never show
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1;
   renderer.localClippingEnabled = true;
+  // Shader error checks read every program's link log on first use, which blocks on the GPU: with them on,
+  // a stop's first visit stalled ~0.4 s. Keep them for ?debug (tests), skip them for visitors.
+  renderer.debug.checkShaderErrors = new URLSearchParams(location.search).has('debug');
   renderer.shadowMap.enabled=true;
   renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   renderer.shadowMap.autoUpdate=false;
@@ -133,7 +137,7 @@ try {
     if (frame || disposed || document.hidden) return;
     frame = requestAnimationFrame(time => {
       frame = 0;
-      if (disposed) return;
+      if (disposed || warming) return;
       renderer.render(scene, camera); fpsMeter?.();
       adaptResolution(time);
     });
@@ -225,13 +229,9 @@ try {
       if (exploded && currentFloor === 'all') root.position.y += index * 2.5;
     }
     model.updateWorldMatrix(true, true);
-    for (const { root, materials } of cutMeshes) {
-      const height = root.getWorldPosition(new THREE.Vector3()).y + 1.2;
-      for (const material of materials) {
-        material.clippingPlanes = cutaway ? [new THREE.Plane(new THREE.Vector3(0, -1, 0), height)] : [];
-        material.needsUpdate = true;
-      }
-    }
+    // Cutaway only moves each floor's clipping plane (far above the model when off). Swapping planes in and
+    // out changed every wall's shader and froze the view for ~0.7 s on each switch to or from the meeting room.
+    for (const { root, plane } of cutMeshes) plane.constant = cutaway ? root.getWorldPosition(new THREE.Vector3()).y + 1.2 : 1e5;
     const showExterior=exteriorEnabled&&currentFloor==='all'&&!exploded&&!cutaway;
     for(const object of presentationMeshes)object.visible=showExterior;
     for (const roof of roofs) roof.visible = showExterior||(currentFloor==='5'&&!cutaway&&!exploded&&roof.name.endsWith('service_roof_caps'));
@@ -414,10 +414,11 @@ try {
         const materials = [].concat(object.material || []);
         materials.forEach(material => ownedMaterials.add(material));
         if (cutTypes.has(object.userData.type)) {
-          const clones = materials.map(material => {const m=material.clone();m.clipShadows=true;return m;});
+          let cut = cutMeshes.find(entry => entry.root === root);
+          if (!cut) { cut = { root, plane: new THREE.Plane(new THREE.Vector3(0, -1, 0), 1e5) }; cutMeshes.push(cut); }
+          const clones = materials.map(material => {const m=material.clone();m.clipShadows=true;m.clippingPlanes=[cut.plane];return m;});
           object.material = Array.isArray(object.material) ? clones : clones[0];
           clones.forEach(material => ownedMaterials.add(material));
-          cutMeshes.push({ root, materials: clones });
         }
         if (object.userData.type === 'roof') roofs.push(object);
         if (object.userData.type === 'ceiling') ceilings.push(object);
@@ -492,16 +493,16 @@ try {
           const retreat=local||same?{eye:new THREE.Vector3(...start.target).add(new THREE.Vector3(...start.eye).sub(new THREE.Vector3(...start.target)).multiplyScalar(1.3)).toArray(),target:start.target,fov:start.fov}:contextPose(direction);
           const orient=contextPose();
           const phases=[];
-          if(!same&&lastDestination!=='overview')phases.push({to:retreat,duration:local?600:1050,
+          if(!same&&lastDestination!=='overview')phases.push({to:retreat,duration:local?400:650,
            onStart(){onPhase(L('ถอยออกจากจุดเดิม','Pulling back'));if(!local)sceneTransition.begin(()=>applyDestination('overview'));},
            onUpdate(t){if(!local)sceneTransition.progress(Math.max(0,(t-.25)/.75));},
            onEnd(){if(!local)sceneTransition.finish();}
           });
-          if(!local&&!same)phases.push({to:orient,duration:lastDestination==='overview'?450:750,
+          if(!local&&!same)phases.push({to:orient,duration:lastDestination==='overview'?300:450,
            onStart(){onPhase(L('มองตำแหน่งบนอาคาร','Locating it on the building'));marker.position.set(to.target[0],id==='energy'?15.8:id==='meeting'?meetingTarget.y-.6:.2,to.target[2]);marker.visible=id!=='overview';},
            onUpdate(){schedule();}
           });
-          phases.push({to,duration:local?1150:same?850:1450,
+          phases.push({to,duration:local?750:same?550:900,
            onStart(){onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));},
            onUpdate(t){sceneTransition.progress(Math.min(1,t/.75));markerMaterial.opacity=.6*(1-t);},
            onEnd(){sceneTransition.finish();}
@@ -511,6 +512,32 @@ try {
           return arrived;
         }
        });
+       // Warm-up: a stop's first visit stalled 0.3–0.7 s. The flight's scene transition fades floors with
+       // transparent copies of their materials, and a transparent material needs its own shader variant, which
+       // this GPU driver compiled and linked on the spot. Compile every material both ways at load, draw one tiny
+       // off-screen frame each way (shadows included), and upload every texture, before anyone clicks.
+       {
+        const hidden=[],opaque=[];
+        warming=true;
+        scene.traverse(object=>{if(!object.visible&&!object.isLight){hidden.push(object);object.visible=true;}});
+        const target=new THREE.WebGLRenderTarget(16,16);
+        const drawOffscreen=()=>{const previous=renderer.getRenderTarget();renderer.shadowMap.needsUpdate=true;renderer.setRenderTarget(target);renderer.render(scene,camera);renderer.setRenderTarget(previous);};
+        const setTransparent=value=>{for(const material of opaque){material.transparent=value;material.needsUpdate=true;}};
+        (async()=>{
+         await renderer.compileAsync(scene,camera);
+         scene.traverse(object=>{for(const material of [].concat(object.material||[]))for(const value of Object.values(material))if(value?.isTexture)renderer.initTexture(value);});
+         drawOffscreen();
+         model.traverse(object=>{for(const material of [].concat(object.material||[]))if(!material.transparent&&!opaque.includes(material))opaque.push(material);});
+         setTransparent(true);
+         await renderer.compileAsync(scene,camera);
+         drawOffscreen();
+        })().catch(()=>{}).finally(()=>{
+         setTransparent(false);
+         for(const object of hidden)object.visible=false;
+         warming=false;
+         target.dispose();renderer.shadowMap.needsUpdate=true;document.documentElement.dataset.warm='done';schedule();
+        });
+       }
        // View controls: zoom, back to the stop's own view, and a slow orbit when nobody is using the screen.
        const userMove=()=>{controls.dispatchEvent({type:'start'});controls.dispatchEvent({type:'end'});};
        let zoomFrame=0;

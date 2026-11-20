@@ -26,7 +26,7 @@ export function createLot({scene, stalls, schedule}) {
   const rect = (x0, x1, z0, z1, y) => flat(x1 - x0, z1 - z0).translate((x0 + x1) / 2, y, (z0 + z1) / 2);
 
   // Surfaces
-  const asphalt = mat({color: '#8d9592'}), street = mat({color: '#6f7774'}), kerb = mat({color: '#cfd3cc'}), paint = decal({color: '#f4f6f2'}, 2);
+  const asphalt = mat({color: '#8d9592'}), street = mat({color: '#6f7774'}), kerb = mat({color: '#cfd3cc'}), paint = mat({color: '#f7f4df', roughness: .7, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8});
   const LOT = {west: -60, east: SITE.west - .7, north: -16, south: DRIVE.north};
   put(mergeGeometries([
     rect(LOT.west, LOT.east, LOT.north, LOT.south, Y.road),
@@ -42,11 +42,12 @@ export function createLot({scene, stalls, schedule}) {
     new THREE.BoxGeometry(200, .1, 1.6).translate(0, pavementY - .05, STREET.south + .8),
   ]), kerb);
 
-  // Line marking: bay separators, street centre dashes, driveway arrows, stop lines and the gate loops.
-  const lines = [];
-  const line = (x0, z0, x1, z1, w = .12, y = Y.road + .012) => {
+  // Road paint matches the building model's own markings: warm white #f7f4df, lit like the ground, thin strokes.
+  // Line marking: bay separators, street centre dashes, and the gate mouth (lane divider, stop lines, loops).
+  const lines = [], darkLines = [];
+  const line = (x0, z0, x1, z1, w = .1, list = lines, y = Y.road + .012) => {
     const len = Math.hypot(x1 - x0, z1 - z0);
-    lines.push(new THREE.PlaneGeometry(w, len).rotateX(-Math.PI / 2).rotateY(Math.atan2(x1 - x0, z1 - z0)).translate((x0 + x1) / 2, y, (z0 + z1) / 2));
+    list.push(new THREE.PlaneGeometry(w, len).rotateX(-Math.PI / 2).rotateY(Math.atan2(x1 - x0, z1 - z0)).translate((x0 + x1) / 2, y, (z0 + z1) / 2));
   };
   for (const s of stalls.filter(s => s.zone === 'P2')) {
     const back = s.x + s.nose * 2.5, front = s.x - s.nose * 2.5;
@@ -54,29 +55,31 @@ export function createLot({scene, stalls, schedule}) {
     line(front, s.z + 1.25, back, s.z + 1.25);
     line(back, s.z - 1.25, back, s.z + 1.25);
   }
-  for (let x = -96; x < 96; x += 6) line(x, (STREET.north + STREET.south) / 2, x + 3, (STREET.north + STREET.south) / 2, .14, Y.road - .003);
-  line(GATE.west, GATE.z - .6, GATE.east, GATE.z - .6, .3);
-  line(GATE.west + .1, GATE.z + 1.1, (GATE.entryX + GATE.exitX) / 2, GATE.z + 1.1, .3);
-  put(mergeGeometries(lines), paint);
-  for (const g of lines) g.dispose();
-  // Arrow decals on the driveway
-  const arrowShape = new THREE.Shape([[0, 1.3], [.55, .35], [.2, .35], [.2, -1.1], [-.2, -1.1], [-.2, .35], [-.55, .35]].map(([x, y]) => new THREE.Vector2(x, y)));
-  const arrow = new THREE.ShapeGeometry(arrowShape).rotateX(-Math.PI / 2);
+  for (let x = -96; x < 96; x += 6) line(x, (STREET.north + STREET.south) / 2, x + 3, (STREET.north + STREET.south) / 2, .12, lines, Y.road - .003);
+  // Gate mouth: entry keeps to the west half, exit to the east half.
+  const divide = (GATE.entryX + GATE.exitX) / 2;
+  for (let z = DRIVE.north + 1.6; z < STREET.north - .4; z += 1.6) line(divide, z, divide, Math.min(z + .9, STREET.north - .4), .1);
+  line(GATE.west + .1, GATE.entryStopZ - 2.45, divide - .15, GATE.entryStopZ - 2.45, .25);   // entry stop line, outside the boom
+  line(divide + .15, GATE.exitStopZ + 2.45, GATE.east - .1, GATE.exitStopZ + 2.45, .25);     // exit stop line, inside the boom
+  // Detector loops: one rectangle per lane, under where each car stops.
+  const loop = (cx, cz) => { const w = .7, d = 1.1; line(cx - w, cz - d, cx + w, cz - d, .07, darkLines); line(cx - w, cz + d, cx + w, cz + d, .07, darkLines); line(cx - w, cz - d, cx - w, cz + d, .07, darkLines); line(cx + w, cz - d, cx + w, cz + d, .07, darkLines); };
+  loop(GATE.entryX, GATE.entryStopZ - .2);
+  loop(GATE.exitX, GATE.exitStopZ + .2);
+  // Arrows in the model's style: a 1.6 m shaft and two 0.6 m head strokes at 45°, 9 cm wide, slightly raised.
+  const strokeArrow = (x, z, heading) => {
+    const box = (len, cx, cz, angle) => new THREE.BoxGeometry(.09, .012, len).rotateY(angle).translate(cx, 0, cz);
+    // Built pointing -Z (tip at z = -0.8), then turned to the route heading (0 = +Z).
+    return mergeGeometries([box(1.6, 0, 0, 0), box(.6, .21, -.59, Math.PI / 4), box(.6, -.21, -.59, -Math.PI / 4)])
+      .rotateY(heading - Math.PI).translate(x, Y.road + .006, z);
+  };
   const arrows = [];
-  const placeArrow = (x, z, heading) => arrows.push(arrow.clone().rotateY(heading).translate(x, Y.road + .014, z));
-  // Shape points toward -Z before turning; heading follows the route convention (0 = +Z).
-  for (const x of [-30, -42, -54]) { placeArrow(x, 17.6, -Math.PI / 2 + Math.PI); placeArrow(x + 4, 14.8, Math.PI / 2 + Math.PI); }
-  placeArrow(GATE.entryX, 23.6 - 2.5, 0); placeArrow(GATE.exitX, 16.6 - 2.2, Math.PI);
-  put(mergeGeometries(arrows), paint);
-  for (const g of arrows) g.dispose();
-  arrow.dispose();
-  // Detector loops under the barrier
-  const loops = [];
-  for (const x of [GATE.entryX, GATE.exitX]) for (const z of [GATE.z + 1.6, GATE.z - 1.8]) {
-    loops.push(new THREE.RingGeometry(.92, 1.0, 4, 1).rotateZ(Math.PI / 4).scale(1, 1.4, 1).rotateX(-Math.PI / 2).translate(x, Y.road + .013, z));
-  }
-  put(mergeGeometries(loops), decal({color: '#2b3236'}, 2));
-  for (const g of loops) g.dispose();
+  for (const x of [-31, -43, -55]) arrows.push(strokeArrow(x, 17.6, -Math.PI / 2));   // westbound, into the lot
+  for (const x of [-27, -39, -51]) arrows.push(strokeArrow(x, 14.8, Math.PI / 2));    // eastbound, towards the exit
+  arrows.push(strokeArrow(GATE.entryX, DRIVE.south - 1.5, Math.PI));                    // entry lane, just past the boom
+  arrows.push(strokeArrow(GATE.exitX, STREET.north - 1.2, 0));                          // exit lane, out to the street
+  put(mergeGeometries([...lines, ...arrows]), paint);
+  put(mergeGeometries(darkLines), decal({color: '#2b3236'}, 2));
+  for (const g of [...lines, ...darkLines, ...arrows]) g.dispose();
   // Visitor bays in row A are tinted and labelled.
   const visitorFill = decal({color: '#3d8fb0', transparent: true, opacity: .22, depthWrite: false}, 1);
   put(mergeGeometries(stalls.filter(s => s.reserved === 'guest').map(s => rect(s.x - 2.4, s.x + 2.4, s.z - 1.15, s.z + 1.15, Y.road + .011))), visitorFill);

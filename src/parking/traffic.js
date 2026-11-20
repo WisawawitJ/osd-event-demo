@@ -69,7 +69,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   let generation = 0, frame = 0, last = 0;
   // Street discipline: through-traffic keeps one speed per lane, yields to cars joining the eastbound lane,
   // and does not spawn into it while a car is driving up to the gate or pulling out.
-  let entryPending = 0, streetArrivals = 0, exitingStreet = 0;
+  let entryPending = 0, streetArrivals = 0, exitingStreet = 0, eastHold = 0;
   const arriving = new Set(); // presence keys of cars on their way in
   const streetCars = new Set(); // arrival agents currently on the street
   const streetClear = (x0, x1) => ![...streetCars].some(a => a.car.visible && a.car.position.x > x0 && a.car.position.x < x1);
@@ -104,6 +104,9 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     });
   }
   const passed = (agent, distance) => !agent.mover || !movers.has(agent.mover) || agent.mover.s > distance;
+  // A car that needs a gap in the eastbound lane (pulling out, backing out, appearing) holds back new eastbound
+  // through-traffic while it waits, so a gap always comes within a few seconds instead of possibly never.
+  async function eastGap(x0, x1, gen) { eastHold++; try { await waitFor(() => eastClear(x0, x1), gen); } finally { if (gen === generation) eastHold--; } }
   function waitFor(cond, gen = generation) {
     return new Promise((resolve, reject) => {
       const check = () => (gen !== generation ? reject(ABORT) : cond() ? resolve() : setTimeout(check, 60));
@@ -133,7 +136,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     for (const a of [...agents.values(), ...ambientCars]) removeAgent(a);
     agents.clear(); ambientCars.clear();
     gateQueue = entryLane = exitLane = Promise.resolve();
-    entryPending = streetArrivals = exitingStreet = 0;
+    entryPending = streetArrivals = exitingStreet = eastHold = 0;
     arriving.clear(); streetCars.clear();
     lot.setBoom(false); kick();
     for (const [k, p] of sim.state.presence) {
@@ -171,7 +174,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     const turnAway = async () => {
       hooks.onLeaveGate?.('in');
       releaseLane();
-      await waitFor(() => eastClear(-70, -12), gen);
+      await eastGap(-70, -12, gen);
       exitingStreet++; joined = true;
       await drive(agent, gateBackOut(), {reverse: true}, gen);
       await drive(agent, awayEast(), {speed: LANE_SPEED[1]}, gen);
@@ -184,6 +187,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
         const queue = ahead > 0 && holdX > fromX + 2;
         if (ahead > 0 && !queue) { await previous; alive(); }
         // Appear only once the spawn point is clear of through-traffic and of the previous arrival.
+        await eastGap(fromX - 14, fromX + 30, gen);
         await waitFor(() => eastClear(fromX - 14, fromX + 30) && streetClear(fromX - 6, fromX + 9), gen);
         place(agent, {x: fromX, z: STREET.laneEast, h: EAST});
         agent.car.visible = true;
@@ -253,7 +257,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           alive();
           await hooks.readPlate?.('out', agent, {allow: true, type: agent.type, exit: true});
           // Wait for a gap in the eastbound lane before lifting the barrier.
-          await waitFor(() => eastClear(-68, -12), gen);
+          await eastGap(-68, -12, gen);
           exitingStreet++; joined = true;
           await openBoom(gen);
           sim.recordExit({plate: agent.plate, province: agent.province});
@@ -276,7 +280,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   // Cosmetic through-traffic on the street.
   function passBy(preferDir = Math.random() < .5 ? 1 : -1) {
     const now = performance.now();
-    const ok = dir => now - lastSpawn[dir] > 4200 && (dir < 0 || (!streetArrivals && !exitingStreet && eastClear(-99, -84)));
+    // Spacing is in demo time, so ?speed keeps the same traffic density the visitors see.
+    const ok = dir => now - lastSpawn[dir] > 4200 / SPEED && (dir < 0 || (!streetArrivals && !exitingStreet && !eastHold && eastClear(-99, -84)));
     const dir = ok(preferDir) ? preferDir : ok(-preferDir) ? -preferDir : 0;
     if (!dir) return false;
     lastSpawn[dir] = now;
