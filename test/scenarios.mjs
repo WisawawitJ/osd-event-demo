@@ -302,4 +302,12 @@ export const scenarios = [
     await p.sleep(500);
     expect(mid > .02 && mid < .58 && !(await p.eval('__air[0].visible')), `airflow fades out (opacity ${mid.toFixed(2)} after 0.12 s, then hidden)`);
   }},
+  {name: 'car park surface: one paving with the building, a ramp instead of a step', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const model=__scene.getObjectByName('Parking_paving').material.color.getHexString();let lot=null;__parking.lot.root.traverse(o=>{if(!lot&&o.isMesh&&o.material?.color&&Math.abs(o.position.y)<1e-6&&o.geometry.attributes.position.count<40)lot=o.material.color.getHexString()});return {model,lot}})())`));
+    expect(r.lot === r.model, `lot paving matches the building's (${r.lot} vs ${r.model})`);
+    const heights = await p.eval(`import('/src/parking/layout.js').then(m=>[13.0,13.8,14.7].map(z=>m.groundY(-14.16,z)))`);
+    expect(heights[0] > heights[1] && heights[1] > heights[2], `cars ride down a ramp at the aisle mouth (${heights.map(h => h.toFixed(2)).join(' > ')})`);
+  }},
 ];

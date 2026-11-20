@@ -2,8 +2,11 @@
 // P1 is the building's own 6-bay lot beside it (positions from the building model's parking area).
 // P2, the street, the driveway and the gate are imagined for the demo.
 
-export const SITE = {west: -23.9, south: 13.1};
-export const Y = {site: 0.56, road: 0.3};
+export const SITE = {west: -23.9, east: 23.9, south: 13.1};
+// site: top of the building model's car-park paving; road: the street and the imagined lot.
+export const Y = {site: 0.51, road: 0.3};
+// The building's covered aisle (P1) meets the driveway on a ramp across its whole mouth.
+export const RAMP = {west: -22.46, east: -11.16, north: 13.07, south: 14.6};
 
 // The driveway runs along the site's south edge and links the gate, the covered aisle and P2.
 export const DRIVE = {z: 16.2, north: 13.1, south: 19.3, west: -58, east: -11.2};
@@ -35,6 +38,6 @@ export function buildStalls() {
 // Ground height under a point: the site slab is 0.26 m above the street, with a short ramp at the aisle mouth.
 export function groundY(x, z) {
   if (x > SITE.west && z < SITE.south) return Y.site;
-  if (x > -17.4 && x < -10.9 && z >= SITE.south && z < SITE.south + 1.6) return Y.site - (z - SITE.south) / 1.6 * (Y.site - Y.road);
+  if (x > RAMP.west && x < RAMP.east && z >= RAMP.north && z < RAMP.south) return Y.site - (z - RAMP.north) / (RAMP.south - RAMP.north) * (Y.site - Y.road);
   return Y.road;
 }

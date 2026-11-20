@@ -3,7 +3,7 @@
 // Presentation only: nothing here is bound to hardware.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries, mergeVertices} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
-import {DRIVE, GATE, STREET, SITE, Y} from './layout.js';
+import {DRIVE, GATE, STREET, SITE, Y, RAMP} from './layout.js';
 
 export function createLot({scene, stalls, schedule}) {
   const root = new THREE.Group();
@@ -26,7 +26,10 @@ export function createLot({scene, stalls, schedule}) {
   const rect = (x0, x1, z0, z1, y) => flat(x1 - x0, z1 - z0).translate((x0 + x1) / 2, y, (z0 + z1) / 2);
 
   // Surfaces
-  const asphalt = mat({color: '#8d9592'}), street = mat({color: '#6f7774'}), kerb = mat({color: '#cfd3cc'}), paint = mat({color: '#f7f4df', roughness: .7, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8});
+  // The lot, driveway and gate mouth use the building model's own car-park paving, so P1 and the new areas read
+  // as one surface; only the public street is darker.
+  const modelPaving = scene.getObjectByName('Parking_paving')?.material;
+  const asphalt = mat({color: modelPaving?.color.clone() ?? '#a0a69f', roughness: modelPaving?.roughness ?? .95}), street = mat({color: '#6f7774'}), kerb = mat({color: '#cfd3cc'}), paint = mat({color: '#f7f4df', roughness: .7, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8});
   const LOT = {west: -60, east: SITE.west - .7, north: -16, south: DRIVE.north};
   put(mergeGeometries([
     rect(LOT.west, LOT.east, LOT.north, LOT.south, Y.road),
@@ -34,12 +37,23 @@ export function createLot({scene, stalls, schedule}) {
     rect(GATE.west - .3, GATE.east + .3, DRIVE.south - .01, STREET.north + .2, Y.road),
   ]), asphalt);
   put(rect(-100, 100, STREET.north, STREET.south, Y.road - .015), street);
+  // Ramp from P1's paving down to the driveway, instead of a 20 cm step.
+  {
+    const ramp = new THREE.BufferGeometry();
+    ramp.setAttribute('position', new THREE.Float32BufferAttribute([RAMP.west, Y.site, RAMP.north, RAMP.east, Y.site, RAMP.north, RAMP.west, Y.road + .002, RAMP.south, RAMP.east, Y.road + .002, RAMP.south], 3));
+    ramp.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 0, 0, 1, 0], 2));
+    ramp.setIndex([0, 2, 1, 1, 2, 3]);
+    ramp.computeVertexNormals();
+    put(ramp, asphalt);
+  }
   // Pavement either side of the gate mouth
   const pavementY = Y.road + .05;
   put(mergeGeometries([
     new THREE.BoxGeometry(GATE.west - (-100), .1, STREET.north - DRIVE.south).translate((-100 + GATE.west) / 2, pavementY - .05, (DRIVE.south + STREET.north) / 2),
     new THREE.BoxGeometry(100 - GATE.east, .1, STREET.north - DRIVE.south).translate((GATE.east + 100) / 2, pavementY - .05, (DRIVE.south + STREET.north) / 2),
     new THREE.BoxGeometry(200, .1, 1.6).translate(0, pavementY - .05, STREET.south + .8),
+    // The site frontage east of the driveway, so the street edge reads as one continuous pavement.
+    new THREE.BoxGeometry(SITE.east - DRIVE.east, .1, DRIVE.south - SITE.south).translate((DRIVE.east + SITE.east) / 2, pavementY - .05, (SITE.south + DRIVE.south) / 2),
   ]), kerb);
 
   // Road paint matches the building model's own markings: warm white #f7f4df, lit like the ground, thin strokes.
