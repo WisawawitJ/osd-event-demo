@@ -81,6 +81,34 @@ try {
   controls.screenSpacePanning = true;
   controls.zoomToCursor = true;
   controls.listenToKeyEvents(canvas);
+  // OrbitControls zooms by a percentage of the distance to its pivot, so steps shrink as you close in and
+  // you can never pass the pivot. Close in, a zoom-in step instead moves the camera and the pivot forward
+  // together (toward the cursor, or the view centre for the + button), at a steady pace.
+  const pushRay = new THREE.Raycaster(), pushNdc = new THREE.Vector2();
+  // Below ~20 m a 5% step is under a metre; from there on, steps stay about a metre long.
+  const closeRange = () => Math.max(controls.minDistance * 2.5, 20);
+  controls.zoomSpeed = 1.4;
+  function pushForward(metres, clientX = null, clientY = null) {
+    const rect = canvas.getBoundingClientRect();
+    pushNdc.set(clientX == null ? 0 : (clientX - rect.left) / rect.width * 2 - 1, clientY == null ? 0 : -(clientY - rect.top) / rect.height * 2 + 1);
+    pushRay.setFromCamera(pushNdc, camera);
+    const dir = pushRay.ray.direction;
+    // Stop at the ground rather than dive through it.
+    if (dir.y < 0) metres = Math.min(metres, Math.max(0, (camera.position.y - .9) / -dir.y));
+    if (metres <= .01) return false;
+    camera.position.addScaledVector(dir, metres);
+    controls.target.addScaledVector(dir, metres);
+    controls.update(); schedule();
+    return true;
+  }
+  canvas.addEventListener('wheel', event => {
+    if (!model || event.deltaY >= 0 || !controls.enabled || !controls.enableZoom) return;
+    if (camera.position.distanceTo(controls.target) > closeRange()) return;
+    // At the ground there is nowhere further to go; let the normal zoom have the event.
+    if (!pushForward(Math.min(2.4, .5 + Math.abs(event.deltaY) / 200), event.clientX, event.clientY)) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    controls.dispatchEvent({type: 'start'}); controls.dispatchEvent({type: 'end'});
+  }, {capture: true, passive: false, signal: abort.signal});
   const hemisphere=new THREE.HemisphereLight(0xebf6ff, 0x7b8066, 1.05);scene.add(hemisphere);
   const key = new THREE.DirectionalLight(0xffe7ba, 3.2);
   key.position.set(-18, 35, 28);
@@ -462,7 +490,7 @@ try {
        const parkingModule=await import('osd/parking/index.js');
        parking=parkingModule.createParking({scene,schedule,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
        parking.lot.root.visible=renderKit.ground.visible;
-       if(new URLSearchParams(location.search).has('debug')){window.__parking=parking;window.__renderer=renderer;window.__scene=scene;}
+       if(new URLSearchParams(location.search).has('debug')){window.__parking=parking;window.__renderer=renderer;window.__scene=scene;window.__camera=camera;window.__controls=controls;}
        simulation.subscribe(()=>parking.setNight(simulation.getState().night));
        showcase=createShowcase({model,simulation,schedule,parking,
         cancelFlight:()=>{navigation++;flight.stop();marker.visible=false;schedule();},
@@ -512,6 +540,7 @@ try {
        let zoomFrame=0;
        function zoomBy(factor){
         userMove();cancelAnimationFrame(zoomFrame);
+        if(factor<1&&camera.position.distanceTo(controls.target)<=closeRange()){pushForward(1.5);return;}
         const offset=camera.position.clone().sub(controls.target),from=offset.length(),to=THREE.MathUtils.clamp(from*factor,controls.minDistance,controls.maxDistance),start=performance.now();
         const step=time=>{const t=Math.min(1,(time-start)/260),e=t*(2-t);camera.position.copy(controls.target).add(offset.setLength(from+(to-from)*e));controls.update();schedule();if(t<1)zoomFrame=requestAnimationFrame(step);};
         zoomFrame=requestAnimationFrame(step);
