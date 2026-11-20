@@ -336,11 +336,14 @@ export const scenarios = [
     await p.goto('?dest=parking&debug=1');
     await p.until("window.__parking && __parking.active && document.documentElement.dataset.warm==='done'", {timeout: 40000});
     await p.until(`[...__parking.lot.root.children].some(c=>c.name==='Demo_car_'&&c.position.x>-60&&c.position.x<20)`, {timeout: 20000, what: 'a street car'});
-    await p.eval(`(()=>{const c=[...__parking.lot.root.children].find(c=>c.name==='Demo_car_'&&c.position.x>-60&&c.position.x<20);window.__s=[];const f=t=>{if(c.parent)__s.push([t,c.position.x]);window.__fr=requestAnimationFrame(f)};window.__fr=requestAnimationFrame(f)})()`);
+    // Pick and follow one car in the same frame loop (a car picked earlier may already have left the stretch).
+    await p.eval(`(()=>{let c=null;window.__s=[];const f=t=>{if(!c||!c.parent){c=[...__parking.lot.root.children].find(c=>c.name==='Demo_car_'&&c.position.x>-60&&c.position.x<20)||null;window.__s=[];}if(c)__s.push([t,c.position.x]);window.__fr=requestAnimationFrame(f)};window.__fr=requestAnimationFrame(f)})()`);
     // Keep the main thread busy meanwhile, as scrolling or a heavy view does.
     await p.eval(`window.__busy=setInterval(()=>{const end=performance.now()+6;while(performance.now()<end);},16)`);
     await p.sleep(1500);
     const s = await p.eval('clearInterval(__busy),cancelAnimationFrame(__fr),__s');
+    expect(s.length > 20, `followed one car for a while (${s.length} frames)`);
+    if (s.length < 2) return;
     const v = Math.abs(s.at(-1)[1] - s[0][1]) / ((s.at(-1)[0] - s[0][0]) / 1000);
     expect(Math.abs(v - 7) < .2 || Math.abs(v - 9) < .2, `street car at 7 or 9 m/s (measured ${v.toFixed(2)})`);
   }},
