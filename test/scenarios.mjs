@@ -354,4 +354,33 @@ export const scenarios = [
     const s = (Date.now() - t0) * 10 / 1000;
     expect(s < 6, `arm down within 6 s of demo time after the exit (took ${s.toFixed(1)} s)`);
   }},
+  {name: 'leaving the story: a drag, Esc or Exit story ends it; Next mode lets you look around', async run(p, expect) {
+    const start = async auto => {
+      await p.goto(parking(`&story=1&auto=${auto ? 1 : 0}`));
+      // In Next mode the story waits at step 1 for the presenter.
+      await p.until(`window.__parking && __parking.story.running && __parking.story.index >= ${auto ? 1 : 0}`, {timeout: 40000, what: 'story playing'});
+    };
+    const drag = () => p.eval(`(()=>{const c=document.querySelector('#viewport canvas'),b=c.getBoundingClientRect(),o={bubbles:true,pointerId:1,pointerType:'mouse',button:0,buttons:1,isPrimary:true,clientX:b.left+200,clientY:b.top+200};c.dispatchEvent(new PointerEvent('pointerdown',o));c.dispatchEvent(new PointerEvent('pointermove',{...o,clientX:o.clientX+80}));window.dispatchEvent(new PointerEvent('pointerup',{...o,buttons:0}))})()`);
+    await start(true); await drag(); await p.sleep(200);
+    expect(!(await p.eval('__parking.story.running')), 'dragging the view ends an auto story');
+    await start(true); await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`); await p.sleep(200);
+    expect(!(await p.eval('__parking.story.running')), 'Esc ends the story');
+    await start(false); await drag(); await p.sleep(200);
+    expect(await p.eval('__parking.story.running'), 'in Next mode a drag only looks around');
+    expect(/Exit story|ออกจากเรื่องราว/.test(await p.eval(`document.querySelector('[data-bar="free"]').textContent`)), 'an Exit story button');
+    await p.click('[data-bar="free"]'); await p.sleep(200);
+    expect(!(await p.eval('__parking.story.running')), 'Exit story ends it');
+  }},
+
+  {name: 'leaving a story that is part of the tour ends the tour too', async run(p, expect) {
+    await p.goto(`?${FAST}`);
+    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000});
+    await p.click('#tour-play');
+    await p.until('__parking.story.running && __parking.story.index >= 1', {timeout: 40000, what: 'tour reaches the parking story'});
+    await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+    await p.sleep(2500);
+    const r = JSON.parse(await p.eval(`JSON.stringify({story:__parking.story.running,dest:document.body.dataset.tourDestination,pause:!!document.querySelector('#tour-play svg path[d^="M8 5v14"]')})`));
+    expect(!r.story, 'the story stopped');
+    expect(r.dest === 'parking' && !r.pause, `the tour stopped at the car park (at ${r.dest}, tour ${r.pause ? 'still running' : 'stopped'})`);
+  }},
 ];

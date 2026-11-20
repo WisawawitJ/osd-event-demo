@@ -157,7 +157,7 @@ export function createParking({scene, schedule, capture, fly}) {
       : s.auto
         ? `<button class="primary-button" data-bar="${s.paused ? 'resume' : 'pause'}">${icon(s.paused ? 'play' : 'pause')}<span>${t(s.paused ? 'story.resume' : 'story.pause')}</span></button>`
         : `<button class="primary-button" data-bar="next"${s.waitingForNext ? ' data-cue="true"' : ''}>${icon('next')}<span>${t('next')}</span></button>`;
-    bar.innerHTML = `<div class="pk-bar-main">${main}${s.running ? `<button data-bar="restart">${icon('restart')}<span>${t('story.restart')}</span></button><button data-bar="free">${icon('hand')}<span>${t('story.free')}</span></button>` : ''}
+    bar.innerHTML = `<div class="pk-bar-main">${main}${s.running ? `<button data-bar="restart">${icon('restart')}<span>${t('story.restart')}</span></button><button data-bar="free" class="pk-exit-story" title="Esc">${icon('x')}<span>${t('story.exit')}</span></button>` : ''}
       <label class="pk-switch"><input type="checkbox" data-bar="auto"${s.auto ? ' checked' : ''}><span>${t('story.autoAdvance')}</span></label></div>
       <div class="pk-bar-progress">${s.running ? `<span>${t('story.step', {n: s.index + 1, total: s.total})}</span><div class="pk-dots">${dots}</div>` : `<span class="pk-bar-idle">${t('story.idle')}</span>`}</div>
       <button class="pk-phone-toggle" data-bar="phone" aria-pressed="${phone.isOpen}">${icon('phone')}<span>${phone.isOpen ? t('ph.hide') : t('ph.show')}</span></button>`;
@@ -171,11 +171,33 @@ export function createParking({scene, schedule, capture, fly}) {
     if (what === 'resume') story.resume();
     if (what === 'next') story.next();
     if (what === 'restart') { onInteract(); story.play({auto: story.auto}); }
-    if (what === 'free') { onInteract(); story.stop(); panel.show('gate'); overlays.toast(esc(t('story.freeMode'))); }
+    if (what === 'free') leaveStory();
     if (what === 'phone') { onInteract(); phone.setOpen(!phone.isOpen); }
     renderBar();
   });
   bar.addEventListener('change', e => { if (e.target.dataset.bar === 'auto') story.setAuto(e.target.checked); });
+
+  // Leaving the story. Like the building tour, a playing story also ends as soon as the visitor takes over:
+  // dragging or zooming the 3D view, or picking a console tab (on auto-advance; in Next mode the presenter may
+  // look around between steps). Esc always ends it. Cued buttons, the phone and the story bar are part of it.
+  function leaveStory() {
+    if (!story.running) return;
+    onInteract(); // also ends a building tour the story was part of, instead of moving on to the next stop
+    story.stop();
+    panel.show('gate');
+    overlays.toast(esc(t('story.freeMode')));
+    renderBar();
+  }
+  const viewport = $('#viewport');
+  const takeOver = event => {
+    if (!active || !story.running || !story.auto) return;
+    if (event.target.closest?.('#pk-phone, .pk-caption, .pk-alert-pop, #view-orbit')) return;
+    leaveStory();
+  };
+  viewport.addEventListener('pointerdown', takeOver, {capture: true});
+  viewport.addEventListener('wheel', takeOver, {capture: true, passive: true});
+  panelRoot.addEventListener('click', event => { if (event.target.closest('[data-tab]')) takeOver(event); }, {capture: true});
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && active && story.running) leaveStory(); });
 
   // Ambient life while the car park is on screen
   function scheduleAmbient() {
