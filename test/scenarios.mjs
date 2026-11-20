@@ -80,10 +80,11 @@ export const scenarios = [
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
     await p.eval(`__parking.sim.state.stalls.forEach((s,i)=>{if(!s.occupant)s.occupant='filler'+i})`);
-    const before = await p.eval('__parking.sim.state.presence.size');
-    const result = await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const v=__parking.sim.state.vehicles.find(v=>v.type==='staff'&&!inside.has(v.id));return __parking.traffic.arrive({plate:v.plate,province:v.province,color:2,fromX:-40})})()`);
+    // Follow the one car: background cars may still leave during the check, so the total can change.
+    const key = await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const v=__parking.sim.state.vehicles.find(v=>v.type==='staff'&&!inside.has(v.id));window.__fullCar=v;return __parking.sim.key(v.plate,v.province)})()`);
+    const result = await p.eval(`__parking.traffic.arrive({plate:__fullCar.plate,province:__fullCar.province,color:2,fromX:-40})`);
     expect(result === 'full', `arrival result is full (got ${result})`);
-    expect(await p.eval('__parking.sim.state.presence.size') === before, 'occupancy unchanged');
+    expect(!(await p.eval(`__parking.sim.state.presence.has(${JSON.stringify(key)})`)), 'the car was not recorded as parked');
   }},
 
   {name: 'unknown-car dispatch skips a plate already parked', async run(p, expect) {
@@ -250,5 +251,17 @@ export const scenarios = [
     await p.click('[data-action="access"]');
     await p.until(`__parking.sim.state.gate !== 'closed'`, {timeout: 10000, what: 'the main gate opens for the entrance scenario'});
     expect(true, 'main gate opened');
+  }},
+  {name: 'a leaving car does not wait long at the barrier', async run(p, expect) {
+    // speed 10 and 3 s for street traffic to build up, as in normal use.
+    await p.goto('?dest=parking&debug=1&speed=10');
+    await p.until(ready, {timeout: 40000});
+    await p.sleep(3000);
+    const key = await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');window.__exitCar=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__parking.sim.state.presence.get(k).plate);void __parking.traffic.leave(k);return k})()`);
+    await p.until(`Math.abs(window.__exitCar.position.z-16.6)<.05&&Math.abs(window.__exitCar.position.x+20.2)<.05`, {timeout: 15000, what: 'car at the exit barrier'});
+    const t0 = Date.now();
+    await p.until(`__parking.sim.state.gate !== 'closed' || !__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 15000, what: 'barrier opening'});
+    const waited = (Date.now() - t0) * 10 / 1000;
+    expect(waited < 8, `barrier opens within 8 s of demo time, plate read included (waited ${waited.toFixed(1)} s)`);
   }},
 ];

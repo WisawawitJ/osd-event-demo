@@ -183,8 +183,8 @@ export function createParkingSim() {
     return event;
   }
 
-  function raiseAlert({plate, province, snapshot, color}) {
-    const alert = {id: uid('a'), at: now(), plate, province, snapshot, color, status: 'open'};
+  function raiseAlert({plate, province, snapshot, color, ambient = false}) {
+    const alert = {id: uid('a'), at: now(), plate, province, snapshot, color, status: 'open', ambient};
     state.alerts.unshift(alert);
     state.events.unshift({id: uid('e'), at: now(), kind: 'unknown', plate, province, type: 'unknown', camera: 'LPR-IN', confidence: .91, alertId: alert.id});
     emit('alert', alert);

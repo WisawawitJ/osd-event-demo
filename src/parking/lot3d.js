@@ -226,7 +226,7 @@ export function createLot({scene, stalls, schedule}) {
   function setBoom(open) { boomTarget = open ? Math.PI / 2 * .96 : 0; }
   function update(dt) {
     if (boomAngle === boomTarget) return false;
-    const step = dt * 1.25;
+    const step = dt * 2; // a quarter turn in ~0.8 s, like a fast parking barrier
     boomAngle = boomTarget > boomAngle ? Math.min(boomTarget, boomAngle + step) : Math.max(boomTarget, boomAngle - step);
     boom.rotation.z = boomAngle;
     const open = boomAngle > .05;

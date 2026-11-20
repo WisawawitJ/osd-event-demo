@@ -62,9 +62,9 @@ export function createParking({scene, schedule, capture, fly}) {
       const shot = snap(which);
       overlays.showFeed({which, snapshot: shot, box: plateBox(camera, agent), phase: 'reading', plate: agent.plate, province: agent.province, verdict, confidence});
       panel.setSnapshot(which, shot);
-      await sleep(1100);
+      await sleep(900);
       overlays.updateFeed({phase: 'done'});
-      await sleep(verdict.allow ? 650 : 350);
+      await sleep(verdict.allow ? 500 : 300);
     },
     onFull(plate) { overlays.toast(`${icon('alert')}<span>${esc(t('gate.full', {plate}))}</span>`); },
     onLeaveGate(which) {
@@ -99,7 +99,7 @@ export function createParking({scene, schedule, capture, fly}) {
         const free = UNKNOWN_PLATES.filter(([p, pr]) => !traffic.isArriving(sim.key(p, pr)) && !presence.has(sim.key(p, pr)));
         if (!free.length) return;
         const [plate, province] = pickOne(free);
-        traffic.arrive({plate, province, color: Math.floor(Math.random() * 9), fromX});
+        traffic.arrive({plate, province, color: Math.floor(Math.random() * 9), fromX, ambient: quiet});
         say('gate.sim.coming', plate); blocked();
         return;
       }
@@ -197,10 +197,12 @@ export function createParking({scene, schedule, capture, fly}) {
     passTimer = later(() => { if (lot.root.visible && document.visibilityState === 'visible') traffic.passBy(); schedulePass(); }, 1800 + Math.random() * 3200);
   }
   // Unknown cars that nobody answers are turned away after a while in free play.
+  // The single barrier serves entry and exit, so a waiting unknown car blocks cars leaving too. Background ones
+  // are turned away after 8 s (demo time); ones a presenter sends wait 45 s for an answer.
   const autoDeny = setInterval(() => {
     if (story.running) return;
-    for (const a of sim.state.alerts) if (a.status === 'open' && sim.now() - a.at > 45000) sim.resolveAlert(a.id, 'deny', undefined, 'staff.guard');
-  }, 5000);
+    for (const a of sim.state.alerts) if (a.status === 'open' && sim.now() - a.at > (a.ambient ? 8000 : 45000)) sim.resolveAlert(a.id, 'deny', undefined, 'staff.guard');
+  }, 250);
 
   onLang(() => { panel.render(); phone.render(); overlays.refresh(); story.refreshCaption(); renderBar(); });
   traffic.syncParked();
