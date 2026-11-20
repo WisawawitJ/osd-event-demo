@@ -30,6 +30,23 @@ export function createTourEffects({model,schedule,meetingRoom}){
    const line=new T.Line(geom,m);line.computeLineDistances();meeting.add(line);air.push(line);
   }
  }
+ // The room light, visible by day too: a soft downlight cone and a warm pool on the floor while it is on.
+ const lamp=[];
+ {
+  const glow=document.createElement('canvas');glow.width=glow.height=128;
+  const c=glow.getContext('2d'),g=c.createRadialGradient(64,64,4,64,64,64);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.55,'rgba(255,255,255,.45)');g.addColorStop(1,'rgba(255,255,255,0)');c.fillStyle=g;c.fillRect(0,0,128,128);
+  const glowMap=new T.CanvasTexture(glow);
+  const [lx,ly,lz]=meetingRoom.lightPosition||[room[0],2.65,room[1]];
+  const poolMaterial=new T.MeshBasicMaterial({color:'#ffcf73',map:glowMap,transparent:true,opacity:.75,depthWrite:false,blending:T.AdditiveBlending});materials.push(poolMaterial);
+  poolMaterial.userData.glowMap=glowMap;
+  const pool=mesh(meeting,new T.CircleGeometry(1.9,40),poolMaterial,[lx,.06,lz]);pool.rotation.x=-Math.PI/2;lamp.push(pool);
+  const fade=document.createElement('canvas');fade.width=4;fade.height=64;
+  const f=fade.getContext('2d'),v=f.createLinearGradient(0,0,0,64);v.addColorStop(0,'#fff');v.addColorStop(1,'#000');f.fillStyle=v;f.fillRect(0,0,4,64);
+  const fadeMap=new T.CanvasTexture(fade);
+  const beamMaterial=new T.MeshBasicMaterial({color:'#ffd88a',alphaMap:fadeMap,transparent:true,opacity:.22,depthWrite:false,side:T.DoubleSide,blending:T.AdditiveBlending});materials.push(beamMaterial);
+  beamMaterial.userData.glowMap=fadeMap;
+  const beam=mesh(meeting,new T.CylinderGeometry(.45,1.7,ly-.1,32,1,true),beamMaterial,[lx,(ly-.1)/2+.05,lz]);lamp.push(beam);
+ }
  const pond=group('pond',1),pondMaterial=mat('#1b9caa',.8),pondRing=mesh(pond,new T.TorusGeometry(.23,.028,8,36),pondMaterial,[23.2,.32,0]);pondRing.rotation.x=-Math.PI/2;
  mesh(pond,new T.CylinderGeometry(.045,.045,.45,12),mat('#3f6975'),[23.2,.3,0]);
  const energy=group('energy',5),energyMaterial=mat('#21a790',.75);
@@ -51,7 +68,7 @@ export function createTourEffects({model,schedule,meetingRoom}){
  const securityCamera=new T.PerspectiveCamera(68,16/9,.05,160);securityCamera.name='Demo_security_camera';securityCamera.position.z=-.27;head.add(securityCamera);
 
  function select(id){current=id;for(const [name,g] of Object.entries(groups))g.visible=name===id;schedule();}
- function update(state){people.forEach(o=>o.visible=state.occupied);air.forEach(o=>o.visible=state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;energyMaterial.opacity=state.solar>5?.8:.35;schedule();}
+ function update(state){people.forEach(o=>o.visible=state.occupied);lamp.forEach(o=>o.visible=state.light!==false);air.forEach(o=>o.visible=state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;energyMaterial.opacity=state.solar>5?.8:.35;schedule();}
  function animate(t){if(current==='meeting')air.forEach((o,i)=>{o.material.dashSize=.12+.035*Math.sin(t*2+i);});if(current==='energy'){packet.position.z=-5.9+((t*.9)%12);packet.position.x=-1.4;}schedule();}
- select('overview');return {securityCamera,select,update,animate,dispose(){for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials)m.dispose();}};
+ select('overview');return {securityCamera,select,update,animate,dispose(){for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
 }

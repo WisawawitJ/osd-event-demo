@@ -212,4 +212,33 @@ export const scenarios = [
     // Alone this measures ~130 ms; four browsers sharing the GPU push it to ~300 ms. The stall it guards against was 700–1,100 ms.
     expect(worst < 450, `no frame longer than 450 ms (worst ${worst} ms)`);
   }},
+  {name: 'meeting room: effects show after arriving by the dock, and the light switch is visible', async run(p, expect) {
+    await p.goto(`?${FAST}`);
+    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
+    await p.click('[data-destination="meeting"]');
+    await p.until(`document.body.dataset.tourDestination === 'meeting' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 20000});
+    await p.sleep(300);
+    const group = `__scene.getObjectByName('Demo_meeting')`;
+    expect(await p.eval(`${group}.visible`), 'meeting effects visible (people, airflow, light)');
+    expect(await p.eval(`${group}.children.filter(o=>o.isLine&&o.visible).length`) === 6, 'six airflow lines from the AC unit');
+    const lit = () => p.eval(`${group}.children.filter(o=>o.material?.blending===2&&o.visible).length`);
+    const on = await lit();
+    await p.click('[data-control="light"]'); await p.sleep(200);
+    const off = await lit();
+    expect(on === 2 && off === 0, `light pool and beam follow the switch (on ${on}, off ${off})`);
+  }},
+
+  {name: 'pond, energy and entrance cameras aim at the real objects', async run(p, expect) {
+    await p.goto(`?${FAST}`);
+    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
+    const centre = expr => (p.eval(`JSON.stringify((()=>{const V=__camera.position.constructor,objs=${expr};const min=new V(1e9,1e9,1e9),max=new V(-1e9,-1e9,-1e9);for(const o of objs)o.traverse(m=>{if(!m.geometry)return;m.geometry.computeBoundingBox();const g=m.geometry.boundingBox;for(const x of [g.min.x,g.max.x])for(const y of [g.min.y,g.max.y])for(const z of [g.min.z,g.max.z]){const v=new V(x,y,z).applyMatrix4(m.matrixWorld);min.min(v);max.max(v)}});return min.add(max).multiplyScalar(.5).toArray()})())`)).then(JSON.parse);
+    const stops = {pond: `(()=>{const a=[];__scene.traverse(o=>{if(o.isMesh&&o.name.includes('_koi_pond_'))a.push(o)});return a})()`, energy: `[__scene.getObjectByName('Floor_5_solar_modules')]`, access: `[__scene.getObjectByName('Demo_access')]`};
+    for (const [stop, objects] of Object.entries(stops)) {
+      await p.click(`[data-destination="${stop}"]`);
+      await p.until(`document.body.dataset.tourDestination === '${stop}' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 20000});
+      const c = await centre(objects), t = await p.eval('__controls.target.toArray()');
+      const off = Math.hypot(c[0] - t[0], c[2] - t[2]);
+      expect(off < 1, `${stop}: camera aims within 1 m of the object (off by ${off.toFixed(1)} m)`);
+    }
+  }},
 ];

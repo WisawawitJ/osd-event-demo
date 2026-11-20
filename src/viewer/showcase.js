@@ -69,7 +69,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   if(disposed)return;const s=actual(),sim=simulation.getState(),d=destinations[destination];
   const focused=document.activeElement?.dataset?.control||document.activeElement?.dataset?.action;
   const lights=Object.values(sim.rooms).filter(r=>r.light).length,ac=Object.values(sim.rooms).filter(r=>r.climate).length;
-  effects.update({...state,climate:s.climate});
+  effects.update({...state,climate:s.climate,light:s.light});
   if(destination==='access'&&!traveling&&(!cameraImage||performance.now()-lastPreview>=400)){cameraImage=snapshot(effects.securityCamera);lastPreview=performance.now();}
   $('#panel-title').textContent=d.panel;
   $('#panel-status').textContent=destination==='pond'&&state.pondAlert?L('ควรตรวจสอบ','Check needed'):destination==='meeting'?(state.occupied?L('มีคนใช้งาน','In use'):L('ห้องว่าง','Vacant')):destination==='access'?L(...[['พร้อมสาธิต','Ready to demo'],['อ่านทะเบียนแล้ว','Plate read'],['อนุญาตผ่าน','Access granted'],['ไม้กั้นเปิด','Barrier open'],['ผ่านเรียบร้อย','Car through']][state.accessStep]):L('ข้อมูลจำลอง','Simulated data');
@@ -124,7 +124,8 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
    if(destination!=='parking'&&parking?.active)parking.exit();
    render();return false;
   }
-  commit();render();return true;
+  // The floor transition ends by restoring the visibility it captured when it began; re-apply this stop's effects.
+  commit();effects.select(id);render();return true;
  }
 
 
@@ -140,7 +141,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
    if(kind==='meeting')state.temp=27.4-Math.min(1,elapsed/12)*2.6;
    if(kind==='access'){state.accessStep=elapsed<1.5?1:elapsed<3?2:elapsed<8?3:4;state.barrierAngle=elapsed<3?0:elapsed<5?(elapsed-3)/2*Math.PI/2:elapsed<7?Math.PI/2:elapsed<9?(9-elapsed)/2*Math.PI/2:0;}
    if(kind==='access'&&reduced.matches)state.barrierAngle=elapsed>=3&&elapsed<8?Math.PI/2:0;
-   if(!reduced.matches&&time-lastVisual>=50){effects.animate(elapsed);effects.update({...state,climate:actual().climate});lastVisual=time;}
+   if(!reduced.matches&&time-lastVisual>=50){effects.animate(elapsed);effects.update({...state,climate:actual().climate,light:actual().light});lastVisual=time;}
    if(Math.floor(elapsed*2)!==lastTick){lastTick=Math.floor(elapsed*2);render();}
    if(elapsed<limit)scenarioFrame=requestAnimationFrame(tick);else{scenarioFrame=0;state.scenario=null;render();}
   }scenarioFrame=requestAnimationFrame(tick);

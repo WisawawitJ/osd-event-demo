@@ -459,7 +459,7 @@ try {
        const meetingTarget=meetingRoot.localToWorld(new THREE.Vector3(meetingRoom.center[0],.8,meetingRoom.center[2]));
        sceneTransition=createSceneTransition({model,schedule,onFinish:()=>{renderer.shadowMap.needsUpdate=true;}});
        const buildingBounds=new THREE.Box3().setFromObject(model),buildingCenter=buildingBounds.getCenter(new THREE.Vector3());
-       let navigation=0,lastDestination='overview';
+       let navigation=0,lastDestination='overview',stopPoses=null;
        const markerMaterial=new THREE.MeshBasicMaterial({color:'#27a8b3',transparent:true,opacity:.6,depthTest:false,depthWrite:false,side:THREE.DoubleSide});
        const marker=new THREE.Mesh(new THREE.RingGeometry(1.05,1.2,48),markerMaterial);marker.rotation.x=-Math.PI/2;marker.renderOrder=100;marker.visible=false;scene.add(marker);
        abort.signal.addEventListener('abort',()=>{marker.removeFromParent();marker.geometry.dispose();markerMaterial.dispose();},{once:true});
@@ -481,6 +481,24 @@ try {
        parking.lot.root.visible=renderKit.ground.visible;
        if(new URLSearchParams(location.search).has('debug')){window.__parking=parking;window.__renderer=renderer;window.__scene=scene;window.__camera=camera;window.__controls=controls;}
        simulation.subscribe(()=>parking.setNight(simulation.getState().night));
+       // Camera poses aimed at the real objects: the pond, the roof's solar panels and the entrance barrier. The
+       // original hard-coded targets sat 4–5 m off them; the viewing angles and distances are kept.
+       function objectPoses(){
+         if(stopPoses)return stopPoses;
+         const ponds=[];model.traverse(o=>{if(o.isMesh&&o.name.includes('_koi_pond_'))ponds.push(o);});
+         const aim=(objects,eye,target,fov)=>{
+           const box=new THREE.Box3();for(const o of objects)if(o)box.expandByObject(o);
+           if(box.isEmpty())return {eye,target,fov};
+           const centre=box.getCenter(new THREE.Vector3()),offset=new THREE.Vector3(...eye).sub(new THREE.Vector3(...target));
+           return {eye:centre.clone().add(offset).toArray(),target:centre.toArray(),fov};
+         };
+         stopPoses={
+           pond:aim(ponds,[33,14,13],[22.7,1,-2.5],48),
+           energy:aim([model.getObjectByName('Floor_5_solar_modules')],[12,29,23],[-1.6,15.6,.8],43),
+           access:aim([scene.getObjectByName('Demo_access')],[-24,14,29],[-10.9,.8,10.5],46),
+         };
+         return stopPoses;
+       }
        showcase=createShowcase({model,simulation,schedule,parking,
         cancelFlight:()=>{navigation++;flight.stop();marker.visible=false;schedule();},
         onUserOrbit:callback=>{controls.addEventListener('start',callback);canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','r','R','+','=','-'].includes(e.key))callback();},{signal:abort.signal});},
@@ -489,9 +507,7 @@ try {
           flight.stop();const ticket=++navigation,start=readPose();marker.visible=false;markerMaterial.opacity=.6;
           const settings={
             meeting:{eye:meetingTarget.clone().add(new THREE.Vector3(5,7,8)).toArray(),target:meetingTarget.toArray(),fov:43},
-            pond:{eye:[33,14,13],target:[22.7,1,-2.5],fov:48},
-            energy:{eye:[12,29,23],target:[-1.6,15.6,.8],fov:43},
-            access:{eye:[-24,14,29],target:[-10.9,.8,10.5],fov:46},
+            ...objectPoses(),
             parking:parkingModule.PARKING_POSES.lot
           };
           const to=settings[id]||contextPose(),quick=instant||matchMedia('(prefers-reduced-motion: reduce)').matches;
