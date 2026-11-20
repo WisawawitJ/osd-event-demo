@@ -25,4 +25,8 @@ createServer(async (req, res) => {
   } catch {
     res.writeHead(404, {'content-type': 'text/plain'}).end('Not found');
   }
+}).on('error', error => {
+  if (error.code !== 'EADDRINUSE') throw error;
+  console.error(`Port ${port} is already in use (maybe the demo is already running: open http://localhost:${port}/).\nTo use another port: node scripts/serve.mjs ${port + 1}`);
+  process.exit(1);
 }).listen(port, '127.0.0.1', () => console.log(`OSD event demo: http://localhost:${port}/`));
