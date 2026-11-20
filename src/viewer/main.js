@@ -89,11 +89,18 @@ try {
   fill.position.set(-30, 20, -20);
   scene.add(fill);
 
+  // ?fps=1 shows how many frames per second the 3D view actually draws (for checking the event laptop).
+  const fpsMeter = new URLSearchParams(location.search).has('fps') ? (() => {
+    const el = Object.assign(document.createElement('div'), {style: 'position:fixed;left:8px;bottom:8px;z-index:99;padding:4px 8px;border-radius:6px;background:#0f1720cc;color:#9ff0b5;font:12px/1.4 ui-monospace,monospace;pointer-events:none'});
+    document.body.append(el);
+    let frames = 0, since = performance.now();
+    return () => { frames++; const now = performance.now(); if (now - since >= 1000) { el.textContent = `${Math.round(frames * 1000 / (now - since))} fps`; frames = 0; since = now; } };
+  })() : null;
   function schedule() {
     if (frame || disposed || document.hidden) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
-      if (!disposed) renderer.render(scene, camera);
+      if (!disposed) { renderer.render(scene, camera); fpsMeter?.(); }
     });
   }
   controls.addEventListener('change', schedule);

@@ -25,6 +25,7 @@ Useful URLs:
 | `/?dest=parking` | Opens straight on the car park, for free play |
 | `/?dest=parking&story=1` | Opens on the car park and plays the parking story with auto-advance |
 | `/?dest=parking&story=1&auto=0` | Same, but the presenter advances each step with **Next** |
+| `/?fps=1` | Adds a frames-per-second counter, to check the event laptop (any page; combine with the others) |
 | `/#explore` | The original free-exploration page, unchanged |
 
 ## At the booth

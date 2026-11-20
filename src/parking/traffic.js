@@ -286,17 +286,23 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   function kick() { if (!frame) { last = performance.now(); frame = requestAnimationFrame(tick); } }
   function tick(time) {
     frame = 0;
-    const dt = Math.min(.1, Math.max(0, (time - last) / 1000)); last = time;
-    let active = lot.update(dt);
-    for (const m of [...movers]) {
-      const remaining = m.route.length - m.s;
-      const brake = Math.sqrt(2 * m.accel * Math.max(0, remaining));
-      m.v = Math.min(m.vmax, m.v + m.accel * dt, Math.max(.5, brake));
-      m.s = Math.min(m.route.length, m.s + m.v * dt);
-      place(m.agent, sample(m.route, m.s), m.reverse);
-      if (m.s >= m.route.length - 1e-3) { movers.delete(m); m.resolve(); }
-      active = true;
+    // Cars move in real time whatever the frame rate: a slow frame (a heavy zoomed-out view) is
+    // stepped in 50 ms slices. Only a stall longer than half a second (tab switch, debugger) is dropped.
+    const elapsed = Math.min(.5, Math.max(0, (time - last) / 1000)); last = time;
+    const steps = Math.max(1, Math.ceil(elapsed / .05)), dt = elapsed / steps;
+    let active = false;
+    for (let i = 0; i < steps; i++) {
+      if (lot.update(dt)) active = true;
+      for (const m of [...movers]) {
+        const remaining = m.route.length - m.s;
+        const brake = Math.sqrt(2 * m.accel * Math.max(0, remaining));
+        m.v = Math.min(m.vmax, m.v + m.accel * dt, Math.max(.5, brake));
+        m.s = Math.min(m.route.length, m.s + m.v * dt);
+        if (m.s >= m.route.length - 1e-3) { movers.delete(m); place(m.agent, sample(m.route, m.s), m.reverse); m.resolve(); }
+        active = true;
+      }
     }
+    for (const m of movers) place(m.agent, sample(m.route, m.s), m.reverse);
     hooks.onFrame?.();
     schedule();
     if (active) kick();
