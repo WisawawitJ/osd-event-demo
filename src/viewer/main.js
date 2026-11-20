@@ -3,6 +3,7 @@ import {createSecurityPreview} from 'osd/viewer/security-preview.js';
 import {createSceneTransition} from 'osd/viewer/scene-transition.js';
 import {createShowcase,translatePage,pageString} from 'osd/viewer/showcase.js';
 import {getLang} from 'osd/parking/i18n.js';
+import {SPEED} from 'osd/parking/clock.js';
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import { OrbitControls } from 'osd/node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'osd/node_modules/three/examples/jsm/loaders/GLTFLoader.js';
@@ -58,9 +59,9 @@ try {
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'default' });
   // The ATOM kiosk renders on an integrated GPU.
   // Resolution adapts to the machine: start at up to 1.5x device pixels (2x only cost frames on laptops)
-  // and step down to 1x while continuous rendering stays under ~38 fps, back up when it is comfortably fast.
+  // and step down (never back up) towards 1x while continuous rendering stays under ~38 fps.
   const maxPixelRatio = Math.min(devicePixelRatio, isAtom ? 1.25 : 1.5), minPixelRatio = Math.min(1, maxPixelRatio);
-  let pixelRatio = maxPixelRatio, slowFrames = 0, fastFrames = 0, lastFrameAt = 0;
+  let pixelRatio = maxPixelRatio, slowFrames = 0, lastFrameAt = 0;
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -141,7 +142,7 @@ try {
   function adaptResolution(time) {
     const gap = time - lastFrameAt; lastFrameAt = time;
     if (gap > 200) return; // an idle pause, not a slow frame
-    if (gap > 26) { slowFrames++; fastFrames = 0; } else if (gap < 18.5) { fastFrames++; slowFrames = Math.max(0, slowFrames - 1); }
+    if (gap > 26) slowFrames++; else if (gap < 18.5) slowFrames = Math.max(0, slowFrames - 1);
     // Only ever step down: stepping back up made the picture go sharp and soft while orbiting.
     if (slowFrames <= 45) return;
     slowFrames = 0;
@@ -163,6 +164,8 @@ try {
   const readPose=()=>({eye:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov});
   const writePose=pose=>{camera.position.fromArray(pose.eye);controls.target.fromArray(pose.target);camera.fov=pose.fov;camera.updateProjectionMatrix();controls.update();schedule();};
   flight=createCameraFlight({read:readPose,write:writePose,onState(active){const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';}});
+  // ?speed=N (tests, rehearsals) shortens every camera flight like the rest of the demo's timing.
+  if (SPEED !== 1) { const flyPath = flight.flyPath; flight.flyPath = steps => flyPath(steps.map(step => ({...step, duration: (step.duration ?? 1800) / SPEED}))); flight.fly = (to, duration = 1800) => flight.flyPath([{to, duration}]); }
   // An eased turn of the camera around its target (the lights view). It runs its own frame loop
   // only while it turns; stopSpin(), every flight (flight.stop) and a drag on the model end it.
   let spinFrame=0,spinEnd=null;

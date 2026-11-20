@@ -1,6 +1,7 @@
 import {createBuildingInsights} from 'osd/viewer/building-insights.js';
 import {createTourEffects} from 'osd/viewer/tour-effects.js';
 import {t as pt, onLang, getLang} from 'osd/parking/i18n.js';
+import {SPEED} from 'osd/parking/clock.js';
 const icons={building:'M3 21V5h12v16M15 11h6v10M7 9h4M7 13h4M7 17h4',light:'M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0l-1 2H9Z',air:'M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h5',people:'M4 21v-3a5 5 0 0 1 10 0v3m3-9a4 4 0 0 1 4 4v5M12 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',water:'M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z',solar:'m5 9-2 10h18L19 9ZM8 9l-1 10m9-10 1 10M4 14h16M12 19v3M12 2v3M5 3l2 2m12-2-2 2',door:'M5 21V3h14v18M9 21V5l8 2v14M13 13h.01',arrow:'M4 12h16m-5-5 5 5-5 5',play:'m8 5 11 7-11 7Z',pause:'M8 5v14M16 5v14',check:'m5 12 4 4L19 6'};
 const icon=name=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[name]||icons.building}"/></svg>`;
 // Thai (default) or English, picked when the text is drawn; applyLanguage() redraws on a switch.
@@ -134,7 +135,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
    const advance=()=>{if(generation!==tourGeneration)return;if(step<order.length)void next();else{stopTour(['พาชมครบแล้ว · เลือกสำรวจต่อได้ทุกจุด','Tour complete · explore any spot you like']);stopScenario();render();if(kiosk)tourTimer=setTimeout(()=>{if(kiosk&&!touring)restartLoop();},2500);}};
    // The car park stop plays the whole parking story, then the tour carries on.
    if(id==='parking'&&parking){await parking.playStory({auto:true});if(!touring||generation!==tourGeneration)return;step++;tourTimer=setTimeout(advance,1200);return;}
-   if(id!=='overview')scenario(id);step++;tourTimer=setTimeout(advance,id==='meeting'?14000:11000);}void next();
+   if(id!=='overview')scenario(id);step++;tourTimer=setTimeout(advance,(id==='meeting'?14000:11000)/SPEED);}void next();
  }
  listen(content,'click',event=>{if(insights?.isReplaying())return;const control=event.target.closest('[data-control]'),action=event.target.closest('[data-action]');if(control||(action&&action.dataset.action!=='tour'))stopTour(['กำลังทดลองด้วยตัวเอง','Trying it yourself']);if(control){stopScenario();const s=actual(),key=control.dataset.control;simulation.selectRoom(meetingId);if(key==='door')simulation.setRoom(meetingId,{doors:Object.fromEntries(Object.entries(s.doors).map(([id,value])=>[id,!value]))});else simulation.setRoom(meetingId,{[key]:!s[key]});render();}if(action){if(action.dataset.action==='tour')void startTour();else scenario(action.dataset.action);}});
  document.querySelectorAll('[data-destination]').forEach(b=>{b.disabled=false;listen(b,'click',()=>void select(b.dataset.destination));});
@@ -150,9 +151,10 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  simulation.setRoom(meetingId,{climate:true});
  // Showcase loop for an unattended screen: the tour repeats; any touch hands control to the visitor,
  // and the loop comes back after a quiet minute.
- const kioskToggle=$('#kiosk-toggle');let kiosk=false,idleTimer=0;const IDLE_MS=60000;
+ const kioskToggle=$('#kiosk-toggle');let kiosk=false,idleTimer=0;const IDLE_MS=60000/SPEED;
  function restartLoop(){if(disposed||!kiosk)return;insights?.returnCurrent({restore:false});stopScenario();state=initial();simulation.reset();simulation.setNight(false);simulation.setRoom(meetingId,{climate:true});void startTour();}
- function armIdle(){clearTimeout(idleTimer);if(kiosk)idleTimer=setTimeout(()=>{if(kiosk&&!touring&&!parking?.story.running)restartLoop();else armIdle();},IDLE_MS);}
+ // A parking story playing on auto-advance is left to finish; one waiting for Next or paused is abandoned like any idle screen.
+ function armIdle(){clearTimeout(idleTimer);if(kiosk)idleTimer=setTimeout(()=>{const s=parking?.story,playing=s?.running&&s.auto&&!s.paused;if(kiosk&&!touring&&!playing){s?.stop();restartLoop();}else armIdle();},IDLE_MS);}
  function setKiosk(on){kiosk=on;kioskToggle.checked=on;document.body.classList.toggle('kiosk-on',on);if(on){if(!touring)restartLoop();}else{clearTimeout(idleTimer);if(touring)stopTour();}}
  listen(kioskToggle,'change',()=>setKiosk(kioskToggle.checked));
  for(const type of ['pointerdown','keydown','wheel'])listen(document,type,event=>{if(!kiosk||event.target.closest?.('.kiosk-toggle'))return;if(touring){stopTour(['หยุดโหมดจัดแสดงชั่วคราว · ทดลองได้เลย','Paused the showcase loop · explore freely']);cancelFlight();}armIdle();},{capture:true});

@@ -5,7 +5,7 @@
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
 
-export const CAR_COLORS = ['#f2f1ec', '#b9bec2', '#22262b', '#6d747a', '#2f5d9a', '#b8322e', '#33584a', '#cdbb98', '#1f3150'];
+const CAR_COLORS = ['#f2f1ec', '#b9bec2', '#22262b', '#6d747a', '#2f5d9a', '#b8322e', '#33584a', '#cdbb98', '#1f3150'];
 export const CAR = {length: 4.4, width: 1.8, frontPlateZ: 2.24, plateY: .52};
 
 // Plate texture layout: the plate fills the top 120 px; a lamp strip (head left, tail right) sits below it.
@@ -72,7 +72,7 @@ function sharedParts() {
 }
 
 const plateCache = new Map();
-export function plateTexture(plate, province) {
+function plateTexture(plate, province) {
   const id = `${plate}|${province}`;
   if (plateCache.has(id)) return plateCache.get(id);
   const canvas = document.createElement('canvas');

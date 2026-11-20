@@ -27,13 +27,9 @@ const S = {
   'sim': ['จำลอง', 'Simulated'],
   'sim.data': ['ข้อมูลจำลอง', 'Simulated data'],
   'sim.disclosure': ['ข้อมูลและเหตุการณ์เพื่อสาธิต · ไม่เชื่อมต่ออุปกรณ์จริง', 'Demo data and events · no real devices connected'],
-  'lang.switch': ['English', 'ภาษาไทย'],
-  'lang.label': ['EN', 'TH'],
-  'close': ['ปิด', 'Close'],
   'back': ['ย้อนกลับ', 'Back'],
   'next': ['ถัดไป', 'Next'],
   'cancel': ['ยกเลิก', 'Cancel'],
-  'confirm': ['ยืนยัน', 'Confirm'],
   'save': ['บันทึก', 'Save'],
   'search': ['ค้นหาชื่อหรือทะเบียน', 'Search name or plate'],
   'all': ['ทั้งหมด', 'All'],
@@ -41,7 +37,6 @@ const S = {
   'cars': ['คัน', 'cars'],
   'today': ['วันนี้', 'Today'],
   'now': ['ตอนนี้', 'Now'],
-  'by.system': ['ระบบ', 'System'],
   'staff.name': ['เจ้าหน้าที่ อรุณี (ตัวอย่าง)', 'Staff: Arunee (sample)'],
   'staff.guard': ['รปภ. ประตูหลัก (ตัวอย่าง)', 'Main-gate guard (sample)'],
 
@@ -75,8 +70,6 @@ const S = {
   'att.sync.pending': ['รอ ATOM ยืนยันทะเบียน', 'Waiting for ATOM to confirm'],
   'att.alert': ['รถไม่รู้จักรออยู่ที่ไม้กั้น', 'Unknown car waiting at the barrier'],
   'att.pending': ['คำขอใหม่รออนุมัติ', 'New request waiting for approval'],
-  'att.retry': ['ลองใหม่', 'Retry'],
-  'att.open': ['เปิดดู', 'Open'],
 
   // requests
   'req.status.pending': ['รออนุมัติ', 'Pending'],
@@ -113,13 +106,10 @@ const S = {
   'req.revoke.confirm': ['ยกเลิกสิทธิ์ทันที และแจ้งทั้งสองฝ่ายทางอีเมล?', 'End access now and email both parties?'],
   'req.approve.confirm': ['อนุมัติแล้วระบบจะลงทะเบียนรถใน ATOM ออก QR และส่งอีเมลยืนยัน', 'Approving registers the car in ATOM, issues a QR code and emails the ticket'],
   'req.history': ['ประวัติ', 'History'],
-  'req.flags': ['ข้อสังเกต', 'Flags'],
   'req.flag.today': ['มาถึงวันนี้', 'Arrives today'],
   'req.flag.staff': ['ทะเบียนนี้เป็นรถพนักงาน', 'Plate is a staff car'],
   'req.flag.overlap': ['ซ้อนกับคำขออื่น', 'Overlaps another request'],
   'req.qr': ['QR สำหรับประตูอาคาร', 'QR for building doors'],
-  'req.empty': ['เลือกคำขอเพื่อดูรายละเอียด', 'Choose a request to see details'],
-  'req.list': ['คำขอทั้งหมด', 'All requests'],
   'req.back': ['กลับไปรายการ', 'Back to list'],
   'req.registered': ['ลงทะเบียนใน ATOM แล้ว', 'Registered in ATOM'],
   'req.registering': ['กำลังลงทะเบียนใน ATOM…', 'Registering in ATOM…'],
@@ -150,8 +140,9 @@ const S = {
   'gate.reason.delivery': ['รถส่งของ / ผู้รับเหมา', 'Delivery / contractor'],
   'gate.reason.guest': ['แขกที่ยืนยันตัวตนแล้ว', 'Guest verified by phone'],
   'gate.reason.other': ['อื่น ๆ', 'Other'],
+  'gate.manual.alertFirst': ['มีรถไม่รู้จักรออยู่ · ตอบการแจ้งเตือนด้านบนก่อน', 'An unknown car is waiting · answer the alert above first'],
+  'gate.full': ['ที่จอดเต็ม · {plate} ถูกแจ้งให้กลับรถ', 'Car park full · {plate} was turned away'],
   'gate.openOnce': ['เปิดหนึ่งครั้ง', 'Open once'],
-  'gate.close': ['สั่งปิด', 'Close'],
   'gate.log': ['บันทึกการเข้าออก', 'Entry and exit log'],
   'gate.sim': ['จำลองรถมาที่ไม้กั้น', 'Send a car to the barrier'],
   'gate.sim.registered': ['รถพนักงาน', 'Staff car'],
@@ -164,7 +155,6 @@ const S = {
   'gate.sim.noVisitor': ['ไม่มีผู้มาติดต่อที่อนุมัติสำหรับวันนี้และยังไม่มาถึง · ส่งคำขอจากมือถือแล้วกดอนุมัติก่อน', 'No approved visitor is still due today · send a request from the phone and approve it first'],
   'gate.sim.noStaff': ['รถพนักงานทุกคันจอดอยู่แล้ว', 'Every staff car is already parked'],
   'gate.sim.waitingAlert': ['มีรถไม่รู้จักรอการตัดสินใจที่ไม้กั้น · เลือกเปิดหรือไม่ให้เข้าก่อน', 'An unknown car is waiting at the barrier · choose Open or Deny first'],
-  'gate.busy': ['มีรถอยู่ที่ไม้กั้น รอสักครู่', 'A car is at the barrier, one moment'],
 
   // events
   'ev.entry': ['เข้า', 'In'],
@@ -189,21 +179,17 @@ const S = {
   // LPR feed
   'lpr.read': ['อ่านทะเบียน', 'Plate read'],
   'lpr.confidence': ['ความมั่นใจ', 'Confidence'],
-  'lpr.waiting': ['รอรถ', 'Waiting for a car'],
   'lpr.match': ['อนุญาต', 'Allowed'],
   'lpr.nomatch': ['ไม่อยู่ในรายการ', 'Not on the list'],
   'lpr.exit': ['ขาออก · เปิดอัตโนมัติ', 'Exit · opens automatically'],
   'lpr.validUntil': ['สิทธิ์ถึง', 'Valid until'],
 
   // vehicles
-  'veh.title': ['รายการรถที่อนุญาต', 'Allowed vehicles'],
-  'veh.sync': ['สถานะ ATOM', 'ATOM sync'],
   'veh.sync.synced': ['ซิงก์แล้ว', 'Synced'],
   'veh.sync.pending': ['รอซิงก์', 'Pending'],
   'veh.sync.failed': ['ล้มเหลว', 'Failed'],
   'veh.owner': ['เจ้าของ', 'Owner'],
   'veh.valid': ['ใช้ได้ถึง', 'Valid until'],
-  'veh.forever': ['ไม่มีวันหมดอายุ', 'No end date'],
   'veh.add': ['เพิ่มรถพนักงาน', 'Add a staff car'],
   'veh.import': ['นำเข้า CSV', 'Import CSV'],
   'veh.import.done': ['นำเข้ารถตัวอย่าง 3 คันแล้ว', 'Imported 3 sample cars'],
@@ -213,7 +199,6 @@ const S = {
   'veh.disable': ['ปิดสิทธิ์', 'Disable'],
   'veh.enable': ['เปิดสิทธิ์', 'Enable'],
   'veh.disabled': ['ปิดสิทธิ์', 'Disabled'],
-  'veh.markLeft': ['บันทึกว่าออกแล้ว', 'Mark as left'],
 
   // reports
   'rep.summary': ['สรุปประจำวัน', 'Daily summary'],
@@ -245,7 +230,6 @@ const S = {
   'a.plateEnable': ['เปิดสิทธิ์ทะเบียน', 'Enabled a plate'],
   'a.import': ['นำเข้ารถพนักงานจาก CSV', 'Imported staff cars from CSV'],
   'a.capacity': ['เปลี่ยนความจุ', 'Changed capacity'],
-  'a.markLeft': ['บันทึกว่ารถออกแล้ว', 'Marked a car as left'],
   'a.retry': ['ส่งทะเบียนไป ATOM ใหม่', 'Retried an ATOM sync'],
 
   // phone / visitor
@@ -289,12 +273,9 @@ const S = {
   'story.step': ['ขั้นที่ {n} / {total}', 'Step {n} / {total}'],
   'story.idle': ['เลือก “เล่นเรื่องราว” เพื่อดูการเดินทางของผู้มาติดต่อ หรือทดลองกดเองได้ทุกส่วน', 'Choose “Play the story” to follow one visitor, or try any part yourself'],
   'story.freeMode': ['โหมดทดลองเอง · กดปุ่มในแผงเจ้าหน้าที่ มือถือ หรือส่งรถไปที่ไม้กั้น', 'Free play · use the staff console, the phone, or send cars to the barrier'],
-  'story.kioskOn': ['โหมดจัดแสดง · แตะหน้าจอเพื่อทดลองเอง', 'Showcase loop · touch the screen to take over'],
-  'story.resumeIn': ['กลับเข้าโหมดจัดแสดงอัตโนมัติเมื่อไม่มีการใช้งาน', 'The showcase loop resumes when idle'],
 
   'story.hint.approve': ['ลองกด “อนุมัติ” ในคอนโซลเจ้าหน้าที่ หรือกดถัดไป', 'Try “Approve” in the staff console, or press Next'],
   'story.hint.alert': ['เลือก “เปิดให้เข้า” หรือ “ไม่ให้เข้า” ได้เลย', 'Choose “Open” or “Deny”'],
-  'story.done': ['จบเรื่องราว · ทดลองต่อได้ทุกส่วน', 'End of the story · keep exploring'],
   's1.t': ['ผู้มาติดต่อขอสิทธิ์จอดล่วงหน้า', 'A visitor asks for parking ahead of time'],
   's1.b': ['คุณชูใจจะมาประชุมที่ OSD เปิดลิงก์บนมือถือ ไม่ต้องเข้าสู่ระบบ กรอกชื่อ อีเมลของตนเองและของผู้ติดต่อใน OSD', 'Chujai is coming to a meeting at OSD. She opens the link on her phone, with no sign-in, and enters her name, her email and her OSD contact’s'],
   's2.t': ['ถ่ายรูปรถ ระบบกรอกทะเบียนให้', 'Snap the car and the plate fills itself'],

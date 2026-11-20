@@ -1,10 +1,9 @@
 // The staff console shown in the side panel: overview, requests, gate, vehicles and reports.
 import {t, tx, fmtTime, fmtDate, fmtShortDate, fmtDateTime, getLang} from './i18n.js';
 import {esc, icon, patch, fakeQr, download} from './dom.js';
-import {PROVINCES, normalizePlate} from './sim.js';
+import {PROVINCES, normalizePlate, GATE_REASONS as REASONS} from './sim.js';
 
 const TABS = [['overview', 'chart'], ['requests', 'inbox'], ['gate', 'gate'], ['vehicles', 'car'], ['reports', 'doc']];
-const REASONS = ['gate.reason.misread', 'gate.reason.delivery', 'gate.reason.guest', 'gate.reason.other'];
 
 export function createPanel({root, sim, actions}) {
   const ui = {tab: 'overview', reqFilter: 'pending', reqSearch: '', selected: null, rejecting: false, rejectText: '', vehFilter: 'all', vehSearch: '', add: {plate: '', province: PROVINCES[0][0], owner: ''}, manualReason: REASONS[0], alertReason: {}, newIds: new Set(), cue: null, flash: null, snapshots: {in: '', out: ''}};
@@ -17,7 +16,6 @@ export function createPanel({root, sim, actions}) {
   const cue = name => (ui.cue === name ? ' data-cue="true"' : '');
   const typeLabel = type => t(`type.${type || 'unknown'}`);
   const plate = (p, province) => `<span class="pk-plate-chip"><b>${esc(p)}</b>${province ? `<small>${esc(province)}</small>` : ''}</span>`;
-  const sinceMin = at => Math.max(0, Math.round((sim.now() - at) / 60000));
 
   function tabs() {
     const pending = sim.state.requests.filter(q => q.status === 'pending').length;
@@ -105,7 +103,7 @@ export function createPanel({root, sim, actions}) {
     return `${open.map(a => alertCard(a)).join('')}
     <div class="pk-gate-status ${g}"><div class="pk-gate-icon">${icon('gate')}</div><div><span class="metric-label">${t('gate.status')}</span><strong>${t(`gate.${g}`)}</strong><small><i class="pk-dot"></i>${t('gate.online')}</small></div>${pill(t(`gate.${g}`), tone)}</div>
     <div class="pk-cams">${['in', 'out'].map(k => `<figure>${ui.snapshots[k] ? `<img src="${ui.snapshots[k]}" alt="">` : `<div class="pk-cam-empty">${icon('camera')}</div>`}<figcaption>${t(k === 'in' ? 'gate.camIn' : 'gate.camOut')}</figcaption></figure>`).join('')}</div>
-    <div class="dashboard-section"><h3>${t('gate.manual')}</h3><p class="pk-hint">${t('gate.manual.note')}</p><div class="pk-manual"><select data-focus="manual-reason" aria-label="${t('gate.reason')}">${REASONS.map(r => `<option value="${r}"${ui.manualReason === r ? ' selected' : ''}>${t(r)}</option>`).join('')}</select><button class="pk-btn primary" data-act="manual-open"${g !== 'closed' ? ' disabled' : ''}>${t('gate.openOnce')}</button></div></div>
+    <div class="dashboard-section"><h3>${t('gate.manual')}</h3><p class="pk-hint">${t('gate.manual.note')}</p><div class="pk-manual"><select data-focus="manual-reason" aria-label="${t('gate.reason')}">${REASONS.map(r => `<option value="${r}"${ui.manualReason === r ? ' selected' : ''}>${t(r)}</option>`).join('')}</select><button class="pk-btn primary" data-act="manual-open"${g !== 'closed' || open.length ? ' disabled' : ''}>${t('gate.openOnce')}</button></div>${open.length ? `<p class="pk-hint">${t('gate.manual.alertFirst')}</p>` : ''}</div>
     <div class="dashboard-section"><h3>${t('gate.sim')} · ${t('sim')}</h3><div class="pk-sim-grid">${[['registered', 'car'], ['visitor', 'user'], ['unknown', 'alert'], ['exit', 'arrowOut']].map(([k, ic]) => `<button class="pk-btn" data-sim="${k}"${cue(`sim:${k}`)}>${icon(ic)}${t(`gate.sim.${k}`)}</button>`).join('')}</div></div>
     <div class="dashboard-section"><h3>${t('gate.log')}</h3>${sim.state.events.slice(0, 14).map(eventRow).join('')}</div>`;
   }

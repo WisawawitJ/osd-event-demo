@@ -1,7 +1,8 @@
 // The visitor's phone: the public request form, the confirmation, and the emailed ticket.
 import {t, fmtDate, fmtTime, bkk} from './i18n.js';
-import {esc, icon, patch, fakeQr} from './dom.js';
+import {esc, icon, patch, fakeQr, saveFile, visitInvite} from './dom.js';
 import {PROVINCES} from './sim.js';
+import {later, sleep} from './clock.js';
 
 const blankForm = () => ({name: '', phone: '', email: '', company: '', contact: '', plate: '', province: '', arrival: '2026-11-24', departure: '2026-11-24', notes: '', consent: false, faceConsent: false, face: false, photo: 'idle'});
 const dateValue = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d, -7); };
@@ -61,7 +62,7 @@ export function createPhone({root, sim, actions}) {
     const subject = t(`ph.mail.${mail.kind}`);
     const head = `<div class="ph-mail-head"><span class="ph-avatar">P</span><div><strong>OSD Parking</strong><small>no-reply@osd.example · ${fmtTime(mail.at)}</small></div></div><h4>${subject}</h4><p class="ph-to">${esc(r.visitor.email)}, cc ${esc(r.contact)}</p>`;
     if (mail.kind === 'approved') {
-      return `${head}<div class="ph-ticket"><div class="ph-ticket-top"><span>${t('ph.ticket')}</span><b>OSD</b></div><div class="ph-ticket-plate">${esc(r.plate)}<small>${esc(r.province)}</small></div><div class="ph-ticket-rows"><div><span>${t('req.dates')}</span><b>${fmtDate(r.arrival)}${r.departure !== r.arrival ? ` – ${fmtDate(r.departure)}` : ''}</b></div><div><span>${t('req.visitor')}</span><b>${esc(r.visitor.name)}</b></div><div><span>${t('parking.floor')}</span><b>P2 · A</b></div></div><p class="ph-ticket-how">${t('ph.ticket.how')}</p><div class="ph-ticket-qr">${fakeQr(r.qr || r.ref)}<span>${t('ph.ticket.qr')}</span></div><button type="button" class="ph-cal">${icon('calendar')}${t('ph.ticket.cal')}</button></div>`;
+      return `${head}<div class="ph-ticket"><div class="ph-ticket-top"><span>${t('ph.ticket')}</span><b>OSD</b></div><div class="ph-ticket-plate">${esc(r.plate)}<small>${esc(r.province)}</small></div><div class="ph-ticket-rows"><div><span>${t('req.dates')}</span><b>${fmtDate(r.arrival)}${r.departure !== r.arrival ? ` – ${fmtDate(r.departure)}` : ''}</b></div><div><span>${t('req.visitor')}</span><b>${esc(r.visitor.name)}</b></div><div><span>${t('parking.floor')}</span><b>P2 · A</b></div></div><p class="ph-ticket-how">${t('ph.ticket.how')}</p><div class="ph-ticket-qr">${fakeQr(r.qr || r.ref)}<span>${t('ph.ticket.qr')}</span></div><button type="button" class="ph-cal" data-ph="calendar">${icon('calendar')}${t('ph.ticket.cal')}</button></div>`;
     }
     return `${head}<p class="ph-mail-body">${mail.kind === 'rejected' ? esc(r.reason || '') : t('req.revoke.confirm')}</p><button type="button" class="ph-link" data-ph="new">${t('ph.newRequest')}</button>`;
   }
@@ -86,7 +87,6 @@ export function createPhone({root, sim, actions}) {
     const arrival = dateValue(f.arrival), departure = Math.max(arrival, dateValue(f.departure));
     const r = sim.submitRequest({visitor: {name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), company: f.company.trim() || '—'}, contact: f.contact.trim(), plate: f.plate.trim(), province: f.province, arrival, departure, notes: f.notes, face: f.faceConsent && f.face, color: ui.color ?? 4});
     ui.requestId = r.id; ui.screen = 'sent';
-    actions.submitted?.(r);
     render();
     return r;
   }
@@ -101,6 +101,7 @@ export function createPhone({root, sim, actions}) {
     if (what === 'submit') submit();
     if (what === 'inbox') { ui.screen = 'mail'; ui.banner = null; render(); }
     if (what === 'site') { ui.screen = req() ? 'sent' : 'form'; render(); }
+    if (what === 'calendar' && req()) saveFile(`osd-parking-${req().ref}.ics`, visitInvite(req()), 'text/calendar;charset=utf-8');
     if (what === 'new') { ui.form = blankForm(); ui.screen = 'form'; ui.requestId = null; ui.banner = null; render(); }
   });
   root.addEventListener('input', e => {
@@ -119,7 +120,7 @@ export function createPhone({root, sim, actions}) {
     ui.form.photo = 'reading'; render();
     clearTimeout(photoTimer);
     return new Promise(resolve => {
-      photoTimer = setTimeout(() => {
+      photoTimer = later(() => {
         if (!ui.form.plate) ui.form.plate = sample.plate;
         if (!ui.form.province) ui.form.province = sample.province;
         ui.form.photo = 'done'; render(); resolve();
@@ -132,7 +133,7 @@ export function createPhone({root, sim, actions}) {
     for (const ch of text) {
       if (isCancelled()) break;
       ui.form[name] += ch; render();
-      await new Promise(r => setTimeout(r, 1000 / cps));
+      await sleep(1000 / cps);
     }
     ui.form[name] = text; ui.typing = null; render();
   }

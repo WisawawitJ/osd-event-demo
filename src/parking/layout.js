@@ -10,7 +10,7 @@ export const DRIVE = {z: 16.2, north: 13.1, south: 19.3, west: -58, east: -11.2}
 export const STREET = {north: 22.5, south: 29.5, laneEast: 24.5, laneWest: 27.5};
 // One barrier serves both directions, as on site: entry keeps left (west half), exit the east half.
 export const GATE = {z: 19.3, west: -24.9, east: -18.5, entryX: -23, exitX: -20.2, entryStopZ: 21.9, exitStopZ: 16.6};
-export const P1_AISLE_X = -14.16;
+const P1_AISLE_X = -14.16;
 const P2_AISLES = {A: -34, B: -34, C: -50, D: -50};
 const P2_ROWS = [
   {row: 'A', x: -28.5, nose: 1},

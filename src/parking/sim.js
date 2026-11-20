@@ -2,11 +2,13 @@
 // alerts, audit and outbox. Nothing here talks to ATOM, Keycloak, mail or cameras.
 import {buildStalls} from './layout.js';
 import {bkk, parts} from './i18n.js';
+import {SPEED, later} from './clock.js';
 
-export const DEMO_DAY = {y: 2026, m: 11, d: 24};
-export const DAY_START = bkk(2026, 11, 24, 0, 0);
-export const DAY_END = bkk(2026, 11, 24, 23, 59, 59);
+const DAY_START = bkk(2026, 11, 24, 0, 0);
 const START_TIME = bkk(2026, 11, 24, 9, 0);
+
+// Reasons a member of staff can give for opening the barrier by hand.
+export const GATE_REASONS = ['gate.reason.misread', 'gate.reason.delivery', 'gate.reason.guest', 'gate.reason.other'];
 
 export const PROVINCES = [
   ['กรุงเทพมหานคร', 'Bangkok'], ['นนทบุรี', 'Nonthaburi'], ['ปทุมธานี', 'Pathum Thani'], ['สมุทรปราการ', 'Samut Prakan'],
@@ -33,10 +35,10 @@ const uid = prefix => `${prefix}${(idCounter++).toString(36)}`;
 
 export function createParkingSim() {
   const listeners = new Set();
-  let state, clockBase, clockReal, clockRate = 1;
+  let state, clockBase, clockReal;
 
   function emit(kind, payload) { for (const fn of listeners) fn(kind, payload); }
-  const now = () => Math.round(clockBase + (performance.now() - clockReal) * clockRate);
+  const now = () => Math.round(clockBase + (performance.now() - clockReal) * SPEED);
   function setNow(ms) { clockBase = ms; clockReal = performance.now(); emit('clock'); }
 
   function seed() {
@@ -65,7 +67,7 @@ export function createParkingSim() {
     };
     const guestA = addRequest({status: 'approved', visitor: {name: 'วีระ กล้าหาญ', phone: '089-111-2222', email: 'weera@example.com', company: 'บริษัท ตัวอย่างเทค จำกัด'}, contact: 'host.demo@osd.example', plate: '3กพ 1150', province: 'นนทบุรี', arrival: DAY_START, departure: DAY_START, createdAt: bkk(2026, 11, 20, 14, 12), face: true, color: 2,
       history: [{at: bkk(2026, 11, 20, 14, 12), key: 'h.submitted'}, {at: bkk(2026, 11, 20, 15, 3), key: 'h.approved', by: 'staff.name'}, {at: bkk(2026, 11, 20, 15, 3), key: 'h.atom'}, {at: bkk(2026, 11, 20, 15, 4), key: 'h.email'}]});
-    const guestB = addRequest({status: 'approved', visitor: {name: 'มานะ อดทน', phone: '086-555-0101', email: 'mana@example.com', company: 'ห้างหุ้นส่วน ตัวอย่างการช่าง'}, contact: 'facility.demo@osd.example', plate: 'ฎณ 7302', province: 'ปทุมธานี', arrival: DAY_START, departure: bkk(2026, 11, 25), createdAt: bkk(2026, 11, 21, 9, 40), color: 7,
+    addRequest({status: 'approved', visitor: {name: 'มานะ อดทน', phone: '086-555-0101', email: 'mana@example.com', company: 'ห้างหุ้นส่วน ตัวอย่างการช่าง'}, contact: 'facility.demo@osd.example', plate: 'ฎณ 7302', province: 'ปทุมธานี', arrival: DAY_START, departure: bkk(2026, 11, 25), createdAt: bkk(2026, 11, 21, 9, 40), color: 7,
       history: [{at: bkk(2026, 11, 21, 9, 40), key: 'h.submitted'}, {at: bkk(2026, 11, 21, 10, 2), key: 'h.approved', by: 'staff.name'}, {at: bkk(2026, 11, 21, 10, 2), key: 'h.atom'}, {at: bkk(2026, 11, 21, 10, 3), key: 'h.email'}]});
     addRequest({status: 'approved', visitor: {name: 'สมใจ นึก', phone: '084-020-3030', email: 'somjai@example.com', company: 'บริษัท ตัวอย่างพลังงาน จำกัด'}, contact: 'host.demo@osd.example', plate: '1ขค 6620', province: 'ชลบุรี', arrival: bkk(2026, 11, 25), departure: bkk(2026, 11, 25), createdAt: bkk(2026, 11, 23, 11, 5), color: 5,
       history: [{at: bkk(2026, 11, 23, 11, 5), key: 'h.submitted'}, {at: bkk(2026, 11, 23, 13, 20), key: 'h.approved', by: 'staff.name'}, {at: bkk(2026, 11, 23, 13, 20), key: 'h.atom'}, {at: bkk(2026, 11, 23, 13, 21), key: 'h.email'}]});
@@ -180,13 +182,6 @@ export function createParkingSim() {
     emit('exit', event);
     return event;
   }
-  function markLeft(k) {
-    const p = state.presence.get(k);
-    if (!p) return;
-    recordExit({plate: p.plate, province: p.province});
-    audit('staff.name', 'a.markLeft', {target: p.plate});
-    emit('markLeft', p);
-  }
 
   function raiseAlert({plate, province, snapshot, color}) {
     const alert = {id: uid('a'), at: now(), plate, province, snapshot, color, status: 'open'};
@@ -245,11 +240,11 @@ export function createParkingSim() {
     audit('staff.name', 'a.approve', {target: req.plate});
     emit('request', req);
     // Simulated ATOM confirms the vehicle and person, then the ticket goes out.
-    setTimeout(() => {
+    later(() => {
       vehicle.sync = 'synced'; req.syncing = false;
       req.history.push({at: now(), key: 'h.atom'});
       emit('vehicle', vehicle);
-      setTimeout(() => {
+      later(() => {
         req.history.push({at: now(), key: 'h.email'});
         sendEmail(req, 'approved');
         emit('request', req);
@@ -288,7 +283,7 @@ export function createParkingSim() {
     state.vehicles.push(v);
     audit('staff.name', 'a.plateAdd', {target: plate});
     emit('vehicle', v);
-    setTimeout(() => { v.sync = 'synced'; emit('vehicle', v); }, 1400);
+    later(() => { v.sync = 'synced'; emit('vehicle', v); }, 1400);
     return v;
   }
   function importCsv() {
@@ -297,7 +292,7 @@ export function createParkingSim() {
     state.vehicles.push(...added);
     audit('staff.name', 'a.import', {target: '3'});
     emit('vehicle');
-    setTimeout(() => { for (const v of added) v.sync = 'synced'; emit('vehicle'); }, 1600);
+    later(() => { for (const v of added) v.sync = 'synced'; emit('vehicle'); }, 1600);
   }
   function setEnabled(id, enabled) {
     const v = state.vehicles.find(v => v.id === id);
@@ -312,7 +307,7 @@ export function createParkingSim() {
     v.sync = 'pending'; v.syncError = null;
     audit('staff.name', 'a.retry', {target: v.plate});
     emit('vehicle', v);
-    setTimeout(() => { v.sync = 'synced'; emit('vehicle', v); }, 1300);
+    later(() => { v.sync = 'synced'; emit('vehicle', v); }, 1300);
   }
   function setCapacity(n) {
     state.capacity = Math.max(state.presence.size, Math.min(200, Math.round(n)));
@@ -364,8 +359,8 @@ export function createParkingSim() {
   reset();
   return {
     get state() { return state; }, now, setNow, reset, subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    decide, freeStall, recordEntry, recordExit, markLeft, raiseAlert, resolveAlert, setGate, manualGate,
+    decide, freeStall, recordEntry, recordExit, raiseAlert, resolveAlert, setGate, manualGate,
     submitRequest, approve, reject, revoke, flagsFor, addVehicle, importCsv, setEnabled, retrySync, setCapacity,
-    stats, attention, findVehicle, key, emit,
+    stats, attention, findVehicle, key,
   };
 }

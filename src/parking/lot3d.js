@@ -26,7 +26,7 @@ export function createLot({scene, stalls, schedule}) {
   const rect = (x0, x1, z0, z1, y) => flat(x1 - x0, z1 - z0).translate((x0 + x1) / 2, y, (z0 + z1) / 2);
 
   // Surfaces
-  const asphalt = mat({color: '#8d9592'}), street = mat({color: '#6f7774'}), kerb = mat({color: '#cfd3cc'}), paint = decal({color: '#f4f6f2'}, 2), yellow = decal({color: '#e7c34a'}, 2);
+  const asphalt = mat({color: '#8d9592'}), street = mat({color: '#6f7774'}), kerb = mat({color: '#cfd3cc'}), paint = decal({color: '#f4f6f2'}, 2);
   const LOT = {west: -60, east: SITE.west - .7, north: -16, south: DRIVE.north};
   put(mergeGeometries([
     rect(LOT.west, LOT.east, LOT.north, LOT.south, Y.road),
@@ -230,7 +230,6 @@ export function createLot({scene, stalls, schedule}) {
     lampOn.color.set(open ? '#2f9e57' : '#c03d32'); lampOn.emissive.set(open ? '#3dff7a' : '#ff3b2f');
     return true;
   }
-  const boomState = () => (boomAngle === boomTarget ? (boomAngle > 0 ? 'open' : 'closed') : boomTarget > boomAngle ? 'opening' : 'closing');
 
   function setNight(night) {
     lampMat.emissiveIntensity = night ? 2.2 : 0;
@@ -242,7 +241,7 @@ export function createLot({scene, stalls, schedule}) {
   boom.matrixAutoUpdate = true;
 
   return {
-    root, cameras: {in: camIn, out: camOut}, setBays, drawSign, setBoom, update, boomState, setNight,
+    root, cameras: {in: camIn, out: camOut}, setBays, drawSign, setBoom, update, setNight,
     get boomMoving() { return boomAngle !== boomTarget; },
     dispose() {
       root.removeFromParent();

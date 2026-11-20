@@ -2,6 +2,7 @@
 // so turns look like real cornering. Heading h means forward = (sin h, cos h) in (x, z).
 import {createCar} from './cars.js';
 import {DRIVE, GATE, STREET, groundY} from './layout.js';
+import {SPEED} from './clock.js';
 
 const EAST = Math.PI / 2, WEST = -Math.PI / 2, NORTH = Math.PI, SOUTH = 0;
 const LANE_IN = 17.6, LANE_OUT = 14.8; // driveway halves: westbound (in) / eastbound (out)
@@ -90,8 +91,10 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     return {x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, h: a.h + dh * f};
   }
   // Trapezoidal speed profile: accelerate, cruise, brake to a stop at the end.
-  function drive(agent, route, {speed = 6.5, reverse = false, startMoving = false} = {}) {
-    const gen = generation;
+  // Every flow passes the generation it started in: after a reset (syncParked) its awaits reject with ABORT,
+  // even ones that only begin later, so traffic from a previous run never carries on into the new one.
+  function drive(agent, route, {speed = 6.5, reverse = false, startMoving = false} = {}, gen = generation) {
+    if (gen !== generation) return Promise.reject(ABORT);
     return new Promise((resolve, reject) => {
       const accel = reverse ? 1.6 : 2.6, vmax = reverse ? 2.2 : speed;
       const m = {agent, route, s: 0, v: startMoving ? vmax : 0, vmax, accel, reverse, resolve: () => (gen === generation ? resolve() : reject(ABORT))};
@@ -101,14 +104,13 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     });
   }
   const passed = (agent, distance) => !agent.mover || !movers.has(agent.mover) || agent.mover.s > distance;
-  function waitFor(cond) {
-    const gen = generation;
+  function waitFor(cond, gen = generation) {
     return new Promise((resolve, reject) => {
       const check = () => (gen !== generation ? reject(ABORT) : cond() ? resolve() : setTimeout(check, 60));
       check();
     });
   }
-  const wait = ms => waitFor((() => { const end = performance.now() + ms; return () => performance.now() >= end; })());
+  const wait = (ms, gen) => { const end = performance.now() + ms / SPEED; return waitFor(() => performance.now() >= end, gen); };
 
   function makeAgent({plate, province, type, color}) {
     const car = createCar({plate, province, color});
@@ -148,88 +150,94 @@ export function createTraffic({lot, sim, schedule, hooks}) {
 
   // One car at a time works the barrier.
   function withGate(fn) { const run = gateQueue.then(fn); gateQueue = run.catch(() => {}); return run; }
-  async function openBoom() { sim.setGate('opening'); lot.setBoom(true); kick(); await waitFor(() => !lot.boomMoving); sim.setGate('open'); }
-  async function closeBoom() { sim.setGate('closing'); lot.setBoom(false); kick(); await waitFor(() => !lot.boomMoving); sim.setGate('closed'); }
+  async function openBoom(gen) { sim.setGate('opening'); lot.setBoom(true); kick(); await waitFor(() => !lot.boomMoving, gen); sim.setGate('open'); }
+  async function closeBoom(gen) { sim.setGate('closing'); lot.setBoom(false); kick(); await waitFor(() => !lot.boomMoving, gen); sim.setGate('closed'); }
 
   // Arrival: street → gate → plate read → open (allowed, or a staff decision) → bay.
+  // A car with nowhere to park (the lot is full) is turned away at the barrier, like a denied one.
   function arrive({plate, province, color = 0, fromX = -95}) {
+    const gen = generation, alive = () => { if (gen !== generation) throw ABORT; };
     const agent = makeAgent({plate, province, type: 'unknown', color});
     agent.car.visible = false;
     const k = sim.key(plate, province);
-    let resolveLane, released = false, onStreet = false;
+    let resolveLane, released = false, onStreet = false, joined = false;
     const previous = entryLane;
     entryLane = new Promise(r => { resolveLane = r; });
     const ahead = entryPending++;
     arriving.add(k);
-    const releaseLane = () => { if (!released) { released = true; entryPending--; resolveLane(); } };
-    const offStreet = () => { if (onStreet) { onStreet = false; streetArrivals--; streetCars.delete(agent); } };
+    // Counters belong to the run that raised them: after a reset they start from zero and must stay there.
+    const releaseLane = () => { if (!released) { released = true; if (gen === generation) entryPending--; resolveLane(); } };
+    const offStreet = () => { if (onStreet) { onStreet = false; if (gen === generation) { streetArrivals--; streetCars.delete(agent); } } };
+    const turnAway = async () => {
+      hooks.onLeaveGate?.('in');
+      releaseLane();
+      await waitFor(() => eastClear(-70, -12), gen);
+      exitingStreet++; joined = true;
+      await drive(agent, gateBackOut(), {reverse: true}, gen);
+      await drive(agent, awayEast(), {speed: LANE_SPEED[1]}, gen);
+      removeAgent(agent);
+    };
     return guard(agent, async () => {
       try {
         // With cars ahead, this one queues visibly on the street; otherwise it drives straight to the barrier.
         const holdX = -33 - 6.5 * Math.max(0, ahead - 1);
         const queue = ahead > 0 && holdX > fromX + 2;
-        if (ahead > 0 && !queue) await previous;
+        if (ahead > 0 && !queue) { await previous; alive(); }
         // Appear only once the spawn point is clear of through-traffic and of the previous arrival.
-        await waitFor(() => eastClear(fromX - 14, fromX + 30) && streetClear(fromX - 6, fromX + 9));
+        await waitFor(() => eastClear(fromX - 14, fromX + 30) && streetClear(fromX - 6, fromX + 9), gen);
         place(agent, {x: fromX, z: STREET.laneEast, h: EAST});
         agent.car.visible = true;
         onStreet = true; streetArrivals++; streetCars.add(agent);
-        hooks.onApproach?.(agent);
         if (queue) {
-          await drive(agent, streetToHold(fromX, holdX), {startMoving: fromX > -90});
-          await previous;
-          await drive(agent, streetToGate(holdX));
+          await drive(agent, streetToHold(fromX, holdX), {startMoving: fromX > -90}, gen);
+          await previous; alive();
+          await drive(agent, streetToGate(holdX), {}, gen);
         } else {
-          await previous;
-          await drive(agent, streetToGate(fromX), {startMoving: fromX > -90});
+          await previous; alive();
+          await drive(agent, streetToGate(fromX), {startMoving: fromX > -90}, gen);
         }
         offStreet();
         return await withGate(async () => {
-          hooks.onAtGate?.('in', agent);
+          alive();
           const verdict = sim.decide(plate, province);
           await hooks.readPlate?.('in', agent, verdict);
+          alive();
           let manual = null;
           if (!verdict.allow) {
             const alert = sim.raiseAlert({plate, province, snapshot: hooks.snapshot?.('in'), color});
-            agent.alertId = alert.id;
-            await waitFor(() => alert.status !== 'open');
-            if (alert.status === 'denied') {
-              hooks.onLeaveGate?.('in', agent, 'denied');
-              releaseLane();
-              await waitFor(() => eastClear(-70, -12));
-              exitingStreet++;
-              await drive(agent, gateBackOut(), {reverse: true});
-              await drive(agent, awayEast(), {speed: LANE_SPEED[1]});
-              exitingStreet--;
-              removeAgent(agent);
-              return 'denied';
-            }
+            await waitFor(() => alert.status !== 'open', gen);
+            if (alert.status === 'denied') { await turnAway(); return 'denied'; }
             manual = {by: alert.by, reason: alert.reasonKey};
           }
           const type = verdict.allow ? verdict.type : 'unknown';
           const stall = sim.freeStall(type === 'unknown' ? 'staff' : type);
+          if (!stall) { hooks.onFull?.(plate); await turnAway(); return 'full'; }
           Object.assign(agent, {type, stall, key: k});
-          await openBoom();
-          sim.recordEntry({plate, province, type, stallId: stall?.id, color, manual});
+          await openBoom(gen);
+          sim.recordEntry({plate, province, type, stallId: stall.id, color, manual});
           agents.set(k, agent);
           refreshBays();
-          const going = drive(agent, stall ? gateToStall(stall) : exitToStreet(), {speed: 5.5});
-          await waitFor(() => passed(agent, 6.5));
-          hooks.onLeaveGate?.('in', agent, manual ? 'manual' : 'allowed');
+          const going = drive(agent, gateToStall(stall), {speed: 5.5}, gen);
+          await waitFor(() => passed(agent, 6.5), gen);
+          hooks.onLeaveGate?.('in');
           releaseLane();
-          await wait(400);
-          await closeBoom();
+          await wait(400, gen);
+          await closeBoom(gen);
           await going;
           schedule();
           return manual ? 'manual' : 'allowed';
         });
-      } finally { releaseLane(); offStreet(); arriving.delete(k); }
+      } finally {
+        releaseLane(); offStreet();
+        if (gen === generation) { arriving.delete(k); if (joined) exitingStreet--; }
+      }
     });
   }
 
   function leave(k) {
     const agent = agents.get(k);
     if (!agent || agent.leaving || !agent.stall) return Promise.resolve(false);
+    const gen = generation, alive = () => { if (gen !== generation) throw ABORT; };
     agent.leaving = true;
     const stall = agent.stall;
     let releaseLane, joined = false;
@@ -237,36 +245,33 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     exitLane = new Promise(r => { releaseLane = r; });
     return guard(agent, async () => {
       try {
-        await drive(agent, stallBackOut(stall), {reverse: true});
+        await drive(agent, stallBackOut(stall), {reverse: true}, gen);
         // The next car out waits in its aisle until the one ahead has cleared the exit lane.
-        await previous;
-        await drive(agent, aisleToExit(stall));
+        await previous; alive();
+        await drive(agent, aisleToExit(stall), {}, gen);
         return await withGate(async () => {
-          hooks.onAtGate?.('out', agent);
+          alive();
           await hooks.readPlate?.('out', agent, {allow: true, type: agent.type, exit: true});
           // Wait for a gap in the eastbound lane before lifting the barrier.
-          await waitFor(() => eastClear(-68, -12));
+          await waitFor(() => eastClear(-68, -12), gen);
           exitingStreet++; joined = true;
-          await openBoom();
+          await openBoom(gen);
           sim.recordExit({plate: agent.plate, province: agent.province});
           agents.delete(k);
           refreshBays();
-          const going = drive(agent, exitToStreet(), {speed: LANE_SPEED[1]});
-          await waitFor(() => passed(agent, 6));
-          hooks.onLeaveGate?.('out', agent, 'exit');
+          const going = drive(agent, exitToStreet(), {speed: LANE_SPEED[1]}, gen);
+          await waitFor(() => passed(agent, 6), gen);
+          hooks.onLeaveGate?.('out');
           releaseLane();
-          await wait(300);
-          await closeBoom();
+          await wait(300, gen);
+          await closeBoom(gen);
           await going;
           removeAgent(agent);
           return true;
         });
-      } finally { releaseLane(); if (joined) { joined = false; exitingStreet--; } }
+      } finally { releaseLane(); if (joined && gen === generation) exitingStreet--; }
     });
   }
-
-  // A staff "mark as left" removes the car without a drive-out (a missed exit read).
-  function vanish(k) { const a = agents.get(k); if (a) { removeAgent(a); agents.delete(k); refreshBays(); schedule(); } }
 
   // Cosmetic through-traffic on the street.
   function passBy(preferDir = Math.random() < .5 ? 1 : -1) {
@@ -289,7 +294,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     frame = 0;
     // Cars move in real time whatever the frame rate: a slow frame (a heavy zoomed-out view) is
     // stepped in 50 ms slices. Only a stall longer than half a second (tab switch, debugger) is dropped.
-    const elapsed = Math.min(.5, Math.max(0, (time - last) / 1000)); last = time;
+    const elapsed = Math.min(.5, Math.max(0, (time - last) / 1000)) * SPEED; last = time;
     const steps = Math.max(1, Math.ceil(elapsed / .05)), dt = elapsed / steps;
     let active = false;
     for (let i = 0; i < steps; i++) {
@@ -304,17 +309,15 @@ export function createTraffic({lot, sim, schedule, hooks}) {
       }
     }
     for (const m of movers) place(m.agent, sample(m.route, m.s), m.reverse);
-    hooks.onFrame?.();
     schedule();
     if (active) kick();
   }
 
   return {
-    syncParked, arrive, leave, vanish, passBy, refreshBays,
+    syncParked, arrive, leave, passBy, refreshBays,
     // A manual open with no car read: one pulse, held briefly, then closed.
-    pulse(holdMs = 5000) { return withGate(async () => { await openBoom(); await wait(holdMs); await closeBoom(); }).catch(() => {}); },
+    pulse(holdMs = 5000) { const gen = generation; return withGate(async () => { await openBoom(gen); await wait(holdMs, gen); await closeBoom(gen); }).catch(() => {}); },
     parkedKeys: () => [...agents.entries()].filter(([, a]) => !a.leaving && a.stall).map(([k]) => k),
-    agentFor: k => agents.get(k),
     get busy() { return movers.size > ambientCars.size; },
     get queued() { return entryPending; },
     isArriving: k => arriving.has(k),

@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node scripts/serve.mjs 8080"
+    "start": "node scripts/serve.mjs 8080",
+    "test": "node test/run.mjs"
   }
 }

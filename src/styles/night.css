@@ -92,7 +92,8 @@ html[data-night=true] .pk-caption-hint { background: #1d2a45; color: #a9bfff; }
 html[data-night=true] .view-controls button { color: #b9c7d5 !important; }
 html[data-night=true] .flash { animation-name: pk-flash-night; }
 @keyframes pk-flash-night { 0%, 30% { background: #3b3416; } 100% { background: transparent; } }
-/* Plates stay white, as on a real car, so their text stays dark; the phone stays a phone. */
+/* Plates stay white, as on a real car, so their text stays dark; the phone stays a phone in its own light theme. */
+html[data-night=true] .pk-phone { --ink: #253b43; --muted: #526870; --line: #cbd6da; --accent: #315ee7; --pk-blue-soft: #edf1fc; --pk-ok: #236b54; --pk-ok-bg: #e5f5ee; --pk-bad: #a3352b; color: var(--ink); color-scheme: light; }
 html[data-night=true] .pk-plate-chip, html[data-night=true] .pk-plate-big, html[data-night=true] .plate { color: #121820; background: #fdfdfb; }
 html[data-night=true] .pk-plate-chip small, html[data-night=true] .pk-plate-big small, html[data-night=true] .plate small { color: #2b3540; }
 

@@ -1,8 +1,7 @@
 // Overlays on the 3D view: the plate-camera feed, the unknown-car alert, story captions and toasts.
 import {t, fmtTime} from './i18n.js';
 import {esc, icon} from './dom.js';
-
-const REASONS = ['gate.reason.misread', 'gate.reason.delivery', 'gate.reason.guest', 'gate.reason.other'];
+import {GATE_REASONS as REASONS} from './sim.js';
 
 export function createOverlays({layer, sim, actions}) {
   layer.innerHTML = `<div class="pk-feed" hidden></div><div class="pk-alert-pop" hidden></div><div class="pk-caption" hidden></div><div class="pk-toasts" aria-live="polite"></div>`;

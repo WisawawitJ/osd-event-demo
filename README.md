@@ -25,8 +25,22 @@ Useful URLs:
 | `/?dest=parking` | Opens straight on the car park, for free play |
 | `/?dest=parking&story=1` | Opens on the car park and plays the parking story with auto-advance |
 | `/?dest=parking&story=1&auto=0` | Same, but the presenter advances each step with **Next** |
+| `/?speed=3` | Runs the demo's timing 3× faster (max 30), for rehearsals and tests |
 | `/?fps=1` | Adds a frames-per-second counter, to check the event laptop (any page; combine with the others) |
 | `/#explore` | The original free-exploration page, now with the car park, its cars and street traffic (no parking UI) |
+
+## Testing
+
+```sh
+npm test                 # all behaviour checks, about a minute
+npm test -- kiosk night  # only checks whose names match
+```
+
+`test/run.mjs` starts its own server on a free port and drives headless Chromium over the DevTools protocol.
+There are no npm dependencies. It renders on the GPU through EGL (about 60 fps on this laptop's Intel graphics) and falls
+back to software WebGL only if no GPU works; set `GPU=egl|vulkan|software` to force one. Pages are loaded with
+`?speed=10`, which runs the simulated clock, cars, story waits and camera flights ten times faster. The same flag works by
+hand for rehearsals, for example `/?dest=parking&story=1&speed=3`. Screenshots of failed checks go to `test/out/`.
 
 ## At the booth
 
@@ -62,7 +76,8 @@ In the staff console:
 - **Vehicles**: add a staff car, import CSV, disable or enable a plate, retry a failed ATOM sync.
 - **Reports**: download the event and audit CSVs, or set the capacity.
 
-The visitor's phone form can be filled in by hand. The car photo reads a sample plate.
+The visitor's phone form can be filled in by hand. The car photo reads a sample plate. On the emailed ticket,
+**Add to calendar** downloads a simulated `.ics` invite for the visit.
 Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street, and leaving cars wait in their aisle.
 Staff and visitor cars also come and go by themselves while the car park is on screen. Through-traffic drives both lanes of the
 street whenever it is in view; it keeps to one speed per lane and gives way to cars turning in or pulling out.

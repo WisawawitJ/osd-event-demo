@@ -3,8 +3,9 @@
 import {t} from './i18n.js';
 import {STORY} from './sim.js';
 import {bkk} from './i18n.js';
+import {SPEED} from './clock.js';
 
-export const ABORT = Symbol('story-abort');
+const ABORT = Symbol('story-abort');
 const at = (h, m) => bkk(2026, 11, 24, h, m);
 
 export function createStory(ctx) {
@@ -19,7 +20,7 @@ export function createStory(ctx) {
       const tick = () => {
         if (my !== token) return reject(ABORT);
         const now = performance.now();
-        if (!paused) left -= now - last;
+        if (!paused) left -= (now - last) * SPEED;
         last = now;
         if (left <= 0) resolve(); else setTimeout(tick, 50);
       };
@@ -39,7 +40,8 @@ export function createStory(ctx) {
         alive();
         if (!done()) { ctx.tap(cue); await wait(250); perform(); }
       } else {
-        await Promise.race([until(done, 1e9), new Promise(r => { nextWaiter = () => { if (!done()) perform(); r(); }; })]);
+        // Next performs the action for the presenter; stopping the story (token bumped first) must not.
+        await Promise.race([until(done, 1e9), new Promise(r => { nextWaiter = () => { if (my === token && !done()) perform(); r(); }; })]);
         nextWaiter = null;
       }
       ctx.cue(null); ctx.hint(null);
