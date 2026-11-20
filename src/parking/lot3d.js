@@ -12,6 +12,9 @@ export function createLot({scene, stalls, schedule}) {
   const owned = [], materials = [], textures = [];
   const mat = (o) => { const m = new THREE.MeshStandardMaterial({roughness: .9, ...o}); materials.push(m); return m; };
   const basic = (o) => { const m = new THREE.MeshBasicMaterial(o); materials.push(m); return m; };
+  // Paint and tints lie a centimetre or two above the asphalt; a depth offset keeps them drawn on top
+  // at any distance instead of flickering against the surface underneath.
+  const decal = (o, layer = 1) => basic({...o, polygonOffset: true, polygonOffsetFactor: -2 * layer, polygonOffsetUnits: -4 * layer});
   const put = (geo, material, {x = 0, y = 0, z = 0, ry = 0, shadow = false, parent = root} = {}) => {
     owned.push(geo);
     const m = new THREE.Mesh(geo, material);
@@ -23,7 +26,7 @@ export function createLot({scene, stalls, schedule}) {
   const rect = (x0, x1, z0, z1, y) => flat(x1 - x0, z1 - z0).translate((x0 + x1) / 2, y, (z0 + z1) / 2);
 
   // Surfaces
-  const asphalt = mat({color: '#8d9592'}), street = mat({color: '#6f7774'}), kerb = mat({color: '#cfd3cc'}), paint = basic({color: '#f4f6f2'}), yellow = basic({color: '#e7c34a'});
+  const asphalt = mat({color: '#8d9592'}), street = mat({color: '#6f7774'}), kerb = mat({color: '#cfd3cc'}), paint = decal({color: '#f4f6f2'}, 2), yellow = decal({color: '#e7c34a'}, 2);
   const LOT = {west: -60, east: SITE.west - .7, north: -16, south: DRIVE.north};
   put(mergeGeometries([
     rect(LOT.west, LOT.east, LOT.north, LOT.south, Y.road),
@@ -72,12 +75,12 @@ export function createLot({scene, stalls, schedule}) {
   for (const x of [GATE.entryX, GATE.exitX]) for (const z of [GATE.z + 1.6, GATE.z - 1.8]) {
     loops.push(new THREE.RingGeometry(.92, 1.0, 4, 1).rotateZ(Math.PI / 4).scale(1, 1.4, 1).rotateX(-Math.PI / 2).translate(x, Y.road + .013, z));
   }
-  put(mergeGeometries(loops), basic({color: '#2b3236'}));
+  put(mergeGeometries(loops), decal({color: '#2b3236'}, 2));
   for (const g of loops) g.dispose();
   // Visitor bays in row A are tinted and labelled.
-  const visitorFill = basic({color: '#3d8fb0', transparent: true, opacity: .22, depthWrite: false});
+  const visitorFill = decal({color: '#3d8fb0', transparent: true, opacity: .22, depthWrite: false}, 1);
   put(mergeGeometries(stalls.filter(s => s.reserved === 'guest').map(s => rect(s.x - 2.4, s.x + 2.4, s.z - 1.15, s.z + 1.15, Y.road + .011))), visitorFill);
-  const vipFill = basic({color: '#7a5bb5', transparent: true, opacity: .2, depthWrite: false});
+  const vipFill = decal({color: '#7a5bb5', transparent: true, opacity: .2, depthWrite: false}, 1);
   put(mergeGeometries(stalls.filter(s => s.reserved === 'vip').map(s => rect(s.x - 2.4, s.x + 2.4, s.z - 1.15, s.z + 1.15, Y.site + .013))), vipFill);
 
   // Planting in the building model's own style: tall slim trunks under rounded multi-blob canopies in three

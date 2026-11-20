@@ -142,11 +142,24 @@ try {
     const gap = time - lastFrameAt; lastFrameAt = time;
     if (gap > 200) return; // an idle pause, not a slow frame
     if (gap > 26) { slowFrames++; fastFrames = 0; } else if (gap < 18.5) { fastFrames++; slowFrames = Math.max(0, slowFrames - 1); }
-    const next = slowFrames > 45 ? Math.max(minPixelRatio, pixelRatio - .25) : fastFrames > 900 ? Math.min(maxPixelRatio, pixelRatio + .25) : pixelRatio;
-    if (slowFrames > 45 || fastFrames > 900) { slowFrames = fastFrames = 0; }
-    if (next !== pixelRatio) { pixelRatio = next; renderer.setPixelRatio(pixelRatio); renderer.setSize(Math.max(viewport.clientWidth, 1), Math.max(viewport.clientHeight, 1), false); schedule(); }
+    // Only ever step down: stepping back up made the picture go sharp and soft while orbiting.
+    if (slowFrames <= 45) return;
+    slowFrames = 0;
+    const next = Math.max(minPixelRatio, pixelRatio - .25);
+    if (next === pixelRatio) return;
+    pixelRatio = next;
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(Math.max(viewport.clientWidth, 1), Math.max(viewport.clientHeight, 1), false);
+    // Resizing clears the canvas: draw again at once so no blank frame shows.
+    renderer.render(scene, camera);
   }
   controls.addEventListener('change', schedule);
+  // Near plane follows the viewing distance. A fixed 1 cm near plane left ~1.5 cm of depth precision at 50 m,
+  // so road paint, kerbs and coplanar model surfaces flickered while the camera moved.
+  if (!isAtom) controls.addEventListener('change', () => {
+    const near = THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) * .015, .03, 1.2);
+    if (Math.abs(near - camera.near) / camera.near > .02) { camera.near = near; camera.updateProjectionMatrix(); }
+  });
   const readPose=()=>({eye:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov});
   const writePose=pose=>{camera.position.fromArray(pose.eye);controls.target.fromArray(pose.target);camera.fov=pose.fov;camera.updateProjectionMatrix();controls.update();schedule();};
   flight=createCameraFlight({read:readPose,write:writePose,onState(active){const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';}});

@@ -74,8 +74,12 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
 - Cars are four draw calls each and share all their geometry. Trees, shrubs and bay lights are instanced, and static car-park
   parts skip per-frame matrix updates.
 - The building's ~110 interior partition walls are merged per floor at load time, with the same picture and cutaway clipping.
-- Sun shadows are computed once per view change, not every frame. At night the room-light pool is 6 lights with 1 casting shadows,
-  re-picked once a zoom settles rather than on every wheel tick. Plate-camera snapshots no longer force a shadow redraw.
+- Shadows behave as if baked: the sun's shadow map is drawn once per view change, never because the camera moved. At night
+  the 6 room lights (1 with shadows) are the selected room and its neighbours, so moving the camera never swaps lights or shadows.
+  Plate-camera snapshots no longer force a shadow redraw.
+- The near clipping plane follows the viewing distance, and road paint, bay tints and car shadows use a depth offset,
+  so nothing flickers against the surface underneath while the camera moves.
+- The resolution only ever steps down, and redraws in the same frame, so the picture never pops between sharp and soft.
 - Car movement runs in real time at any frame rate. Add `?fps=1` to see the frame rate.
 
 ## What is real and what is imagined

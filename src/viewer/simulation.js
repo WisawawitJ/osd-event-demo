@@ -101,6 +101,8 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       room.capabilities?.light !== false && floors.has(String(room.floor)) &&
       isVisible(floors.get(String(room.floor))) &&
       (view.currentFloor === 'all' || String(room.floor) === String(view.currentFloor))) : [];
+    const selected = byId.get(selectedId), selectedRoot = selected && floors.get(String(selected.floor));
+    const anchor = selected && selectedRoot ? selectedRoot.localToWorld(new THREE.Vector3(selected.center[0], 2, selected.center[2])) : new THREE.Vector3();
     const candidates = visibleRooms.flatMap(room => {
       const root = floors.get(String(room.floor));
       const positions = room.lightPositions?.length ? room.lightPositions :
@@ -108,7 +110,9 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       return positions.map(position => {
         worldPoint.fromArray(position);
         root.localToWorld(worldPoint);
-        return { room, position, distance: camera.position.distanceToSquared(worldPoint) };
+        // Rank by distance from the selected room, not from the camera: the set (and its shadows) then stays
+        // put while the camera moves, instead of lights hopping between rooms on every drag or zoom.
+        return { room, position, distance: worldPoint.distanceToSquared(anchor) };
       });
     });
     candidates.sort((a, b) => Number(b.room.id === selectedId) - Number(a.room.id === selectedId) || a.distance - b.distance);
@@ -233,7 +237,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     pointers.delete(event.pointerId);
     press = null;
     if (event.target !== canvas || !start || start.id !== event.pointerId || start.moved || performance.now() - start.time > 500 ||
-      Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) { if (night) { updateLighting(); renderer.shadowMap.needsUpdate = true; schedule(); } return; }
+      Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) return;
     const rect = canvas.getBoundingClientRect();
     pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
     model.updateWorldMatrix(true, true);
@@ -257,14 +261,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     panel.querySelector('details').open = true;
     toggle(data.deviceKind, data.doorId);
   });
-  // At night the light pool follows the camera. Re-pick once a zoom settles, not on every wheel tick:
-  // each re-pick redraws every shadow map.
-  let wheelSettle = 0;
-  listen(canvas, 'wheel', () => {
-    if (!night) return;
-    clearTimeout(wheelSettle);
-    wheelSettle = setTimeout(() => { if (night && !disposed) { updateLighting(); renderer.shadowMap.needsUpdate = true; schedule(); } }, 220);
-  }, { passive: true });
+  // Camera moves no longer re-pick the night lights (see updateLighting), so nothing to do on wheel.
   renderControls();
   updateModel();
 

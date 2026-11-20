@@ -64,7 +64,8 @@ function sharedParts() {
     body, details, decals, blob,
     bodyMaterials: CAR_COLORS.map(color => new THREE.MeshStandardMaterial({color, roughness: .32, metalness: .45})),
     detailMaterial: new THREE.MeshStandardMaterial({vertexColors: true, roughness: .3, metalness: .5}),
-    blobMaterial: new THREE.MeshBasicMaterial({map: blobTexture, transparent: true, depthWrite: false}),
+    // The soft shadow sits on the road; the depth offset stops it flickering against the asphalt and paint.
+    blobMaterial: new THREE.MeshBasicMaterial({map: blobTexture, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12}),
     blobTexture,
   };
   return shared;
@@ -103,7 +104,7 @@ export function createCar({plate, province, color = 0}) {
   add(p.details, p.detailMaterial);
   add(p.decals, plateTexture(plate, province)).receiveShadow = false;
   const blob = add(p.blob, p.blobMaterial);
-  blob.position.y = .015; blob.updateMatrix(); blob.renderOrder = -1; blob.receiveShadow = false;
+  blob.position.y = .025; blob.updateMatrix(); blob.renderOrder = -1; blob.receiveShadow = false;
   car.userData = {plate, province};
   return car;
 }
