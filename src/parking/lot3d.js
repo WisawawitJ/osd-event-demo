@@ -2,9 +2,8 @@
 // barrier with two plate cameras, a guard booth, a free-space sign and per-bay indicator lights.
 // Presentation only: nothing here is bound to hardware.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
-import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
+import {mergeGeometries, mergeVertices} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
 import {DRIVE, GATE, STREET, SITE, Y} from './layout.js';
-import {setCarLights} from './cars.js';
 
 export function createLot({scene, stalls, schedule}) {
   const root = new THREE.Group();
@@ -81,25 +80,47 @@ export function createLot({scene, stalls, schedule}) {
   const vipFill = basic({color: '#7a5bb5', transparent: true, opacity: .2, depthWrite: false});
   put(mergeGeometries(stalls.filter(s => s.reserved === 'vip').map(s => rect(s.x - 2.4, s.x + 2.4, s.z - 1.15, s.z + 1.15, Y.site + .013))), vipFill);
 
-  // Planting: hedges and trees around P2
-  const hedge = mat({color: '#5f7d55'}), trunkMat = mat({color: '#6b5844'}), leaf = mat({color: '#6f9460', flatShading: true});
-  put(mergeGeometries([
-    new THREE.BoxGeometry(LOT.east - LOT.west + 2, .9, .9).translate((LOT.west + LOT.east) / 2, Y.road + .45, LOT.north - .9),
-    new THREE.BoxGeometry(.9, .9, LOT.south - LOT.north + 2).translate(LOT.west - .9, Y.road + .45, (LOT.north + LOT.south) / 2 - 1),
-    new THREE.BoxGeometry(GATE.west - .5 - (LOT.west - 1.4), .8, .8).translate((GATE.west - .5 + LOT.west - 1.4) / 2 - 1.6, Y.road + .45, DRIVE.south + .1),
-    new THREE.BoxGeometry(.9, .8, DRIVE.south - DRIVE.north - 3.4).translate(LOT.east + .45, Y.road + .45, DRIVE.north - 6),
-  ]), hedge);
-  const treeSpots = [[-36.8, -17.5], [-45, -17.5], [-52.4, -17.5], [-26.5, -17.5], [-61.8, 6], [-61.8, -6], [-61.8, 15], [-42, 20.6], [-54, 20.6], [-33, 20.6]];
-  const trunk = new THREE.CylinderGeometry(.12, .16, 1.8, 6), crown = new THREE.IcosahedronGeometry(1.5, 0);
-  owned.push(trunk, crown);
-  const trunks = new THREE.InstancedMesh(trunk, trunkMat, treeSpots.length), crowns = new THREE.InstancedMesh(crown, leaf, treeSpots.length);
-  const m4 = new THREE.Matrix4();
-  treeSpots.forEach(([x, z], i) => {
-    trunks.setMatrixAt(i, m4.makeTranslation(x, Y.road + .9, z));
-    const s = .85 + ((i * 37) % 10) / 25;
-    crowns.setMatrixAt(i, m4.compose(new THREE.Vector3(x, Y.road + 2.6 * s, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, i, 0)), new THREE.Vector3(s, s * 1.1, s)));
-  });
-  for (const m of [trunks, crowns]) { m.castShadow = true; m.receiveShadow = true; root.add(m); }
+  // Planting in the building model's own style: tall slim trunks under rounded multi-blob canopies in three
+  // greens, and hedges as rows of rounded shrubs. All instanced, so the extra greenery costs five draw calls.
+  const GREENS = ['#47634b', '#607c4f', '#7d9057'];
+  const leafMats = GREENS.map(color => mat({color, roughness: .65}));
+  const trunkMat = mat({color: '#776c56', roughness: .65});
+  // A smooth low-poly blob, like the model's leaves.
+  const blobGeo = mergeVertices(new THREE.IcosahedronGeometry(1, 1).deleteAttribute('normal').deleteAttribute('uv'));
+  blobGeo.computeVertexNormals();
+  const trunkGeo = new THREE.CylinderGeometry(.08, .12, 1, 7).translate(0, .5, 0);
+  owned.push(blobGeo, trunkGeo);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+  let seed = 7;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const blobs = GREENS.map(() => []), trunkList = [];
+  const treeSpots = [[-36.8, -17.6], [-45, -17.6], [-52.4, -17.6], [-28.4, -17.6], [-62, 7], [-62, -5], [-62, 16], [-42, 20.7], [-54, 20.7], [-33.5, 20.7]];
+  for (const [x, z] of treeSpots) {
+    const h = 3.3 + rand() * .8, r = 1.25 + rand() * .35;
+    trunkList.push(m4.compose(v.set(x, Y.road, z), q.identity(), sc.set(1, h + .4, 1)).clone());
+    // Five or six overlapping blobs around the crown, cycling through the three greens.
+    const n = 5 + Math.round(rand());
+    for (let i = 0; i < n; i++) {
+      const a = i / n * Math.PI * 2 + rand(), d = i === 0 ? 0 : r * (.45 + rand() * .3), s0 = r * (i === 0 ? .95 : .62 + rand() * .25);
+      blobs[i % 3].push(m4.compose(v.set(x + Math.cos(a) * d, Y.road + h + (i === 0 ? .35 : rand() * .7 - .1), z + Math.sin(a) * d), q.setFromEuler(e.set(rand(), rand() * 6, rand())), sc.set(s0, s0 * .82, s0)).clone());
+    }
+  }
+  // Hedges: shrub rows along the lot's north and west edges and beside the driveway.
+  const hedgeRow = (x0, z0, x1, z1) => {
+    const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(2, Math.round(len / .62));
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, s0 = .44 + rand() * .08;
+      blobs[1 + (i % 2)].push(m4.compose(v.set(x0 + (x1 - x0) * t, Y.road + .42, z0 + (z1 - z0) * t), q.setFromEuler(e.set(0, rand() * 6, 0)), sc.set(s0, s0 * 1.15, s0)).clone());
+    }
+  };
+  hedgeRow(LOT.west - .9, LOT.north - .9, LOT.east + .6, LOT.north - .9);
+  hedgeRow(LOT.west - .9, LOT.north - .9, LOT.west - .9, DRIVE.south);
+  hedgeRow(LOT.west - .9, DRIVE.south + .1, GATE.west - 4.4, DRIVE.south + .1);
+  hedgeRow(LOT.east + .45, DRIVE.north - 10, LOT.east + .45, DRIVE.north - 1.8);
+  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, trunkList.length);
+  trunkList.forEach((mm, i) => trunks.setMatrixAt(i, mm));
+  const leaves = blobs.map((list, k) => { const im = new THREE.InstancedMesh(blobGeo, leafMats[k], list.length); list.forEach((mm, i) => im.setMatrixAt(i, mm)); return im; });
+  for (const m of [trunks, ...leaves]) { m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); root.add(m); }
 
   // Light poles along the driveway
   const poleMat = mat({color: '#59636b', metalness: .4, roughness: .5});
@@ -210,9 +231,12 @@ export function createLot({scene, stalls, schedule}) {
 
   function setNight(night) {
     lampMat.emissiveIntensity = night ? 2.2 : 0;
-    setCarLights(night);
     schedule();
   }
+
+  // Everything here is static except the boom: skip the per-frame matrix work for the rest.
+  root.traverse(o => { o.updateMatrix(); o.matrixAutoUpdate = false; });
+  boom.matrixAutoUpdate = true;
 
   return {
     root, cameras: {in: camIn, out: camOut}, setBays, drawSign, setBoom, update, boomState, setNight,
@@ -222,7 +246,7 @@ export function createLot({scene, stalls, schedule}) {
       for (const g of owned) g.dispose();
       for (const m of materials) m.dispose();
       for (const t of textures) t.dispose();
-      leds.dispose(); posts.dispose(); trunks.dispose(); crowns.dispose();
+      leds.dispose(); posts.dispose(); trunks.dispose(); for (const l of leaves) l.dispose();
     },
   };
 }

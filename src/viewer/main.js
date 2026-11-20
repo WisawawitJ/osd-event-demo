@@ -6,6 +6,7 @@ import {getLang} from 'osd/parking/i18n.js';
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import { OrbitControls } from 'osd/node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'osd/node_modules/three/examples/jsm/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createRenderKit } from 'osd/viewer/render-kit.js';
 import { createSimulation } from 'osd/viewer/simulation.js';
 import { createSurfaceTextures } from 'osd/viewer/surface-textures.js';
@@ -56,7 +57,11 @@ try {
   const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 1000);
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'default' });
   // The ATOM kiosk renders on an integrated GPU.
-  renderer.setPixelRatio(Math.min(devicePixelRatio, isAtom ? 1.25 : 2));
+  // Resolution adapts to the machine: start at up to 1.5x device pixels (2x only cost frames on laptops)
+  // and step down to 1x while continuous rendering stays under ~38 fps, back up when it is comfortably fast.
+  const maxPixelRatio = Math.min(devicePixelRatio, isAtom ? 1.25 : 1.5), minPixelRatio = Math.min(1, maxPixelRatio);
+  let pixelRatio = maxPixelRatio, slowFrames = 0, fastFrames = 0, lastFrameAt = 0;
+  renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1;
@@ -98,10 +103,20 @@ try {
   })() : null;
   function schedule() {
     if (frame || disposed || document.hidden) return;
-    frame = requestAnimationFrame(() => {
+    frame = requestAnimationFrame(time => {
       frame = 0;
-      if (!disposed) { renderer.render(scene, camera); fpsMeter?.(); }
+      if (disposed) return;
+      renderer.render(scene, camera); fpsMeter?.();
+      adaptResolution(time);
     });
+  }
+  function adaptResolution(time) {
+    const gap = time - lastFrameAt; lastFrameAt = time;
+    if (gap > 200) return; // an idle pause, not a slow frame
+    if (gap > 26) { slowFrames++; fastFrames = 0; } else if (gap < 18.5) { fastFrames++; slowFrames = Math.max(0, slowFrames - 1); }
+    const next = slowFrames > 45 ? Math.max(minPixelRatio, pixelRatio - .25) : fastFrames > 900 ? Math.min(maxPixelRatio, pixelRatio + .25) : pixelRatio;
+    if (slowFrames > 45 || fastFrames > 900) { slowFrames = fastFrames = 0; }
+    if (next !== pixelRatio) { pixelRatio = next; renderer.setPixelRatio(pixelRatio); renderer.setSize(Math.max(viewport.clientWidth, 1), Math.max(viewport.clientHeight, 1), false); schedule(); }
   }
   controls.addEventListener('change', schedule);
   const readPose=()=>({eye:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov});
@@ -320,6 +335,32 @@ try {
     renderer.dispose();
   }, { signal: abort.signal });
 
+  // Interior partition walls are many small static meshes that nothing addresses one by one: merge each
+  // floor's walls of the same look into one mesh. Fewer draw calls, same picture, same cutaway clipping.
+  function mergeStaticPartitions(root) {
+    const groups = new Map();
+    const look = m => [m.type, m.color?.getHexString(), m.map?.uuid, m.roughness, m.metalness, m.transparent, m.opacity, m.side, m.alphaTest].join('|');
+    root.traverse(o => {
+      if (!o.isMesh || !/interior_partition/.test(o.name) || o.children.length || Array.isArray(o.material)) return;
+      const key = [o.parent.uuid, o.userData.type, look(o.material), Object.keys(o.geometry.attributes).sort().join(), Boolean(o.geometry.index)].join('#');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(o);
+    });
+    for (const list of groups.values()) {
+      if (list.length < 2) continue;
+      const parent = list[0].parent;
+      const parts = list.map(o => { o.updateMatrix(); return o.geometry.clone().applyMatrix4(o.matrix); });
+      const merged = mergeGeometries(parts);
+      for (const g of parts) g.dispose();
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, list[0].material);
+      mesh.name = `${parent.name}_interior_partitions`;
+      mesh.userData = {type: list[0].userData.type, merged: list.length};
+      for (const o of list) { o.removeFromParent(); o.geometry.dispose(); }
+      parent.add(mesh);
+    }
+  }
+
   async function loadModel() {
     let gltf;
     try {
@@ -345,6 +386,7 @@ try {
       model.position.x -= center.x;
       model.position.z -= center.z;
       surfaceTextures.apply(model);
+      mergeStaticPartitions(model);
       // Preserve all Y coordinates: floor elevations are provisional but meaningful.
       for (const root of floorRoots) root.traverse(object => {
         if (!object.isMesh && !object.isLine) return;
@@ -420,7 +462,7 @@ try {
        const parkingModule=await import('osd/parking/index.js');
        parking=parkingModule.createParking({scene,schedule,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
        parking.lot.root.visible=renderKit.ground.visible;
-       if(new URLSearchParams(location.search).has('debug'))window.__parking=parking;
+       if(new URLSearchParams(location.search).has('debug')){window.__parking=parking;window.__renderer=renderer;window.__scene=scene;}
        simulation.subscribe(()=>parking.setNight(simulation.getState().night));
        showcase=createShowcase({model,simulation,schedule,parking,
         cancelFlight:()=>{navigation++;flight.stop();marker.visible=false;schedule();},
@@ -504,6 +546,13 @@ try {
         orbitFrame=requestAnimationFrame(tick);
        },500);
        abort.signal.addEventListener('abort',()=>{clearInterval(orbitWatch);stopOrbit();},{once:true});
+      }
+      if(!isShowcase&&!isAtom){
+       // The exploration page shows the car park too: lot, parked cars and traffic, without the showcase UI.
+       const {createParkingScene}=await import('osd/parking/index.js');
+       parking=createParkingScene({scene,schedule});
+       parking.lot.root.visible=renderKit.ground.visible;
+       simulation.subscribe(()=>parking.setNight(simulation.getState().night));
       }
       if(isAtom){
        // The ATOM page (React, web/) takes the scene API through window.atomBoot.

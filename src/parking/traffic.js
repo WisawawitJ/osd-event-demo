@@ -79,6 +79,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   function place(agent, p, reverse = false) {
     agent.car.position.set(p.x, groundY(p.x, p.z), p.z);
     agent.car.rotation.y = p.h + (reverse ? Math.PI : 0);
+    agent.car.updateMatrix();
   }
   function sample(route, s) {
     const pts = route.pts;

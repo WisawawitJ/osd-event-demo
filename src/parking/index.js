@@ -222,3 +222,33 @@ export function createParking({scene, schedule, capture, fly, onStoryChange = ()
     dispose() { story.stop(); clearTimeout(ambientTimer); clearTimeout(passTimer); lot.dispose(); disposeCars(); },
   };
 }
+
+// The car park without any UI, for the free-exploration page (#explore): the lot, parked cars,
+// through-traffic, and staff cars coming and going through the barrier.
+export function createParkingScene({scene, schedule}) {
+  const sim = createParkingSim();
+  const lot = createLot({scene, stalls: sim.state.stalls, schedule});
+  const traffic = createTraffic({lot, sim, schedule, hooks: {}});
+  const timers = [];
+  const loop = (fn, min, spread) => { const run = () => { timers[0] = 0; fn(); timers.push(setTimeout(run, min + Math.random() * spread)); }; timers.push(setTimeout(run, min * Math.random())); };
+  loop(() => { if (lot.root.visible && document.visibilityState === 'visible') traffic.passBy(); }, 1800, 3200);
+  loop(() => {
+    if (!lot.root.visible || document.visibilityState !== 'visible' || traffic.busy) return;
+    const parked = sim.state.presence.size;
+    if (parked > 40 || (parked > 22 && Math.random() < .45)) {
+      const keys = traffic.parkedKeys().filter(k => sim.state.presence.get(k)?.type === 'staff');
+      if (keys.length) traffic.leave(keys[Math.floor(Math.random() * keys.length)]);
+    } else {
+      const inside = new Set([...sim.state.presence.values()].map(p => p.vehicleId));
+      const pool = sim.state.vehicles.filter(v => v.type === 'staff' && v.enabled && v.sync === 'synced' && !inside.has(v.id) && !traffic.isArriving(sim.key(v.plate, v.province)));
+      const v = pool[Math.floor(Math.random() * pool.length)];
+      if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70});
+    }
+  }, 14000, 12000);
+  traffic.syncParked();
+  return {
+    lot, sim, traffic,
+    setNight(night) { lot.setNight(night); },
+    dispose() { for (const t of timers) clearTimeout(t); lot.dispose(); disposeCars(); },
+  };
+}

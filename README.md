@@ -26,7 +26,7 @@ Useful URLs:
 | `/?dest=parking&story=1` | Opens on the car park and plays the parking story with auto-advance |
 | `/?dest=parking&story=1&auto=0` | Same, but the presenter advances each step with **Next** |
 | `/?fps=1` | Adds a frames-per-second counter, to check the event laptop (any page; combine with the others) |
-| `/#explore` | The original free-exploration page, unchanged |
+| `/#explore` | The original free-exploration page, now with the car park, its cars and street traffic (no parking UI) |
 
 ## At the booth
 
@@ -66,6 +66,15 @@ The visitor's phone form can be filled in by hand. The car photo reads a sample 
 Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street, and leaving cars wait in their aisle.
 Staff and visitor cars also come and go by themselves while the car park is on screen. Through-traffic drives both lanes of the
 street whenever it is in view; it keeps to one speed per lane and gives way to cars turning in or pulling out.
+
+## Performance
+
+- The 3D view renders at up to 1.5× device pixels and steps down to 1× by itself when the frame rate stays under ~38 fps.
+  It goes back up when the frame rate stays high.
+- Cars are four draw calls each and share all their geometry. Trees, shrubs and bay lights are instanced, and static car-park
+  parts skip per-frame matrix updates.
+- The building's ~110 interior partition walls are merged per floor at load time, with the same picture and cutaway clipping.
+- Car movement runs in real time at any frame rate. Add `?fps=1` to see the frame rate.
 
 ## What is real and what is imagined
 
