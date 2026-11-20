@@ -99,20 +99,34 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  async function select(id,{guided=false,instant=false}={}){
   if(!destinations[id]||disposed)return false;if(!guided){insights?.pause();stopTour(['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around']);}stopScenario();const ticket=++sequence,d=destinations[id];
   if(destination==='parking'&&id!=='parking')parking?.exit();
+  // The car park changes the page layout: switch it before the flight, so the view is its final size while the
+  // camera moves instead of jumping at the end.
+  if(id==='parking'&&!parking?.active)parking?.enter();
   traveling=true;pendingDestination=id;effects.select(null);render();
-  document.querySelectorAll('[data-destination]').forEach(b=>b.setAttribute('aria-busy',String(b.dataset.destination===id)));
-  const arrived=await navigate(id,{instant,onPhase(phase){if(ticket===sequence){$('#scene-chip').textContent=`${phase} → ${d.floor} · ${d.panel}`;$('#flight-status').textContent=L(`กำลังไป ${d.floor} · ${d.panel}`,`Heading to ${d.floor} · ${d.panel}`);}}});
+  document.querySelectorAll('[data-destination]').forEach(b=>{b.setAttribute('aria-busy',String(b.dataset.destination===id));b.setAttribute('aria-pressed',String(b.dataset.destination===id));});
+  // The stop's title, panel and scene state arrive as the final approach begins, not after the camera settles.
+  let committed=false;
+  const commit=()=>{
+   if(committed||disposed||ticket!==sequence)return;committed=true;
+   destination=id;document.body.dataset.tourDestination=id;$('#scene-heading').textContent=d.title;$('#scene-description').textContent=d.description;$('#scene-floor').textContent=d.floor;$('#scene-chip').textContent=d.chip;
+   effects.select(id);if(id==='access')cameraImage='';
+   // The meeting stop's controls act on its room: select it on arrival, so night lighting is laid out around it
+   // from the start and its switch only changes that room.
+   if(id==='meeting')simulation.selectRoom(meetingId);
+   render();
+  };
+  const arrived=await navigate(id,{instant,onApproach:commit,onPhase(phase){if(ticket===sequence){$('#scene-chip').textContent=`${phase} → ${d.floor} · ${d.panel}`;$('#flight-status').textContent=L(`กำลังไป ${d.floor} · ${d.panel}`,`Heading to ${d.floor} · ${d.panel}`);}}});
   if(disposed||ticket!==sequence)return false;
-  traveling=false;pendingDestination=null;document.querySelectorAll('[data-destination]').forEach(b=>b.removeAttribute('aria-busy'));
-  if(!arrived){$('#scene-chip').textContent=L('หยุดการบินแล้ว · หมุนสำรวจหรือเลือกจุดต่อไป','Flight stopped · orbit to explore or pick the next spot');effects.select(destination);if(destination==='parking'&&!parking?.active)parking?.enter();render();return false;}
-  destination=id;document.body.dataset.tourDestination=id;$('#scene-heading').textContent=d.title;$('#scene-description').textContent=d.description;$('#scene-floor').textContent=d.floor;$('#scene-chip').textContent=d.chip;
-  document.querySelectorAll('[data-destination]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.destination===id)));
-  effects.select(id);if(id==='access')cameraImage='';
-  // The meeting stop's controls act on its room: select it on arrival, so night lighting is laid out around it
-  // from the start and its switch only changes that room.
-  if(id==='meeting')simulation.selectRoom(meetingId);
-  if(id==='parking')parking?.enter();render();return true;
+  traveling=false;pendingDestination=null;document.querySelectorAll('[data-destination]').forEach(b=>{b.removeAttribute('aria-busy');b.setAttribute('aria-pressed',String(b.dataset.destination===(arrived||committed?id:destination)));});
+  if(!arrived&&!committed){
+   $('#scene-chip').textContent=L('หยุดการบินแล้ว · หมุนสำรวจหรือเลือกจุดต่อไป','Flight stopped · orbit to explore or pick the next spot');effects.select(destination);
+   if(destination==='parking'&&!parking?.active)parking?.enter();
+   if(destination!=='parking'&&parking?.active)parking.exit();
+   render();return false;
+  }
+  commit();render();return true;
  }
+
 
  function scenario(kind){
   if(traveling||insights?.isReplaying())return;

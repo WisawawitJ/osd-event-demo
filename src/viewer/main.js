@@ -142,6 +142,21 @@ try {
       adaptResolution(time);
     });
   }
+  // While the camera flies, floors fade with transparent copies (heavy overdraw) and the pond mirror re-renders the
+  // scene: draw at ~70% resolution and keep the mirror's last image until the camera stops. Motion hides the
+  // softness; full sharpness comes back on the last frame.
+  let inMotion = false;
+  function applyPixelRatio() {
+    renderer.setPixelRatio(inMotion ? Math.max(.6, pixelRatio * .7) : pixelRatio);
+    renderer.setSize(Math.max(viewport.clientWidth, 1), Math.max(viewport.clientHeight, 1), false);
+    renderer.render(scene, camera); // resizing clears the canvas: redraw at once so no blank frame shows
+  }
+  function setInMotion(value) {
+    if (value === inMotion || !renderKit) return;
+    inMotion = value;
+    renderKit.setReflectionsPaused(value);
+    applyPixelRatio();
+  }
   function adaptResolution(time) {
     const gap = time - lastFrameAt; lastFrameAt = time;
     if (gap > 200) return; // an idle pause, not a slow frame
@@ -152,10 +167,7 @@ try {
     const next = Math.max(minPixelRatio, pixelRatio - .25);
     if (next === pixelRatio) return;
     pixelRatio = next;
-    renderer.setPixelRatio(pixelRatio);
-    renderer.setSize(Math.max(viewport.clientWidth, 1), Math.max(viewport.clientHeight, 1), false);
-    // Resizing clears the canvas: draw again at once so no blank frame shows.
-    renderer.render(scene, camera);
+    applyPixelRatio();
   }
   controls.addEventListener('change', schedule);
   // Near plane follows the viewing distance. A fixed 1 cm near plane left ~1.5 cm of depth precision at 50 m,
@@ -166,7 +178,7 @@ try {
   });
   const readPose=()=>({eye:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov});
   const writePose=pose=>{camera.position.fromArray(pose.eye);controls.target.fromArray(pose.target);camera.fov=pose.fov;camera.updateProjectionMatrix();controls.update();schedule();};
-  flight=createCameraFlight({read:readPose,write:writePose,onState(active){const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';}});
+  flight=createCameraFlight({read:readPose,write:writePose,onState(active){const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';setInMotion(active);}});
   // ?speed=N (tests, rehearsals) shortens every camera flight like the rest of the demo's timing.
   if (SPEED !== 1) { const flyPath = flight.flyPath; flight.flyPath = steps => flyPath(steps.map(step => ({...step, duration: (step.duration ?? 1800) / SPEED}))); flight.fly = (to, duration = 1800) => flight.flyPath([{to, duration}]); }
   if(isShowcase){scene.background.set('#e6ecee');renderKit.ground.material.color.set('#e6ecee');}
@@ -473,7 +485,7 @@ try {
         cancelFlight:()=>{navigation++;flight.stop();marker.visible=false;schedule();},
         onUserOrbit:callback=>{controls.addEventListener('start',callback);canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','r','R','+','=','-'].includes(e.key))callback();},{signal:abort.signal});},
         snapshot:securityCamera=>securityPreview.capture(securityCamera),
-        async navigate(id,{instant=false,onPhase=()=>{}}={}){
+        async navigate(id,{instant=false,onPhase=()=>{},onApproach=()=>{}}={}){
           flight.stop();const ticket=++navigation,start=readPose();marker.visible=false;markerMaterial.opacity=.6;
           const settings={
             meeting:{eye:meetingTarget.clone().add(new THREE.Vector3(5,7,8)).toArray(),target:meetingTarget.toArray(),fov:43},
@@ -503,7 +515,7 @@ try {
            onUpdate(){schedule();}
           });
           phases.push({to,duration:local?750:same?550:900,
-           onStart(){onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));},
+           onStart(){onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));onApproach();},
            onUpdate(t){sceneTransition.progress(Math.min(1,t/.75));markerMaterial.opacity=.6*(1-t);},
            onEnd(){sceneTransition.finish();}
           });

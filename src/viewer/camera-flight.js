@@ -1,6 +1,7 @@
 // Finite camera transitions. No scene, network or device dependencies.
 function flightPose(from,to,progress){
- const t=Math.max(0,Math.min(1,progress)),e=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+ // Quadratic in-out: cubic spent its last quarter crawling, which read as 'arrived, now waiting'.
+ const t=Math.max(0,Math.min(1,progress)),e=t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
  const distance=Math.hypot(...to.eye.map((v,i)=>v-from.eye[i]));
  return {eye:from.eye.map((v,i)=>v+(to.eye[i]-v)*e+(i===1?Math.sin(Math.PI*e)*Math.min(distance*.18,8):0)),target:from.target.map((v,i)=>v+(to.target[i]-v)*e),fov:from.fov+(to.fov-from.fov)*e};
 }

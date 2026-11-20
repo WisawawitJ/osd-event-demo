@@ -14,7 +14,7 @@ export function createRenderKit(renderer, scene) {
  const h=holes.getContext('2d');h.fillStyle='white';h.fillRect(0,0,64,64);h.fillStyle='black';
  for(const [x,y] of [[16,16],[48,48]]){h.beginPath();h.arc(x,y,13,0,Math.PI*2);h.fill();}
  const perforation=new THREE.CanvasTexture(holes);perforation.wrapS=perforation.wrapT=THREE.RepeatWrapping;perforation.repeat.set(5,5);perforation.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),4);
- const reflections=[];
+ const reflections=[];let reflectionsPaused=false;
  function addPondReflections(model){
   const ponds=[];model.traverse(o=>{if(o.isMesh&&o.name.includes('_koi_pond_'))ponds.push(o);});
   for(const pond of ponds){
@@ -25,6 +25,8 @@ export function createRenderKit(renderer, scene) {
    const reflection=new Reflector(geometry,{color:'#9bb6ae',textureWidth:512,textureHeight:512,multisample:0,clipBias:.003,shader});
    reflection.name='Courtyard_water_reflection';reflection.rotation.x=-Math.PI/2;reflection.position.y=-.078;
    reflection.material.transparent=true;reflection.material.depthWrite=false;reflection.userData={type:'water',interiorFeature:true};
+   // The mirror re-renders the scene every frame; during camera flights it keeps its last image instead.
+   const update=reflection.onBeforeRender;reflection.onBeforeRender=function(...args){if(!reflectionsPaused)update.apply(this,args);};
    pond.parent.add(reflection);reflections.push(reflection);
   }
  }
@@ -33,5 +35,5 @@ export function createRenderKit(renderer, scene) {
  const logo=receptionCanvas.getContext('2d');logo.font='bold 112px Arial';logo.textAlign='center';logo.textBaseline='middle';logo.strokeStyle='#b9eaff';logo.lineWidth=2;logo.shadowColor='#5caaff';logo.shadowBlur=12;logo.strokeText('OSD',256,82);
  const receptionTexture=new THREE.CanvasTexture(receptionCanvas);receptionTexture.colorSpace=THREE.SRGBColorSpace;
  function createReceptionSign(position){const sign=new THREE.Mesh(new THREE.PlaneGeometry(1.45,.45),new THREE.MeshBasicMaterial({map:receptionTexture,transparent:true,depthWrite:false}));sign.name='OSD_reception_sign';sign.position.fromArray(position);sign.rotation.y=Math.PI;sign.userData={type:'furniture',interiorFeature:true};return sign;}
- return {ground,perforation,createReceptionSign,addPondReflections,setReflectionVisible(value){for(const reflection of reflections)reflection.visible=value;},dispose(){for(const reflection of reflections){reflection.geometry.dispose();reflection.dispose();}environment.dispose();perforation.dispose();receptionTexture.dispose();ground.geometry.dispose();ground.material.dispose();}};
+ return {ground,perforation,createReceptionSign,addPondReflections,setReflectionsPaused(value){reflectionsPaused=value;},setReflectionVisible(value){for(const reflection of reflections)reflection.visible=value;},dispose(){for(const reflection of reflections){reflection.geometry.dispose();reflection.dispose();}environment.dispose();perforation.dispose();receptionTexture.dispose();ground.geometry.dispose();ground.material.dispose();}};
 }
