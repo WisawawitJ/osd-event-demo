@@ -27,7 +27,7 @@ const courtyardButton=document.querySelector('#courtyard'),officeButton=document
 const arrivalButton=document.querySelector('#arrival'),receptionButton=document.querySelector('#reception'),stairsButton=document.querySelector('#stairs');
 const parkingButton=document.querySelector('#parking'),servicesButton=document.querySelector('#services');
 const extraButtons=[servicesButton,parkingButton,arrivalButton,receptionButton,stairsButton,exteriorButton,frontButton,sideButton,liftButton,courtyardButton,officeButton];
-let exteriorEnabled=true, cameraSide=false, renderKit, simulation, surfaceTextures, interiorView=null, dayBackground=null, dayGround=null;
+let exteriorEnabled=true, cameraSide=false, renderKit, simulation, surfaceTextures, interiorView=null;
 const ceilings=[],deviceMeshes=[];
 const presentationMeshes=[];
 const labels = { all: 'ทั้งอาคาร', 1: 'ชั้น 1', 2: 'ชั้น 2', 3: 'ชั้น 3', 4: 'ชั้น 4', 5: 'ดาดฟ้า' };
@@ -35,8 +35,8 @@ const cutTypes = new Set(['wall', 'glass', 'column', 'door', 'stair']);
 const abort = new AbortController();
 let currentFloor = 'all', exploded = false, cutaway = false;
 let renderer, controls, model, resizeObserver, showcase, flight, sceneTransition, securityPreview, parking = null;
-const isShowcase=Boolean(document.querySelector('#showcase')),isAtom=Boolean(document.querySelector('#atom'));
-// Status texts follow the TH/EN switch on the showcase page only; #explore and the kiosk stay Thai.
+const isShowcase=Boolean(document.querySelector('#showcase'));
+// Status texts follow the TH/EN switch on the showcase page only; #explore stays Thai.
 const L=(th,en)=>isShowcase&&getLang()==='en'?en:th;
 let frame = 0, disposed = false;
 const floorRoots = [], basePositions = new Map(), cutMeshes = [], roofs = [];
@@ -57,10 +57,9 @@ try {
   scene.background = new THREE.Color('#dce5e5');
   const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 1000);
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'default' });
-  // The ATOM kiosk renders on an integrated GPU.
   // Resolution adapts to the machine: start at up to 1.5x device pixels (2x only cost frames on laptops)
   // and step down (never back up) towards 1x while continuous rendering stays under ~38 fps.
-  const maxPixelRatio = Math.min(devicePixelRatio, isAtom ? 1.25 : 1.5), minPixelRatio = Math.min(1, maxPixelRatio);
+  const maxPixelRatio = Math.min(devicePixelRatio, 1.5), minPixelRatio = Math.min(1, maxPixelRatio);
   let pixelRatio = maxPixelRatio, slowFrames = 0, lastFrameAt = 0;
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -157,7 +156,7 @@ try {
   controls.addEventListener('change', schedule);
   // Near plane follows the viewing distance. A fixed 1 cm near plane left ~1.5 cm of depth precision at 50 m,
   // so road paint, kerbs and coplanar model surfaces flickered while the camera moved.
-  if (!isAtom) controls.addEventListener('change', () => {
+  controls.addEventListener('change', () => {
     const near = THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) * .015, .03, 1.2);
     if (Math.abs(near - camera.near) / camera.near > .02) { camera.near = near; camera.updateProjectionMatrix(); }
   });
@@ -166,34 +165,7 @@ try {
   flight=createCameraFlight({read:readPose,write:writePose,onState(active){const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';}});
   // ?speed=N (tests, rehearsals) shortens every camera flight like the rest of the demo's timing.
   if (SPEED !== 1) { const flyPath = flight.flyPath; flight.flyPath = steps => flyPath(steps.map(step => ({...step, duration: (step.duration ?? 1800) / SPEED}))); flight.fly = (to, duration = 1800) => flight.flyPath([{to, duration}]); }
-  // An eased turn of the camera around its target (the lights view). It runs its own frame loop
-  // only while it turns; stopSpin(), every flight (flight.stop) and a drag on the model end it.
-  let spinFrame=0,spinEnd=null;
-  function stopSpin(){if(spinFrame)cancelAnimationFrame(spinFrame);spinFrame=0;const end=spinEnd;spinEnd=null;end?.();}
-  function spin({degrees=45,seconds=6}={}){
-    stopSpin();
-    const ms=Math.max(0,Number(seconds)*1000)||0,turn=THREE.MathUtils.degToRad(Number(degrees)||0);
-    if(!turn||!ms||disposed||matchMedia('(prefers-reduced-motion: reduce)').matches)return Promise.resolve();
-    const from=readPose(),target=new THREE.Vector3(...from.target),offset=new THREE.Vector3(...from.eye).sub(target),up=new THREE.Vector3(0,1,0);
-    return new Promise(resolve=>{
-      let start=null;spinEnd=resolve;
-      const tick=time=>{
-        start??=time;const t=Math.min(1,(time-start)/ms),eased=t*t*(3-2*t);
-        // + degrees turns right, like adjust_view's yaw.
-        writePose({eye:target.clone().add(offset.clone().applyAxisAngle(up,-turn*eased)).toArray(),target:from.target,fov:from.fov});
-        if(t<1){spinFrame=requestAnimationFrame(tick);return;}
-        spinFrame=0;spinEnd=null;resolve();
-      };
-      spinFrame=requestAnimationFrame(tick);
-    });
-  }
-  {const stopFlight=flight.stop;flight.stop=()=>{stopSpin();stopFlight();};}
-  controls.addEventListener('start',stopSpin);
-  // The camera's heading around its target in degrees, for the kiosk browser test.
-  if(isAtom)window.atomCameraYaw=()=>THREE.MathUtils.radToDeg(Math.atan2(camera.position.x-controls.target.x,camera.position.z-controls.target.z));
   if(isShowcase){scene.background.set('#e6ecee');renderKit.ground.material.color.set('#e6ecee');}
-  if(isAtom){scene.background.set('#0b1219');renderKit.ground.material.color.set('#1b2631');}
-
 
   function visibleBounds() {
     const bounds = new THREE.Box3();
@@ -260,8 +232,6 @@ try {
         material.needsUpdate = true;
       }
     }
-    // Read by the kiosk test: glass meshes whose own materials carry the cut plane.
-    if(isAtom){let glass=0,clipped=0;model.traverse(o=>{if(o.isMesh&&o.userData.type==='glass'){glass++;if([].concat(o.material).every(m=>m.clippingPlanes?.length))clipped++;}});document.documentElement.dataset.glassClipped=`${clipped}/${glass}`;}
     const showExterior=exteriorEnabled&&currentFloor==='all'&&!exploded&&!cutaway;
     for(const object of presentationMeshes)object.visible=showExterior;
     for (const roof of roofs) roof.visible = showExterior||(currentFloor==='5'&&!cutaway&&!exploded&&roof.name.endsWith('service_roof_caps'));
@@ -336,13 +306,8 @@ try {
   });
 
   let lastAspect = 0;
-  // A host page may frame the model in part of the screen ({x, y, w, h} in canvas px)
-  // while the canvas still fills it: the camera's own frustum covers that rectangle.
-  let viewFrame = null;
   function applyAspect() {
-    const width = Math.max(viewport.clientWidth, 1), height = Math.max(viewport.clientHeight, 1);
-    if (viewFrame) { camera.aspect = viewFrame.w / viewFrame.h; camera.setViewOffset(viewFrame.w, viewFrame.h, -viewFrame.x, -viewFrame.y, width, height); }
-    else { camera.aspect = width / height; camera.clearViewOffset(); }
+    camera.aspect = Math.max(viewport.clientWidth, 1) / Math.max(viewport.clientHeight, 1);
     camera.updateProjectionMatrix();
   }
   resizeObserver = new ResizeObserver(() => {
@@ -460,16 +425,11 @@ try {
       });
       scene.add(model);
       renderKit.addPondReflections(model);
-      // The kiosk (an iGPU) keeps 4 room spot lights at night, 1 casting shadows.
-      simulation=await createSimulation({THREE,scene,model,floorRoots,renderer,camera,schedule,...(isAtom?{spotLights:4,shadowSpots:1}:{spotLights:6,shadowSpots:1}),
+      // Night room lighting: a pool of 6 spot lights, 1 casting shadows, to stay light on laptop GPUs.
+      simulation=await createSimulation({THREE,scene,model,floorRoots,renderer,camera,schedule,spotLights:6,shadowSpots:1,
         onSelectFloor(n){if(currentFloor!==String(n)){currentFloor=String(n);interiorView=null;updateView();}},
         onNightChange(night){
-          // A host page may set a gradient day background (setBackground); night always uses a flat colour.
-          if(!night&&dayBackground)scene.background=dayBackground;
-          else{if(!scene.background?.isColor)scene.background=new THREE.Color();scene.background.set(night?'#182b3c':isAtom?'#0b1219':isShowcase?'#e6ecee':'#dce5e5');}
-          // The kiosk's dark day ground turns the light showcase ground at night, so the building reads.
-          if(isAtom){if(night){dayGround??=renderKit.ground.material.color.clone();renderKit.ground.material.color.set('#c9d2d8');}else if(dayGround){renderKit.ground.material.color.copy(dayGround);dayGround=null;}
-            Object.assign(document.documentElement.dataset,{ground:'#'+renderKit.ground.material.color.getHexString(),sky:scene.background?.isColor?'#'+scene.background.getHexString():'gradient'});} // read by the kiosk test
+          scene.background.set(night?'#182b3c':isShowcase?'#e6ecee':'#dce5e5');
           scene.environmentIntensity=night?.16:.65;
           hemisphere.intensity=night?.36:1.05;key.intensity=night?.24:3.2;key.color.set(night?0xb7d4ff:0xffe7ba);
           fill.intensity=night?.09:.6;renderer.toneMappingExposure=night?1.05:1;
@@ -592,170 +552,12 @@ try {
        },500);
        abort.signal.addEventListener('abort',()=>{clearInterval(orbitWatch);stopOrbit();},{once:true});
       }
-      if(!isShowcase&&!isAtom){
+      if(!isShowcase){
        // The exploration page shows the car park too: lot, parked cars and traffic, without the showcase UI.
        const {createParkingScene}=await import('osd/parking/index.js');
        parking=createParkingScene({scene,schedule});
        parking.lot.root.visible=renderKit.ground.visible;
        simulation.subscribe(()=>parking.setNight(simulation.getState().night));
-      }
-      if(isAtom){
-       // The ATOM page (React, web/) takes the scene API through window.atomBoot.
-       const boot=typeof window.atomBoot==='function'?window.atomBoot:()=>{};
-       const {createAtomScene}=await import('osd/viewer/atom-scene.js');
-       sceneTransition=createSceneTransition({model,schedule,onFinish:()=>{renderer.shadowMap.needsUpdate=true;}});
-       const bounds=new THREE.Box3().setFromObject(model),center=bounds.getCenter(new THREE.Vector3());
-       let navigation=0;
-       // A pose from `direction` that fits `box` in the current frame's aspect.
-       function fitPose(box,direction,fov){
-        const mid=box.getCenter(new THREE.Vector3()),right=new THREE.Vector3().crossVectors(camera.up,direction).normalize(),up=new THREE.Vector3().crossVectors(direction,right).normalize(),tan=Math.tan(THREE.MathUtils.degToRad(fov/2));let distance=1;
-        for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){
-         const v=new THREE.Vector3(x,y,z).sub(mid);distance=Math.max(distance,v.dot(direction)+Math.abs(v.dot(right))/(tan*camera.aspect),v.dot(direction)+Math.abs(v.dot(up))/tan);
-        }
-        return {eye:mid.clone().addScaledVector(direction,distance*1.08).toArray(),target:mid.toArray(),fov};
-       }
-       // Portrait (a tall canvas) only: a pose moved and scaled so `boxes` fill the frame as seen,
-       // not their bounding distance (the site ground and the box corners otherwise leave the
-       // building small in a wide upper frame). A few rounds of project, centre and scale.
-       const portrait=()=>canvas.clientHeight>canvas.clientWidth;
-       // A floor's box as it stands unlifted (the exploded view lifts floor i by i × 2.5 m), measured
-       // now: the scene adds to the floors after boot (the car park's stalls, for one).
-       // shown: only shown meshes count (the root itself may be hidden while another floor is in
-       // view; hidden overlays are larger than the floor). A fitted floor (the camera view, the
-       // vehicles tile) keeps the whole box, the one screenBox reports.
-       function floorBox(i,shown=true){
-        const root=floorRoots[i],box=new THREE.Box3();root.updateWorldMatrix(true,true);
-        const walk=o=>{if(o!==root&&!o.visible)return;if((o.isMesh||o.isLine)&&o.geometry){o.geometry.computeBoundingBox();box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));}for(const c of o.children)walk(c);};
-        if(shown)walk(root);
-        if(box.isEmpty())box.setFromObject(root);
-        return box.translate(new THREE.Vector3(0,exploded&&currentFloor==='all'?-i*2.5:0,0));
-       }
-       const floorBoxes=()=>floorRoots.map((_,i)=>floorBox(i));
-       function fillPose(pose,boxes,margin=.94){
-        const view=new THREE.PerspectiveCamera(pose.fov,camera.aspect,.1,5000),eye=new THREE.Vector3(...pose.eye),target=new THREE.Vector3(...pose.target);
-        const points=boxes.flatMap(b=>[b.min.x,b.max.x].flatMap(x=>[b.min.y,b.max.y].flatMap(y=>[b.min.z,b.max.z].map(z=>new THREE.Vector3(x,y,z)))));
-        for(let round=0;round<4;round++){
-         view.position.copy(eye);view.lookAt(target);view.updateMatrixWorld();
-         let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
-         for(const p of points){const v=p.clone().project(view);x0=Math.min(x0,v.x);x1=Math.max(x1,v.x);y0=Math.min(y0,v.y);y1=Math.max(y1,v.y);}
-         const half=Math.tan(THREE.MathUtils.degToRad(pose.fov/2))*eye.distanceTo(target);
-         const shift=new THREE.Vector3().setFromMatrixColumn(view.matrixWorld,0).multiplyScalar((x0+x1)/2*half*view.aspect)
-          .add(new THREE.Vector3().setFromMatrixColumn(view.matrixWorld,1).multiplyScalar((y0+y1)/2*half));
-         target.add(shift);eye.add(shift);
-         eye.sub(target).multiplyScalar(Math.max((x1-x0)/2,(y1-y0)/2)/margin).add(target);
-        }
-        return {eye:eye.toArray(),target:target.toArray(),fov:pose.fov};
-       }
-       const overviewPose=()=>{const pose=fitPose(bounds,new THREE.Vector3(.72,.55,1.6).normalize(),38);return portrait()?fillPose(pose,floorBoxes()):pose;};
-       const roomTarget=room=>floorRoots[room.floor-1].localToWorld(new THREE.Vector3(room.center[0],.8,room.center[2]));
-       function roomPose(room){
-        const target=roomTarget(room),reach=Math.max(1,(room.lightRadius||2.5)/2.5);
-        const pose={eye:target.clone().add(new THREE.Vector3(6,9,10.5).multiplyScalar(reach)).toArray(),target:target.toArray(),fov:43};
-        // Portrait: from the same side, the room's whole floor fills the upper frame (a close-up would run behind the panels).
-        return portrait()?fillPose(pose,[floorBox(room.floor-1)]):pose;
-       }
-       // fit: the whole floor (and its site) inside the frame, from the same direction (the camera view).
-       function floorPose(floor,fit=false){
-        const box=new THREE.Box3().setFromObject(floorRoots[floor-1]),target=box.getCenter(new THREE.Vector3());
-        if(fit||portrait()){const pose=fitPose(box,new THREE.Vector3(14,22,26).normalize(),40);return portrait()?fillPose(pose,[floorBox(floor-1,!fit)]):pose;}
-        return {eye:target.clone().add(new THREE.Vector3(14,22,26)).toArray(),target:target.toArray(),fov:40};
-       }
-       // One camera route at a time; a newer request cancels the older one.
-       async function flyTo({floor='all',cut=false,pose,explode=false}){
-        const ticket=++navigation;flight.stop();sceneTransition.finish();
-        const apply=()=>{currentFloor=String(floor);exploded=explode;cutaway=cut;interiorView=null;exteriorEnabled=true;cameraSide=false;updateView({reframe:false});if(cut)for(const device of deviceMeshes)device.visible=true;controls.minDistance=.4;controls.maxDistance=500;};
-        const arrived=await flight.flyPath([{to:pose,duration:1400,
-         onStart(){sceneTransition.begin(apply);},
-         onUpdate(t){sceneTransition.progress(Math.min(1,t/.7));},
-         onEnd(){sceneTransition.finish();}
-        }]);
-        return arrived&&ticket===navigation;
-       }
-       const deviceMap=await (await fetch("./model/device-map.json",{signal:abort.signal})).json();
-       const parkingLayout=await fetch("./model/parking-layout.json",{signal:abort.signal}).then(r=>r.json(),()=>null).catch(()=>null);
-       const atomScene=createAtomScene({scene,model,floorRoots,rooms:simulation.rooms,units:deviceMap.acUnits||[],stalls:parkingLayout?.stalls||[],schedule,setLitRooms:ids=>simulation.setLitRooms(ids)});
-       // Exploded overview: floors lifted 2.5 m apart (see updateView), framed a little wider.
-       const explodedPose=()=>{const pose=fitPose(bounds,new THREE.Vector3(.72,.55,1.6).normalize(),38),target=new THREE.Vector3(...pose.target).add(new THREE.Vector3(0,5,0)),eye=new THREE.Vector3(...pose.eye).sub(new THREE.Vector3(...pose.target)).multiplyScalar(1.22).add(target);return {eye:eye.toArray(),target:target.toArray(),fov:pose.fov};};
-       // Portrait: the lifted floors (2.5 m apart, see updateView) fill the frame.
-       const explodedFill=()=>portrait()?fillPose(explodedPose(),floorBoxes().map((b,i)=>b.clone().translate(new THREE.Vector3(0,i*2.5,0)))):explodedPose();
-       // Relative camera move for gestures and adjust_view. Clamped so the camera never goes
-       // under the floor and the target stays near the building.
-       function adjustedPose({yaw=0,pitch=0,panX=0,panY=0,zoom=1}){
-        const target=controls.target.clone(),offset=camera.position.clone().sub(target),s=new THREE.Spherical().setFromVector3(offset);
-        s.theta-=THREE.MathUtils.degToRad(yaw);s.phi=THREE.MathUtils.clamp(s.phi-THREE.MathUtils.degToRad(pitch),.12,1.45);s.radius=THREE.MathUtils.clamp(s.radius/(zoom||1),2,200);
-        const height=2*s.radius*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)),width=height*camera.aspect;
-        const right=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0),up=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,1);
-        target.addScaledVector(right,panX*width).addScaledVector(up,panY*height);
-        target.x=THREE.MathUtils.clamp(target.x,bounds.min.x-8,bounds.max.x+8);target.z=THREE.MathUtils.clamp(target.z,bounds.min.z-8,bounds.max.z+8);target.y=THREE.MathUtils.clamp(target.y,bounds.min.y-1,bounds.max.y+4);
-        return {eye:target.clone().add(new THREE.Vector3().setFromSpherical(s)).toArray(),target:target.toArray(),fov:camera.fov};
-       }
-       // The koi pond on floor 1: its water meshes, their box (world, unlifted) and a teal glow and rim for the pond view.
-       const pondMeshes=[];floorRoots[0]?.traverse(o=>{if(o.isMesh&&o.name.includes('_koi_pond_'))pondMeshes.push(o);});
-       const pondBox=()=>{const box=new THREE.Box3();for(const mesh of pondMeshes)box.expandByObject(mesh);return box;};
-       const pondHighlight=(()=>{let parts=null;return on=>{
-        if(!pondMeshes.length)return;
-        if(!parts)parts=pondMeshes.map(mesh=>{
-         const material=mesh.material.clone(),opacity=material.opacity;mesh.material=material;
-         const rim=new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry,30),new THREE.LineBasicMaterial({color:'#5ff2e2',transparent:true,opacity:.95}));
-         rim.name='Koi_pond_highlight_rim';rim.userData.atomOverlay=true;rim.raycast=()=>{};rim.visible=false;mesh.add(rim);
-         return {material,opacity,rim};
-        });
-        for(const {material,opacity,rim} of parts){material.emissive.set('#2fd8c8');material.emissiveIntensity=on?.85:0;material.opacity=on?Math.max(opacity,.62):opacity;rim.visible=Boolean(on);}
-        document.documentElement.dataset.pondHighlight=String(Boolean(on));schedule();
-       };})();
-       // The pond view's pose: obliquely down at the pond, its courtyard around it in the frame.
-       function pondPose(){
-        const box=pondBox(),size=box.getSize(new THREE.Vector3()),target=box.getCenter(new THREE.Vector3());
-        const pose={eye:target.clone().addScaledVector(new THREE.Vector3(10.3,13,15.5).normalize(),THREE.MathUtils.clamp(Math.max(size.x,size.z)*1.4,14,30)).toArray(),target:target.toArray(),fov:46};
-        return portrait()?fillPose(pose,[box.clone().expandByScalar(2)]):pose;
-       }
-       boot({rooms:simulation.rooms,units:deviceMap.acUnits||[],scene:atomScene,
-        overview:({explode=false}={})=>{return flyTo({pose:explode?explodedFill():overviewPose(),explode});},
-        room:room=>{return flyTo({floor:room.floor,cut:room.floor<5,pose:roomPose(room)});},
-        floor:(floor,{fit=false}={})=>{return floor==='all'?flyTo({pose:overviewPose()}):flyTo({floor,cut:Number(floor)<5,pose:floorPose(Number(floor),fit)});},
-        // Floor 1 alone, real walls (no cut, so the water shows its reflection), looking down at the koi pond.
-        pond:()=>pondMeshes.length?flyTo({floor:1,pose:pondPose()}):flyTo({floor:1,cut:true,pose:floorPose(1)}),
-        setPondHighlight:pondHighlight,
-        // The pond's centre in floor-1 coordinates, for its label (see project).
-        pondAnchor:()=>{if(!pondMeshes.length)return null;const c=pondBox().getCenter(new THREE.Vector3());return {floor:1,point:floorRoots[0].worldToLocal(c).toArray()};},
-        // Screen position of a floor-local point, or null when off screen or behind the camera.
-        project(floor,[x,y,z]){
-         const root=floorRoots[floor-1];if(!root||!root.visible)return null;
-         const p=root.localToWorld(new THREE.Vector3(x,y,z)).project(camera);
-         if(p.z>1||Math.abs(p.x)>1.05||Math.abs(p.y)>1.05)return null;
-         return {x:(p.x+1)/2*canvas.clientWidth,y:(1-p.y)/2*canvas.clientHeight};
-        },
-        // Screen box (CSS px) of a floor's bounds, the box floor({fit}) fits to the frame.
-        screenBox(floor){
-         const box=new THREE.Box3().setFromObject(floorRoots[floor-1]),out={left:Infinity,top:Infinity,right:-Infinity,bottom:-Infinity};
-         for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){
-          const p=new THREE.Vector3(x,y,z).project(camera),sx=(p.x+1)/2*canvas.clientWidth,sy=(1-p.y)/2*canvas.clientHeight;
-          out.left=Math.min(out.left,sx);out.right=Math.max(out.right,sx);out.top=Math.min(out.top,sy);out.bottom=Math.max(out.bottom,sy);
-         }
-         return out;
-        },
-        // Frame the model inside a screen rectangle; before the first flight the overview is re-fitted to it.
-        setFrame:rect=>{viewFrame=rect&&rect.w>0&&rect.h>0?{...rect}:null;applyAspect();if(!navigation)writePose(overviewPose());schedule();},
-        onCamera:callback=>{controls.addEventListener('change',callback);new ResizeObserver(callback).observe(canvas);},
-        orbit:({dx=0,dy=0,scale=1})=>{flight.stop();writePose(adjustedPose({yaw:-dx*180,pitch:dy*90,zoom:scale}));},
-        // Map-like pan: the scene follows the hand, so the target moves the other way.
-        pan:({dx=0,dy=0})=>{flight.stop();writePose(adjustedPose({panX:-dx,panY:dy}));},
-        adjust:params=>{stopSpin();return flight.fly(adjustedPose(params),600);},
-        spin,stopSpin,
-        // Vertical gradient behind the model (and the ground tinted to match), for host pages.
-        setBackground:(top,bottom)=>{
-         const c=document.createElement('canvas');c.width=4;c.height=256;const g=c.getContext('2d'),grad=g.createLinearGradient(0,0,0,256);
-         grad.addColorStop(0,top);grad.addColorStop(1,bottom);g.fillStyle=grad;g.fillRect(0,0,4,256);
-         dayBackground=new THREE.CanvasTexture(c);dayBackground.colorSpace=THREE.SRGBColorSpace;
-         if(!simulation.getState().night)scene.background=dayBackground;
-         if(dayGround)dayGround.set(bottom);else renderKit.ground.material.color.set(bottom);schedule();
-        },
-        // Night show: dark sky and simulated room lights (existing simulation night mode).
-        setNight:value=>{if(simulation.getState().night!==Boolean(value))simulation.setNight(Boolean(value));},
-        // Roof panels glow with live output (0..1) in the solar view.
-        setPanelGlow:(()=>{const panels=model.getObjectByName('Floor_5_solar_modules');let material=null;return k=>{if(!panels)return;if(!material){material=panels.material.clone();panels.material=material;}material.emissive.set('#ffb02e');material.emissiveIntensity=1.4*k;schedule();};})(),
-       });
-       writePose(overviewPose());
       }
     } catch (error) {
       if (error.name !== 'AbortError' && !disposed) fail(L('โหลดโมเดลไม่สำเร็จ ตรวจสอบไฟล์โมเดล แล้วลองโหลดใหม่','Could not load the model. Check the model file, then reload.'));

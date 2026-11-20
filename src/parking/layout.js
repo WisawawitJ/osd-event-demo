@@ -1,5 +1,5 @@
 // Car-park layout in world metres, after main.js centres the building model.
-// P1 is the building's own 6-stall covered lot (from model/parking-layout.json).
+// P1 is the building's own 6-bay lot beside it (positions from the building model's parking area).
 // P2, the street, the driveway and the gate are imagined for the demo.
 
 export const SITE = {west: -23.9, south: 13.1};

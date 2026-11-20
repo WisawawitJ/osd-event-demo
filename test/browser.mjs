@@ -12,7 +12,7 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // GPU back ends to try, best first. `software` is the always-available fallback.
-export const GPU_MODES = {
+const GPU_MODES = {
   egl: ['--use-angle=gl-egl', '--ignore-gpu-blocklist'],
   vulkan: ['--use-angle=vulkan', '--enable-features=Vulkan,DefaultANGLEVulkan,VulkanFromANGLE', '--ignore-gpu-blocklist'],
   software: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
