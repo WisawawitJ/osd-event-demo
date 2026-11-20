@@ -164,7 +164,8 @@ export const scenarios = [
     await p.click('[data-destination="pond"]');
     await p.sleep(1500);
     const before = await p.eval('__parking.sim.state.events.length');
-    await p.until(`__parking.sim.state.events.length > ${before}`, {timeout: 15000, what: 'an entry or exit while on the pond stop'});
+    // Background lot traffic skips a turn while another car is moving; with four browsers sharing the GPU that can take a while.
+    await p.until(`__parking.sim.state.events.length > ${before}`, {timeout: 30000, what: 'an entry or exit while on the pond stop'});
     const kinds = await p.eval(`__parking.sim.state.events.slice(0, __parking.sim.state.events.length - ${before}).map(e=>e.kind+':'+e.type).join(',')`);
     expect(!/unknown/.test(kinds), `no unknown cars away from the parking stop (got ${kinds})`);
   }},
