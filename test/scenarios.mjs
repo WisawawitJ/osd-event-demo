@@ -81,7 +81,8 @@ export const scenarios = [
   {name: 'full car park turns a car away', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
-    await p.eval(`__parking.sim.state.stalls.forEach((s,i)=>{if(!s.occupant)s.occupant='filler'+i})`);
+    // Keep every bay taken: a background car leaving during the check would otherwise free one for our car.
+    await p.eval(`(()=>{const fill=()=>__parking.sim.state.stalls.forEach((s,i)=>{if(!s.occupant)s.occupant='filler'+i});fill();__parking.sim.subscribe(fill)})()`);
     // Follow the one car: background cars may still leave during the check, so the total can change.
     const key = await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const v=__parking.sim.state.vehicles.find(v=>v.type==='staff'&&!inside.has(v.id));window.__fullCar=v;return __parking.sim.key(v.plate,v.province)})()`);
     const result = await p.eval(`__parking.traffic.arrive({plate:__fullCar.plate,province:__fullCar.province,color:2,fromX:-40})`);
@@ -419,5 +420,11 @@ export const scenarios = [
     // Once the car drives under the camera the plate is out of view: the box goes, and is never drawn off the picture.
     expect(!shown.some(([x, y, w, h]) => x < -1 || y < -1 || x + w > 101 || y + h > 101), 'plate box never drawn outside the picture');
     expect(log.length > 1 && log.at(-1) === null, 'box cleared before the feed closes (the car has left the frame)');
+  }},
+  {name: 'no plate uses an unlucky letter pair (ศพ, ชน …)', async run(p, expect) {
+    await p.goto('?dest=parking&debug=1');
+    await p.until('!!window.__parking', {timeout: 40000});
+    const bad = await p.eval(`__parking.sim.state.vehicles.map(v=>v.plate).filter(p=>/ศพ|ชน|ตก|ตด|จม|ยม|รก/.test(p)).join(', ')`);
+    expect(!bad, `unlucky plates: ${bad}`);
   }},
 ];

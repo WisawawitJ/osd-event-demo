@@ -15,6 +15,8 @@ export const PROVINCES = [
   ['ชลบุรี', 'Chon Buri'], ['นครปฐม', 'Nakhon Pathom'], ['เชียงใหม่', 'Chiang Mai'], ['ขอนแก่น', 'Khon Kaen'],
 ];
 const CONSONANTS = 'กขคงจฉชฌญฐฒณดตถทธนบปผพภมยรลวศษสหฬอฮ';
+// Letter pairs real plates are not issued with because they read as an unlucky or rude word (ศพ = corpse, ชน = crash).
+const AVOID = new Set(['ศพ', 'ชน', 'ตก', 'ตด', 'จม', 'ยม', 'รก']);
 const FIRST = ['สมศรี', 'วิไล', 'ประเสริฐ', 'อนันต์', 'กมล', 'จันทร์เพ็ญ', 'ธีระ', 'นภา', 'พรทิพย์', 'วรวุฒิ', 'สุดา', 'อำนาจ', 'ศิริพร', 'ชาญ', 'ดวงใจ', 'ภาณุ', 'รัตนา', 'สมบัติ', 'อุไร', 'เกียรติ', 'ปราณี', 'ณัฐ', 'มยุรี', 'ทองดี'];
 const LAST = ['ใจงาม', 'ทองคำ', 'ศรีสุข', 'บุญมา', 'แสงทอง', 'มั่นคง', 'วงศ์ดี', 'สายบุญ', 'พูลสุข', 'รุ่งเรือง', 'ชื่นใจ', 'เย็นใจ', 'นาคดี', 'สุขสม'];
 // Sample people, plates and companies are invented for the demo.
@@ -46,8 +48,10 @@ export function createParkingSim() {
     const pick = list => list[Math.floor(r() * list.length)];
     const plate = () => {
       const c = () => CONSONANTS[Math.floor(r() * CONSONANTS.length)];
+      let letters;
+      do letters = c() + c(); while (AVOID.has(letters));
       const num = String(1000 + Math.floor(r() * 9000));
-      return r() < .55 ? `${1 + Math.floor(r() * 9)}${c()}${c()} ${num}` : `${c()}${c()} ${num}`;
+      return r() < .55 ? `${1 + Math.floor(r() * 9)}${letters} ${num}` : `${letters} ${num}`;
     };
     const province = () => (r() < .62 ? PROVINCES[0][0] : pick(PROVINCES.slice(1, 6))[0]);
     const person = () => `${pick(FIRST)} ${pick(LAST)}`;
