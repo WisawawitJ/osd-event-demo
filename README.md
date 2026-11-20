@@ -32,15 +32,26 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks, about a minute
+npm test                 # all 14 behaviour checks, about 12 s
 npm test -- kiosk night  # only checks whose names match
 ```
 
 `test/run.mjs` starts its own server on a free port and drives headless Chromium over the DevTools protocol.
 There are no npm dependencies. It renders on the GPU through EGL (about 60 fps on this laptop's Intel graphics) and falls
-back to software WebGL only if no GPU works; set `GPU=egl|vulkan|software` to force one. Pages are loaded with
-`?speed=10`, which runs the simulated clock, cars, story waits and camera flights ten times faster. The same flag works by
-hand for rehearsals, for example `/?dest=parking&story=1&speed=3`. Screenshots of failed checks go to `test/out/`.
+back to software WebGL only if no GPU works; set `GPU=egl|vulkan|software` to force one. Pages load with `?speed=30`,
+which runs the simulated clock, cars, story waits and camera flights 30× faster, and 4 browsers run checks side by side.
+`SPEED=n` and `JOBS=n` change either. The `?speed` flag also works by hand for rehearsals, for example
+`/?dest=parking&story=1&speed=3`. Screenshots of failed checks go to `test/out/`.
+
+Measured on this laptop (Intel iGPU, all 14 checks):
+
+| Setting | Time |
+| --- | --- |
+| speed 10, 1 browser | ~55 s |
+| speed 30, 1 browser | ~34 s |
+| speed 30, 3 browsers | ~14 s |
+| speed 30, 4 browsers (default) | ~12 s |
+| Before: software WebGL, real time | many minutes (one story alone took ~2½ min) |
 
 ## At the booth
 

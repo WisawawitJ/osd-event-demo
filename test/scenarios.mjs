@@ -1,5 +1,6 @@
-// Behaviour checks for the demo, run by test/run.mjs. Each runs at ?speed=10 (demo timing ten times faster).
-const FAST = 'debug=1&speed=10';
+// Behaviour checks for the demo, run by test/run.mjs. Pages load with ?speed=SPEED (default 30: demo timing 30× faster).
+const SPEED = Number(process.env.SPEED) || 30;
+const FAST = `debug=1&speed=${SPEED}`;
 const parking = (extra = '') => `?dest=parking&${FAST}${extra}`;
 const ready = 'window.__parking && window.__parking.active';
 const VISITOR = 'ชูใจ ใฝ่รู้', STORY_PLATE = '7กข 4821';
@@ -61,15 +62,17 @@ export const scenarios = [
     await p.until(ready, {timeout: 40000});
     await p.eval(`void __parking.traffic.arrive({plate:'3ฆง 6047',province:'ชลบุรี',color:6,fromX:-40})`);
     await p.until('__parking.sim.state.alerts.some(a=>a.status==="open")', {timeout: 30000});
-    // Queue two known staff cars behind the waiting unknown car, then reset the world.
-    const queued = await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const cars=__parking.sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)).slice(0,2);for(const v of cars)void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-60});return cars.map(v=>__parking.sim.key(v.plate,v.province))})()`);
+    // Queue two staff cars behind the waiting unknown car and keep hold of their 3D objects; then reset the world.
+    // (Checking plates would be unreliable: background traffic may legitimately pick the same car again after the reset.)
+    await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const cars=__parking.sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)).slice(0,2);const before=new Set(__parking.lot.root.children);for(const v of cars)void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-60});window.__queuedCars=__parking.lot.root.children.filter(c=>!before.has(c))})()`);
     await p.sleep(300);
     expect(await p.eval('__parking.traffic.queued') >= 2, 'cars queued behind the alert');
-    await p.eval('void __parking.story.play({auto:true})'); await p.sleep(100); await p.eval('__parking.story.stop()');
-    expect(await p.eval('__parking.traffic.queued') === 0, 'queue empty right after reset');
-    await p.sleep(3000);
-    const back = await p.eval(`${JSON.stringify(queued)}.filter(k=>__parking.sim.state.presence.has(k)||__parking.traffic.isArriving(k))`);
-    expect(back.length === 0, `queued cars from before the reset never arrive (found ${back.join(', ')})`);
+    expect(await p.eval('window.__queuedCars.length') === 2, 'both queued cars exist before the reset');
+    // story.play resets the world synchronously; read the queue in the same call, before any new traffic can start.
+    const afterReset = await p.eval('(()=>{void __parking.story.play({auto:true});const q=__parking.traffic.queued;__parking.story.stop();return q})()');
+    expect(afterReset === 0, `queue empty right after reset (got ${afterReset})`);
+    await p.sleep(1500);
+    expect(await p.eval('window.__queuedCars.every(c=>!c.parent)'), 'cars queued before the reset are gone and never drive in');
   }},
 
   {name: 'full car park turns a car away', async run(p, expect) {
@@ -140,7 +143,7 @@ export const scenarios = [
   }},
 
   {name: 'kiosk recovers from an idle guided story', async run(p, expect) {
-    await p.goto(`?kiosk=1&debug=1&speed=20`);
+    await p.goto(`?kiosk=1&${FAST}`);
     await p.until('window.__parking && document.querySelector("#kiosk-toggle").checked', {timeout: 40000});
     await p.eval(`document.querySelector('#viewport').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`);
     await p.click('[data-destination="parking"]');
@@ -148,7 +151,7 @@ export const scenarios = [
     await p.eval(`(()=>{const c=document.querySelector('[data-bar="auto"]');if(c.checked)c.click()})()`);
     await p.click('[data-bar="play"]');
     await p.until('__parking.story.waitingForNext', {timeout: 30000, what: 'guided story waiting'});
-    await p.until(`document.body.dataset.tourDestination !== 'parking' || (__parking.story.running && __parking.story.auto)`, {timeout: 20000, what: 'loop takes over (60 s / speed)'});
+    await p.until(`document.body.dataset.tourDestination !== 'parking' || (__parking.story.running && __parking.story.auto)`, {timeout: 20000, what: `loop takes over (60 s / ${SPEED})`});
     expect(true, 'loop resumed');
   }},
 ];
