@@ -138,6 +138,7 @@ export const scenarios = [
   {name: 'night: page goes dark, phone text stays dark on white', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
+    await p.until(`!document.querySelector('#tour-night').disabled`, {what: 'night switch enabled'}); // off during the opening flight
     await p.click('#tour-night');
     await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 10000, what: 'night on'});
     await p.click('[data-bar="phone"]');
@@ -414,7 +415,7 @@ export const scenarios = [
     await p.goto(`?${FAST}`);
     await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
     await p.click('[data-destination="meeting"]');
-    await p.until("document.body.dataset.tourDestination === 'meeting'", {timeout: 20000});
+    await p.until("document.body.dataset.tourDestination === 'meeting' && !document.querySelector('#tour-night').disabled", {timeout: 20000});
     await p.click('#tour-night');
     await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 10000});
     const spots = `JSON.stringify(__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.visible).map(l=>[l.userData.roomId,l.position.x.toFixed(1),l.position.z.toFixed(1),l.intensity]))`;

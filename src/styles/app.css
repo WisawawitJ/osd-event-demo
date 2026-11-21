@@ -152,3 +152,9 @@ html[data-night=true] .showcase-page:not([data-tour-destination="overview"]) .sc
 #viewport.flying .insight-toolbar{visibility:hidden} /* any camera flight (Reset view too): a click would stop it midway */
 .scene-top-right .layer-controls,.scene-top-right .layer-controls>div{flex-wrap:wrap;justify-content:flex-end}
 @container scene (max-width:760px){.showcase-page .scene-top-right{max-width:calc(100% - 28px)}#viewport:not(.flying):has(.insight-toolbar:not([hidden])) .scene-title{display:none}}
+/* Secondary controls are slimmer than the 44px touch size the dock and tour buttons keep: the header actions, the
+   room-colour bar and (parking.css) the view controls stay 30–34px tall, still a comfortable tap on the booth screen.
+   The Explore link is a link, not a button, so it gets the header buttons' shape here too. */
+.showcase-page .header-actions button,.showcase-page .explore-link{min-height:34px;padding:5px 10px;border-radius:8px;line-height:1.4}
+.showcase-page .insight-toolbar{padding:3px 4px 3px 12px}
+.showcase-page .layer-controls button{min-height:30px;padding:4px 10px}
