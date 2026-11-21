@@ -36,7 +36,7 @@ class Route {
 // Routes ----------------------------------------------------------------
 // A queued arrival waits on the street at holdX, clear of the turn into the gate.
 const streetToHold = (fromX, holdX) => new Route(fromX, STREET.laneEast, EAST).toX(holdX).build();
-const streetToGate = (fromX = -95) => new Route(fromX, STREET.laneEast, EAST).toX(GATE.entryX - 2.6).arc(2.6, Math.PI / 2).build();
+const streetToGate = fromX => new Route(fromX, STREET.laneEast, EAST).toX(GATE.entryX - 2.6).arc(2.6, Math.PI / 2).build();
 function gateToStall(stall) {
   const r = new Route(GATE.entryX, GATE.entryStopZ, NORTH);
   if (stall.zone === 'P1') r.toZ(LANE_OUT + 2).arc(2, -Math.PI / 2).toX(stall.aisleX - 2.4).arc(2.4, Math.PI / 2);
@@ -143,7 +143,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     night = Boolean(value);
     // Parked cars' plates and lamps dim at night even though their lamps stay off.
     for (const a of live) { a.lit = night && a.car.visible && !parked(a); setCarLamps(a.car, a.lit, night); }
-    updateLamps(); schedule();
+    schedule();
   }
   function guard(agent, fn) {
     return fn().catch(error => { removeAgent(agent); if (error !== ABORT) throw error; return 'aborted'; });
@@ -179,10 +179,11 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   // The car park catching up on time it did not show: a car is simply there in its bay, or gone, without driving.
   // Only for cars standing in their bays (never one on the move), and without stopping cars on the move.
   function appear(k) { parkCar(k); refreshBays(); schedule(); }
-  function vanish(k) {
+  // `gone` records the departure before the bays and the sign are redrawn (drawn first, they showed the car still there).
+  function vanish(k, gone) {
     const agent = agents.get(k);
     if (!agent || agent.leaving || movers.has(agent.mover)) return false;
-    removeAgent(agent); agents.delete(k); refreshBays(); schedule();
+    removeAgent(agent); agents.delete(k); gone(); refreshBays(); schedule();
     return true;
   }
 
@@ -196,10 +197,15 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   }
   // The arm can be told to rise again while it is still coming down; only the latest command reports its end state.
   let boomCommand = 0;
-  async function openBoom(gen) { const c = ++boomCommand; sim.setGate('opening'); lot.setBoom(true); kick(); await waitFor(() => !lot.boomMoving || c !== boomCommand, gen); if (c === boomCommand) sim.setGate('open'); }
+  async function moveBoom(open, gen) {
+    const c = ++boomCommand;
+    sim.setGate(open ? 'opening' : 'closing'); lot.setBoom(open); kick();
+    await waitFor(() => !lot.boomMoving || c !== boomCommand, gen);
+    if (c === boomCommand) sim.setGate(open ? 'open' : 'closed');
+  }
+  const openBoom = gen => moveBoom(true, gen), closeBoom = gen => moveBoom(false, gen);
   // A car that is not going through now (unknown, lot full, or waiting for a gap) lowers an arm left up.
   const lowerIfUp = gen => (['open', 'opening'].includes(sim.state.gate) ? closeBoom(gen) : Promise.resolve());
-  async function closeBoom(gen) { const c = ++boomCommand; sim.setGate('closing'); lot.setBoom(false); kick(); await waitFor(() => !lot.boomMoving || c !== boomCommand, gen); if (c === boomCommand) sim.setGate('closed'); }
 
   // Arrival: street → gate → plate read → open (allowed, or a staff decision) → bay.
   // A car with nowhere to park (the lot is full) is turned away at the barrier, like a denied one.
@@ -266,8 +272,11 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           const type = verdict.allow ? verdict.type : 'unknown';
           const stall = sim.freeStall(type === 'unknown' ? 'staff' : type);
           if (!stall) { hooks.onFull?.(plate); await lowerIfUp(gen); return 'full'; }
+          // The bay is the car's from now on: a jump in time while the arm rises gave it to a car made up in it too.
+          stall.occupant = k;
+          try { await openBoom(gen); } catch (error) { if (stall.occupant === k) stall.occupant = null; throw error; }
+          // Given its bay (so parked, lamps off, once it stops) only now: given before the arm rose, it went dark at the barrier.
           Object.assign(agent, {type, stall, key: k});
-          await openBoom(gen);
           sim.recordEntry({plate, province, type, stallId: stall.id, color, manual});
           agents.set(k, agent);
           refreshBays();
@@ -278,10 +287,10 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           releaseLane();
           return {going, result: manual ? 'manual' : 'allowed'};
         });
-        // Through: the next car may already read its plate while the arm comes down (it rises again if allowed).
-        if (typeof passage !== 'string') void wait(400, gen).then(() => { if (!gateQueueBusy()) return closeBoom(gen); }).catch(() => {});
         // Denied or full: the car reverses out and drives away, without holding the barrier.
         if (typeof passage === 'string') { await turnAway(); return passage; }
+        // Through: the next car may already read its plate while the arm comes down (it rises again if allowed).
+        void wait(400, gen).then(() => { if (!gateQueueBusy()) return closeBoom(gen); }).catch(() => {});
         await passage.going;
         schedule();
         return passage.result;
@@ -294,7 +303,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
 
   function leave(k) {
     const agent = agents.get(k);
-    if (!agent || agent.leaving || !agent.stall) return Promise.resolve(false);
+    // Not while it is still driving in (a jump sent a visitor home on its way to the bay: two routes moved one car).
+    if (!agent || agent.leaving || !agent.stall || arriving.has(k)) return Promise.resolve(false);
     const gen = generation, alive = () => { if (gen !== generation) throw ABORT; };
     agent.leaving = true;
     const stall = agent.stall;
@@ -391,8 +401,10 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   return {
     syncParked, arrive, leave, passBy, refreshBays, setNight,
     // A manual open with no car read: one pulse, held briefly, then closed.
-    pulse(holdMs = 5000) { const gen = generation; return withGate(async () => { await openBoom(gen); await wait(holdMs, gen); await closeBoom(gen); }).catch(() => {}); },
-    parkedKeys: () => [...agents.entries()].filter(([, a]) => !a.leaving && a.stall).map(([k]) => k),
+    // `cancelled`: asked when its turn at the barrier comes (it may queue behind cars); true skips it.
+    pulse(holdMs = 5000, cancelled = () => false) { const gen = generation; return withGate(async () => { if (cancelled()) return; await openBoom(gen); await wait(holdMs, gen); await closeBoom(gen); }).catch(() => {}); },
+    // Parked: in its bay (one still driving in from the barrier is not, and cannot be sent out yet).
+    parkedKeys: () => [...agents.entries()].filter(([k, a]) => !a.leaving && a.stall && !arriving.has(k)).map(([k]) => k),
     get busy() { return movers.size > ambientCars.size; },
     get queued() { return entryPending; },
     get leaving() { let n = 0; for (const a of agents.values()) if (a.leaving) n++; return n; },

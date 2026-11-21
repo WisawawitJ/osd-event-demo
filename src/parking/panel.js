@@ -4,6 +4,8 @@ import {esc, icon, patch, fakeQr, download} from './dom.js';
 import {PROVINCES, normalizePlate, GATE_REASONS as REASONS} from './sim.js';
 
 const TABS = [['overview', 'chart'], ['requests', 'inbox'], ['gate', 'gate'], ['vehicles', 'car'], ['reports', 'doc']];
+const KIND_KEY = {entry: 'ev.entry', exit: 'ev.exit', unknown: 'ev.unknown', denied: 'ev.denied', manual: 'ev.manual', exitNoEntry: 'ev.exitNoEntry'};
+const VEHICLE_RANK = {vip: 0, guest: 1, staff: 2};
 
 export function createPanel({root, sim, actions}) {
   let shownTab = null;
@@ -31,7 +33,7 @@ export function createPanel({root, sim, actions}) {
     return `<svg class="pk-donut" viewBox="0 0 120 120" role="img" aria-label="${used} / ${total}"><circle cx="60" cy="60" r="${r}" fill="none" stroke="#e8edf5" stroke-width="13"/><circle cx="60" cy="60" r="${r}" fill="none" stroke="${tone}" stroke-width="13" stroke-linecap="round" stroke-dasharray="${c * f} ${c}" transform="rotate(-90 60 60)"/><text x="60" y="58" text-anchor="middle" class="pk-donut-main">${used}</text><text x="60" y="78" text-anchor="middle" class="pk-donut-sub">/ ${total}</text></svg>`;
   }
   function hourlyChart(hourly) {
-    const max = Math.max(4, ...hourly.map(h => (h.in || 0) + 0));
+    const max = Math.max(4, ...hourly.map(h => Math.max(h.in || 0, h.out || 0))); // an evening hour's exits can outnumber any hour's entries
     const w = 300, hgt = 92, bw = w / hourly.length;
     const bars = hourly.map((h, i) => {
       const x = i * bw + 3, ih = h.in == null ? 0 : (h.in / max) * (hgt - 18), oh = h.out == null ? 0 : (h.out / max) * (hgt - 18);
@@ -40,9 +42,8 @@ export function createPanel({root, sim, actions}) {
     return `<svg class="pk-bars" viewBox="0 0 ${w} ${hgt + 16}" role="img" aria-label="${t('ov.hourly')}"><path d="M0 ${hgt}h${w}" class="axis"/>${bars}</svg><div class="pk-legend"><span><i class="in"></i>${t('ev.entry')}</span><span><i class="out"></i>${t('ev.exit')}</span></div>`;
   }
   function eventRow(e) {
-    const kindKey = {entry: 'ev.entry', exit: 'ev.exit', unknown: 'ev.unknown', denied: 'ev.denied', manual: 'ev.manual', exitNoEntry: 'ev.exitNoEntry'}[e.kind];
     const tone = {entry: 'ok', exit: 'mute', unknown: 'bad', denied: 'bad', manual: 'warn', exitNoEntry: 'warn'}[e.kind];
-    return `<div class="pk-event${ui.flash === e.id ? ' flash' : ''}"><time>${fmtTime(e.at)}</time>${icon(e.kind === 'exit' || e.kind === 'exitNoEntry' ? 'arrowOut' : 'arrowIn')}<div>${plate(e.plate, e.province)}<small>${typeLabel(e.type)}${e.reason ? ` · ${t(e.reason)}` : ''}${e.by ? ` · ${t(e.by)}` : ''}</small></div>${pill(t(kindKey), tone)}</div>`;
+    return `<div class="pk-event${ui.flash === e.id ? ' flash' : ''}"><time>${fmtTime(e.at)}</time>${icon(e.kind === 'exit' || e.kind === 'exitNoEntry' ? 'arrowOut' : 'arrowIn')}<div>${plate(e.plate, e.province)}<small>${typeLabel(e.type)}${e.reason ? ` · ${t(e.reason)}` : ''}${e.by ? ` · ${t(e.by)}` : ''}</small></div>${pill(t(KIND_KEY[e.kind]), tone)}</div>`;
   }
   function overview() {
     const s = sim.stats();
@@ -50,7 +51,7 @@ export function createPanel({root, sim, actions}) {
     const att = sim.attention();
     return `<section class="pk-occupancy">${donut(s.parked, s.capacity)}<div><span class="metric-label">${t('ov.occupancy')}</span><div class="metric-value">${s.parked}<small>${t('cars')}</small></div><span class="metric-note">${t('ov.free')} ${free} · ${t('ov.capacity')} ${s.capacity}</span><span class="pk-live"><i></i>${t('ov.stale')} · ${fmtTime(sim.now())}</span></div></section>
     <div class="pk-kpis"><div><span>${t('ov.entries')}</span><strong>${s.entries}</strong></div><div><span>${t('ov.exits')}</span><strong>${s.exits}</strong></div><div><span>${t('ov.pending')}</span><strong>${s.pending}</strong></div><div><span>${t('ov.unknown')}</span><strong>${s.unknown}</strong></div></div>
-    ${att.length ? `<div class="dashboard-section"><h3>${t('ov.attention')} <span class="pk-count">${att.length}</span></h3>${att.map(a => `<button class="pk-attention ${a.kind}" data-goto="${a.kind}" data-id="${a.id}">${icon(a.kind === 'alert' ? 'alert' : a.kind === 'request' ? 'inbox' : 'sync')}<span><strong>${t(a.key)}</strong><small>${esc(a.target)}</small></span>${icon('next')}</button>`).join('')}</div>` : ''}
+    ${att.length ? `<div class="dashboard-section"><h3>${t('ov.attention')} <span class="pk-count">${att.length}</span></h3>${att.map(a => `<button class="pk-attention ${a.kind}" data-key="${esc(a.kind + ':' + a.id)}" data-goto="${a.kind}" data-id="${a.id}">${icon(a.kind === 'alert' ? 'alert' : a.kind === 'request' ? 'inbox' : 'sync')}<span><strong>${t(a.key)}</strong><small>${esc(a.target)}</small></span>${icon('next')}</button>`).join('')}</div>` : ''}
     <div class="dashboard-section"><h3>${t('ov.hourly')}</h3>${hourlyChart(s.hourly)}</div>
     <div class="dashboard-section"><h3>${t('ov.zones')}</h3>${['P1', 'P2'].map(z => `<div class="pk-zone"><div><span>${t(`zone.${z}`)}</span><strong>${s.zones[z].used} / ${s.zones[z].total}</strong></div><i><b style="width:${(s.zones[z].used / s.zones[z].total) * 100}%"></b></i></div>`).join('')}</div>
     <div class="dashboard-section"><h3>${t('ov.recent')}</h3>${sim.state.events.slice(0, 5).map(eventRow).join('')}</div>
@@ -63,7 +64,7 @@ export function createPanel({root, sim, actions}) {
     const list = sim.state.requests.filter(r => (ui.reqFilter === 'all' || r.status === ui.reqFilter) && (!q || r.visitor.name.toLowerCase().includes(q) || normalizePlate(r.plate).includes(np))).sort((a, b) => b.createdAt - a.createdAt);
     const chips = ['pending', 'approved', 'rejected', 'all'].map(f => `<button data-req-filter="${f}" aria-pressed="${ui.reqFilter === f}">${f === 'all' ? t('all') : t(`req.status.${f}`)}</button>`).join('');
     return `<div class="pk-toolbar"><div class="pk-chips">${chips}</div><input type="search" data-focus="req-search" placeholder="${t('search')}" value="${esc(ui.reqSearch)}"></div>
-    <div class="pk-list">${list.length ? list.map(r => `<button class="pk-row${ui.newIds.has(r.id) ? ' is-new' : ''}" data-request="${r.id}"${cue(`request:${r.id}`)}><span class="pk-row-main"><strong>${esc(r.visitor.name)}${ui.newIds.has(r.id) ? ` <i class="pk-new">${t('req.new')}</i>` : ''}</strong><small>${esc(r.visitor.company)} · ${fmtShortDate(r.arrival)}${r.departure !== r.arrival ? `–${fmtShortDate(r.departure)}` : ''}</small></span>${plate(r.plate, r.province)}${pill(t(`req.status.${r.status}`), statusTone[r.status])}</button>`).join('') : `<p class="pk-empty">${t('none')}</p>`}</div>`;
+    <div class="pk-list">${list.length ? list.map(r => `<button class="pk-row${ui.newIds.has(r.id) ? ' is-new' : ''}" data-key="${esc(r.id)}" data-request="${r.id}"${cue(`request:${r.id}`)}><span class="pk-row-main"><strong>${esc(r.visitor.name)}${ui.newIds.has(r.id) ? ` <i class="pk-new">${t('req.new')}</i>` : ''}</strong><small>${esc(r.visitor.company)} · ${fmtShortDate(r.arrival)}${r.departure !== r.arrival ? `–${fmtShortDate(r.departure)}` : ''}</small></span>${plate(r.plate, r.province)}${pill(t(`req.status.${r.status}`), statusTone[r.status])}</button>`).join('') : `<p class="pk-empty">${t('none')}</p>`}</div>`;
   }
   function requestDetail(r) {
     const flags = sim.flagsFor(r);
@@ -121,12 +122,12 @@ export function createPanel({root, sim, actions}) {
     const q = ui.vehSearch.trim().toLowerCase(), np = normalizePlate(ui.vehSearch);
     const parked = new Set([...sim.state.presence.values()].map(p => p.vehicleId));
     const list = sim.state.vehicles.filter(v => (ui.vehFilter === 'all' || v.type === ui.vehFilter) && (!q || (v.owner || '').toLowerCase().includes(q) || normalizePlate(v.plate).includes(np)))
-      .sort((a, b) => (a.sync === 'synced') - (b.sync === 'synced') || ({vip: 0, guest: 1, staff: 2}[a.type] - {vip: 0, guest: 1, staff: 2}[b.type]));
+      .sort((a, b) => (a.sync === 'synced') - (b.sync === 'synced') || VEHICLE_RANK[a.type] - VEHICLE_RANK[b.type]);
     const counts = {all: sim.state.vehicles.length, staff: 0, vip: 0, guest: 0};
     for (const v of sim.state.vehicles) counts[v.type]++;
     return `<div class="pk-toolbar"><div class="pk-chips">${['all', 'staff', 'vip', 'guest'].map(f => `<button data-veh-filter="${f}" aria-pressed="${ui.vehFilter === f}">${f === 'all' ? t('all') : t(`type.${f}`)} <small>${counts[f]}</small></button>`).join('')}</div><input type="search" data-focus="veh-search" placeholder="${t('search')}" value="${esc(ui.vehSearch)}"></div>
     <details class="pk-add"${ui.addOpen ? ' open' : ''}><summary>${icon('plus')}${t('veh.add')}</summary><form data-form="add"><input data-focus="add-plate" name="plate" placeholder="${t('req.plate')} · 1กข 2345" value="${esc(ui.add.plate)}" required><select name="province">${PROVINCES.map(([th]) => `<option${ui.add.province === th ? ' selected' : ''}>${th}</option>`).join('')}</select><input data-focus="add-owner" name="owner" placeholder="${t('veh.owner')}" value="${esc(ui.add.owner)}"><button class="pk-btn primary" type="submit">${t('save')}</button></form><button class="pk-btn" data-act="import">${icon('upload')}${t('veh.import')}</button></details>
-    <div class="pk-list">${list.slice(0, 60).map(v => `<div class="pk-vrow${v.enabled ? '' : ' disabled'}"><span class="pk-row-main">${plate(v.plate, v.province)}<small>${esc(v.owner || '—')} · ${typeLabel(v.type)}${v.validTo ? ` · ${t('veh.valid')} ${fmtShortDate(v.validTo)}` : ''}${parked.has(v.id) ? ` · <b class="pk-parked">${t('veh.parked')}</b>` : ''}</small>${v.sync === 'failed' && v.syncError ? `<small class="pk-error">${esc(tx(v.syncError))}</small>` : ''}</span><span class="pk-vrow-side">${pill(v.enabled ? t(`veh.sync.${v.sync}`) : t('veh.disabled'), v.enabled ? syncTone[v.sync] : 'mute')}${v.sync === 'failed' ? `<button class="pk-link" data-retry="${v.id}">${t('veh.retry')}</button>` : `<button class="pk-link" data-toggle="${v.id}">${v.enabled ? t('veh.disable') : t('veh.enable')}</button>`}</span></div>`).join('')}</div>`;
+    <div class="pk-list">${list.map(v => `<div class="pk-vrow${v.enabled ? '' : ' disabled'}" data-key="${esc(v.id)}"><span class="pk-row-main">${plate(v.plate, v.province)}<small>${esc(v.owner || '—')} · ${typeLabel(v.type)}${v.validTo ? ` · ${t('veh.valid')} ${fmtShortDate(v.validTo)}` : ''}${parked.has(v.id) ? ` · <b class="pk-parked">${t('veh.parked')}</b>` : ''}</small>${v.sync === 'failed' && v.syncError ? `<small class="pk-error">${esc(tx(v.syncError))}</small>` : ''}</span><span class="pk-vrow-side">${pill(v.enabled ? t(`veh.sync.${v.sync}`) : t('veh.disabled'), v.enabled ? syncTone[v.sync] : 'mute')}${v.sync === 'failed' ? `<button class="pk-link" data-retry="${v.id}">${t('veh.retry')}</button>` : `<button class="pk-link" data-toggle="${v.id}">${v.enabled ? t('veh.disable') : t('veh.enable')}</button>`}</span></div>`).join('')}</div>`;
   }
 
   // Reports --------------------------------------------------------------
@@ -189,7 +190,7 @@ export function createPanel({root, sim, actions}) {
       case 'manual-open': actions.manualOpen(ui.manualReason); break;
       case 'import': sim.importCsv(); actions.toast?.(t('veh.import.done')); break;
       case 'capacity': { const v = Number(root.querySelector('[data-focus="capacity"]')?.value); if (Number.isFinite(v)) sim.setCapacity(v); break; }
-      case 'csv-events': download(`osd-parking-events-${getLang()}.csv`, [['time', 'kind', 'plate', 'province', 'type', 'camera', 'by', 'reason'], ...sim.state.events.map(e => [fmtDateTime(e.at), t({entry: 'ev.entry', exit: 'ev.exit', unknown: 'ev.unknown', denied: 'ev.denied', manual: 'ev.manual', exitNoEntry: 'ev.exitNoEntry'}[e.kind]), e.plate, e.province, typeLabel(e.type), e.camera, e.by ? t(e.by) : '', e.reason ? t(e.reason) : ''])]); break;
+      case 'csv-events': download(`osd-parking-events-${getLang()}.csv`, [['time', 'kind', 'plate', 'province', 'type', 'camera', 'by', 'reason'], ...sim.state.events.map(e => [fmtDateTime(e.at), t(KIND_KEY[e.kind]), e.plate, e.province, typeLabel(e.type), e.camera, e.by ? t(e.by) : '', e.reason ? t(e.reason) : ''])]); break;
       case 'csv-audit': download(`osd-parking-audit-${getLang()}.csv`, [['time', 'actor', 'action', 'target', 'reason'], ...sim.state.audit.map(a => [fmtDateTime(a.at), t(a.actor), t(a.key), a.target || '', a.reasonKey ? t(a.reasonKey) : ''])]); break;
     }
   });
@@ -218,7 +219,6 @@ export function createPanel({root, sim, actions}) {
 
   return {
     render: schedule,
-    get state() { return ui; },
     show(tab, {request = null} = {}) { ui.tab = tab; ui.selected = request; ui.rejecting = false; render(); root.scrollTop = 0; },
     markNew(id) { ui.newIds.add(id); schedule(); },
     setCue(name) { ui.cue = name; render(); },

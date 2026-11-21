@@ -1,7 +1,7 @@
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 
 // Light in the air under a lamp: a cone of lit air from the lamp down to the floor or road, drawn on a closed
-// cylinder (`createLightCone`). It is lit air, not a surface: each pixel adds up the glow along its view ray through
+// cylinder (`createLightConeGeometry`). It is lit air, not a surface: each pixel adds up the glow along its view ray through
 // the cone (brightest under the lamp and on the axis, fading towards the floor and the edge). Drawn as the cone's
 // hollow shell, it looked right only from the side: from above, the view passed through the narrow top to the floor
 // and saw no glow at all, a dark disc under the lamp.

@@ -35,7 +35,7 @@ export function buildStalls() {
   return stalls;
 }
 
-// Ground height under a point: the site slab is 0.26 m above the street, with a short ramp at the aisle mouth.
+// Ground height under a point: the site slab is 0.21 m above the street, with a short ramp at the aisle mouth.
 export function groundY(x, z) {
   if (x > SITE.west && z < SITE.south) return Y.site;
   if (x > RAMP.west && x < RAMP.east && z >= RAMP.north && z < RAMP.south) return Y.site - (z - RAMP.north) / (RAMP.south - RAMP.north) * (Y.site - Y.road);

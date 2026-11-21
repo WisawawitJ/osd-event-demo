@@ -1,6 +1,7 @@
 // Overlays on the 3D view: the plate-camera feed, the unknown-car alert, story captions and toasts.
 import {t, fmtTime} from './i18n.js';
 import {esc, icon} from './dom.js';
+import {later, cancelLater} from './clock.js';
 import {GATE_REASONS as REASONS} from './sim.js';
 
 export function createOverlays({layer, sim, actions}) {
@@ -16,9 +17,9 @@ export function createOverlays({layer, sim, actions}) {
     if (!f) return;
     const v = f.verdict;
     const verdict = f.phase === 'reading' ? '' : v.exit ? `<span class="pk-pill info">${t('lpr.exit')}</span>` : v.allow ? `<span class="pk-pill ok">${t('lpr.match')} · ${t(`type.${v.type}`)}</span>` : `<span class="pk-pill bad">${t('lpr.nomatch')}</span>`;
-    // Live: the box is placed each frame and keeps its last place when the card redraws (no blink); a still keeps its fixed box.
-    const b = f.live ? state.box : f.box, place = b ? ` style="left:${b.x * 100}%;top:${b.y * 100}%;width:${b.w * 100}%;height:${b.h * 100}%"` : '';
-    const box = f.live || f.box ? `<i class="pk-feed-box ${f.phase}"${place}${b ? '' : ' hidden'}></i>` : '';
+    // Live: the box is placed each frame and keeps its last place when the card redraws (no blink).
+    const b = state.box, place = b ? ` style="left:${b.x * 100}%;top:${b.y * 100}%;width:${b.w * 100}%;height:${b.h * 100}%"` : '';
+    const box = f.live ? `<i class="pk-feed-box ${f.phase}"${place}${b ? '' : ' hidden'}></i>` : '';
     feed.innerHTML = `<div class="pk-feed-head"><span><i class="pk-rec"></i>${f.which === 'in' ? 'LPR-IN' : 'LPR-OUT'} · ${t('sim')}</span><time>${fmtTime(sim.now(), true)}</time></div>
       <div class="pk-feed-img${f.live ? ' live' : ''}">${!f.live && f.snapshot ? `<img src="${f.snapshot}" alt="">` : ''}${box}</div>
       <div class="pk-feed-result"><div class="pk-feed-plate${f.phase === 'reading' ? ' reading' : ''}"><b>${f.phase === 'reading' ? '· · ·' : esc(f.plate)}</b><small>${f.phase === 'reading' ? t('lpr.read') + '…' : esc(f.province)}</small></div><div class="pk-feed-meta">${f.phase === 'reading' ? '' : `<small>${t('lpr.confidence')} ${Math.round(f.confidence * 100)}%</small>`}${verdict}${v.vehicle?.validTo && f.phase !== 'reading' && !v.exit ? `<small>${t('lpr.validUntil')} ${fmtTime(v.vehicle.validTo)}</small>` : ''}</div></div>`;
@@ -54,7 +55,7 @@ export function createOverlays({layer, sim, actions}) {
   });
 
   return {
-    showFeed(f) { clearTimeout(hideTimer); state.feed = f; state.box = null; renderFeed(); },
+    showFeed(f) { cancelLater(hideTimer); state.feed = f; state.box = null; renderFeed(); },
     updateFeed(patch) { if (state.feed) { Object.assign(state.feed, patch); renderFeed(); } },
     // The live picture area and its plate box, for the canvas inset drawn each frame (index.js).
     feedView() { return state.feed?.live && !feed.hidden ? feed.querySelector('.pk-feed-img') : null; },
@@ -66,7 +67,8 @@ export function createOverlays({layer, sim, actions}) {
       el.hidden = !box;
       if (box) Object.assign(el.style, {left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.w * 100}%`, height: `${box.h * 100}%`});
     },
-    hideFeed(delay = 3500) { clearTimeout(hideTimer); hideTimer = setTimeout(() => { state.feed = null; renderFeed(); }, delay); },
+    // On demo time (later): it stays up while paused, like the car it shows.
+    hideFeed(delay = 3500) { cancelLater(hideTimer); hideTimer = later(() => { state.feed = null; renderFeed(); }, delay); },
     showAlert(id) { state.alertId = id; state.reason = REASONS[1]; renderAlert(); },
     setCue(name) { state.cue = name; renderAlert(); },
     caption(c) { state.caption = c; renderCaption(); },

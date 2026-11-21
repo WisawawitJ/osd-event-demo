@@ -4,15 +4,25 @@ const SPEED = Number(process.env.SPEED) || 30;
 const FASTW = `debug=1&speed=${SPEED}`;
 const FAST = `${FASTW}&warm=0`;
 const parking = (extra = '') => `?dest=parking&${FAST}${extra}`;
+// The explore page. `explore=1` (read by nothing) makes the URL differ from the showcase's `?${FAST}` by more than
+// the hash: a hash-only change is a same-page navigation, and boot.js picks the page only when it loads.
+const EXPLORE = `?explore=1&${FAST}#explore`;
 const ready = 'window.__parking && window.__parking.active';
-// The showcase is up (any stop).
-const UP = "document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking";
+// The model is loaded (either page); the showcase is up (any stop); no stop is loading and the camera is not flying.
+const LOADED = "document.querySelector('#status')?.dataset.state === 'ready'";
+const UP = `${LOADED} && !!window.__parking`;
+const STILL = "!document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')";
+const IDLE = `${UP} && ${STILL}`;
 const VISITOR = 'ชูใจ ใฝ่รู้', STORY_PLATE = '7กข 4821';
+const STORY_REQUEST = `__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)})`;
+// Sends a parked staff car out; returns its key.
+const LEAVE_STAFF = `(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');void __parking.traffic.leave(k);return k})()`;
+const viewport = (p, width = 1600, height = 1000) => p.cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
 
 export const scenarios = [
   {quick: true, name: 'showcase loads with the parking stop', async run(p, expect) {
     await p.goto(`?${FAST}`);
-    await p.until("document.querySelector('#status')?.dataset.state === 'ready'", {timeout: 40000, what: 'model ready'});
+    await p.until(LOADED, {timeout: 40000, what: 'model ready'});
     expect(await p.eval('document.querySelectorAll(".destination-dock [data-destination]").length') === 6, 'dock has 6 stops');
   }},
 
@@ -20,7 +30,7 @@ export const scenarios = [
     await p.goto(parking('&story=1'));
     await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
     await p.until('!__parking.story.running', {timeout: 90000, what: 'story end'});
-    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const s=__parking.sim.state;const ev=s.events.filter(e=>e.plate===${JSON.stringify(STORY_PLATE)});return {status:s.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)})?.status,entry:ev.some(e=>e.kind==='entry'),exit:ev.some(e=>e.kind==='exit'),denied:s.events.some(e=>e.kind==='denied'&&e.plate==='2ฒษ 9077')}})())`));
+    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const s=__parking.sim.state;const ev=s.events.filter(e=>e.plate===${JSON.stringify(STORY_PLATE)});return {status:${STORY_REQUEST}?.status,entry:ev.some(e=>e.kind==='entry'),exit:ev.some(e=>e.kind==='exit'),denied:s.events.some(e=>e.kind==='denied'&&e.plate==='2ฒษ 9077')}})())`));
     expect(r.status === 'approved', `visitor request approved (got ${r.status})`);
     expect(r.entry && r.exit, 'visitor car entered and left');
     expect(r.denied, 'unknown car was denied');
@@ -33,7 +43,7 @@ export const scenarios = [
     await p.until(`document.querySelector('[data-act="approve"][data-cue="true"]')`, {timeout: 30000, what: 'approve cue'});
     await p.click('[data-bar="free"]');
     await p.sleep(300);
-    const status = await p.eval(`__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)})?.status`);
+    const status = await p.eval(`${STORY_REQUEST}?.status`);
     expect(status === 'pending', `request stays pending (got ${status})`);
   }},
 
@@ -49,6 +59,213 @@ export const scenarios = [
     expect(r.stall, 'its bay is marked occupied');
   }},
 
+  {name: 'a car at the barrier keeps its bay through a jump in time, and its lamps on while the arm rises', async run(p, expect) {
+    // It picked its bay before the arm rose but took it only after: a jump meanwhile made up another car in the same
+    // bay. And with its bay given, it counted as parked, lamps off, while still waiting at the barrier.
+    await p.goto(parking('&time=07:00'));
+    await p.until(ready, {timeout: 40000});
+    const pick = `(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const v=__parking.sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(__parking.sim.key(v.plate,v.province)));
+      window.__plate=v.plate;void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-40});return __parking.sim.key(v.plate,v.province)})()`;
+    // Acts the moment the arm starts up for this car (at ?speed=30 it is up within a few frames: polling missed it).
+    const car = `__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate)`;
+    const atGate = act => `(()=>{const sim=__parking.sim,set=sim.setGate;sim.setGate=g=>{set(g);const c=${car};if(g==='opening'&&c&&Math.hypot(c.position.x+23,c.position.z-21.9)<2.5){sim.setGate=set;${act}}};})()`;
+    await p.eval(atGate(`__world.jumpTo(12*60);window.__acted=true;`));
+    const key = await p.eval(pick);
+    await p.until('window.__acted', {timeout: 30000, what: 'the arm rising for the car'});
+    await p.until(`__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 30000, what: 'entry recorded'});
+    const shared = await p.eval(`(()=>{const seen=new Map();for(const [k,p] of __parking.sim.state.presence){if(seen.has(p.stallId))return p.stallId+': '+seen.get(p.stallId)+' & '+k;seen.set(p.stallId,k);}return '';})()`);
+    expect(!shared, `every bay holds one car (${shared || 'none shared'})`);
+    // Night: the waiting car's lamps while the arm rises (read two frames on, once the lamps have followed).
+    await p.goto(parking('&time=21:00'));
+    await p.until(ready, {timeout: 40000});
+    await p.eval(atGate(`requestAnimationFrame(()=>requestAnimationFrame(()=>{window.__lamps=${car}.children[5].visible;}));`));
+    await p.eval(pick);
+    await p.until(`window.__lamps!==undefined`, {timeout: 30000, what: 'the arm rising for the car'});
+    const lamps = await p.eval('__lamps');
+    expect(lamps === true, `the car's headlights stay on while the arm rises (${lamps})`);
+  }},
+  {name: 'the car park\'s catch-up after the 03:00 wrap logs today, not tomorrow', async run(p, expect) {
+    // The wrap moved the log back a day but not the car park's last look: the next catch-up spread its departures
+    // between that (a day ahead) and now, logging them a day in the future.
+    // At the meeting room: the car park is hidden, so its catch-up does the coming and going.
+    await p.goto(`?dest=meeting&${FAST}&time=23:00`);
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting' && !__parking.lot.root.visible`, {timeout: 40000, what: 'at the meeting room, the car park hidden'});
+    // Extra cars in the hidden car park as the day wraps, for the first look after it to take away.
+    await p.eval(`(()=>{window.__wrapped=-1;const off=__world.subscribe(kind=>{if(kind!=='wrap')return;off();const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));
+      for(const v of sim.state.vehicles.filter(v=>v.type==='staff'&&!inside.has(v.id)).slice(0,8)){const s=sim.freeStall('staff');if(!s)break;sim.recordEntry({plate:v.plate,province:v.province,type:'staff',stallId:s.id,color:v.color});__parking.traffic.appear(sim.key(v.plate,v.province));}
+      window.__wrapped=sim.state.events.filter(e=>e.kind==='exit').length;});__world.jumpTo(2*60+59);})()`);
+    const exits = `__parking.sim.state.events.filter(e=>e.kind==='exit')`;
+    await p.until(`__wrapped>=0 && ${exits}.length>__wrapped`, {timeout: 20000, what: 'departures logged after the wrap'});
+    const ahead = await p.eval(`${exits}.filter(e=>e.at>__world.now()+60e3).length`);
+    expect(ahead === 0, `no departure logged in the future (${ahead})`);
+  }},
+  {name: 'opened before 09:00, the car park holds the cars its log says are in', async run(p, expect) {
+    // The seeded morning is 09:00's. Opened earlier, the log lost the later exits but the car park still lacked the
+    // cars that made them: at 08:00 the log said 14 in and none out with 10 parked.
+    await p.goto(`?dest=meeting&${FAST}&time=08:00`);
+    await p.until(UP, {timeout: 40000, what: 'model ready'});
+    await p.eval('__world.setPaused(true)');
+    const r = JSON.parse(await p.eval(`(()=>{const s=__parking.sim.state,n=k=>s.events.filter(e=>e.kind===k).length;return JSON.stringify({entries:n('entry'),exits:n('exit'),parked:s.presence.size,bays:s.stalls.filter(b=>b.occupant).length});})()`));
+    expect(r.parked === r.entries - r.exits && r.bays === r.parked, `${r.entries} in, ${r.exits} out: ${r.parked} parked in ${r.bays} bays`);
+  }},
+  {name: 'opened before 08:31, the seeded visitor request is not in yet', async run(p, expect) {
+    // The seeded morning's pending request is made at 08:31; opened earlier it was already waiting, and approving it
+    // logged a decision before the request.
+    await p.goto(parking('&time=07:40'));
+    await p.until(ready, {timeout: 40000});
+    const early = await p.eval(`__parking.sim.state.requests.filter(q=>q.createdAt>__world.now()).length`);
+    expect(early === 0, `no request from the future (${early})`);
+  }},
+  {name: 'after midnight, the hourly chart counts what the totals count', async run(p, expect) {
+    // Until the day wraps at 03:00, entries after midnight counted in the totals but had no hour in the chart.
+    await p.goto(parking('&time=23:00'));
+    await p.until(ready, {timeout: 40000});
+    await p.eval('__world.setPaused(true)');
+    await p.eval('__world.jumpTo(40)');
+    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&!inside.has(v.id));const s=sim.freeStall('staff');sim.recordEntry({plate:v.plate,province:v.province,type:'staff',stallId:s.id,color:v.color});})()`);
+    const r = JSON.parse(await p.eval(`(()=>{const s=__parking.sim.stats();return JSON.stringify({entries:s.entries,charted:s.hourly.reduce((n,h)=>n+(h.in||0),0)});})()`));
+    expect(r.charted === r.entries, `${r.charted} charted of ${r.entries} entries`);
+  }},
+  {name: 'a jump past midnight finds the VIPs gone home', async run(p, expect) {
+    // VIPs could leave only from 16:30 by the hour reached: a jump from 10:00 to 01:00 left all three parked all night.
+    await p.goto(`?dest=meeting&${FAST}&time=10:00`);
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting' && !__parking.lot.root.visible`, {timeout: 40000, what: 'at the meeting room, the car park hidden'});
+    const vips = `[...__parking.sim.state.presence.values()].filter(p=>p.type==='vip').length`;
+    const before = await p.eval(vips);
+    await p.eval('__world.jumpTo(60)');
+    const after = await p.eval(vips);
+    expect(before > 0 && after < before, `VIPs parked ${before} -> ${after} after the night`);
+  }},
+  {name: 'the report\'s peak counts the cars parked overnight', async run(p, expect) {
+    // The 03:00 wrap moves the night's entries into yesterday while their cars stay: the peak, counted from zero
+    // through today's entries and exits, came out blank or too low.
+    await p.goto(parking('&time=23:00'));
+    await p.until(ready, {timeout: 40000});
+    await p.eval('__world.setPaused(true)');
+    await p.eval('__world.jumpTo(3*60+5)');
+    const s = JSON.parse(await p.eval(`JSON.stringify((({parked,peak,peakAt})=>({parked,peak,peakAt}))(__parking.sim.stats()))`));
+    expect(s.parked > 0 && s.peak >= s.parked && s.peakAt, `peak ${s.peak} (at ${s.peakAt}) with ${s.parked} cars parked`);
+  }},
+  {name: 'a car still driving to its bay is not sent out again', async run(p, expect) {
+    // A jump made a just-arrived visitor's stay look over while it was still on its way to its bay: its exit set off
+    // from the bay at once, and two routes moved the same car.
+    await p.goto(parking('&time=10:00'));
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(sim.key(v.plate,v.province)));
+      window.__k=sim.key(v.plate,v.province);void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-40});})()`);
+    await p.until(`__parking.sim.state.presence.has(__k) && __parking.traffic.isArriving(__k)`, {timeout: 30000, what: 'the car through the barrier, on its way to its bay'});
+    expect(await p.eval('__parking.traffic.leave(__k)') === false, 'leave() turns it down while it drives in');
+    expect(!(await p.eval('__parking.traffic.parkedKeys().includes(__k)')), 'nor is it offered as parked (to Exit)');
+    await p.until('!__parking.traffic.isArriving(__k)', {timeout: 30000, what: 'parked'});
+    expect(await p.eval('__parking.traffic.leave(__k).then(()=>true)') === true, 'and sends it once parked');
+  }},
+  {name: 'Vehicles: a row keeps its vehicle when the list reorders', async run(p, expect) {
+    // Rows were reused by position: when a retried vehicle synced and moved down the list, the row (and a focused
+    // button in it) went on to stand for another vehicle; pressing Disable there disabled that one.
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.click('[data-tab="vehicles"]');
+    await p.until(`!!document.querySelector('.pk-vrow [data-retry]')`, {timeout: 5000, what: 'a vehicle whose sync failed'});
+    const who = `r.querySelector('.pk-row-main').firstElementChild.textContent`;
+    await p.eval(`document.querySelectorAll('.pk-vrow').forEach(r=>r.__id=${who})`);
+    // A button in a row below the retried one (which moves up as that one moves down) has the focus.
+    await p.eval(`(()=>{const rows=[...document.querySelectorAll('.pk-vrow')],i=rows.findIndex(r=>r.querySelector('[data-retry]'));window.__f=rows.slice(i+1).map(r=>r.querySelector('button')).find(Boolean);__f.focus();})()`);
+    await p.click('.pk-vrow [data-retry]');
+    await p.until(`!document.querySelector('.pk-vrow [data-retry]')`, {timeout: 5000, what: 'the retried vehicle synced'});
+    await p.sleep(300);
+    const moved = await p.eval(`[...document.querySelectorAll('.pk-vrow')].filter(r=>r.__id&&r.__id!==${who}).length`);
+    expect(moved === 0, `every kept row still stands for its vehicle (${moved} switched)`);
+    expect(await p.eval('document.activeElement===__f'), 'the focused button keeps the focus as its row moves');
+  }},
+  {name: 'an unknown car let in by hand can leave', async run(p, expect) {
+    // Only staff (and late VIP) cars were picked to leave: a delivery let in through an unknown-plate alert stayed
+    // parked for good, and with only it parked, Exit did nothing.
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.click('[data-tab="gate"]');
+    const left = await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic;
+      for(const k of t.parkedKeys()){const q=sim.state.presence.get(k);t.vanish(k,()=>sim.recordExit({plate:q.plate,province:q.province}));}
+      const s=sim.freeStall('staff');sim.recordEntry({plate:'3ฆง 6047',province:'ชลบุรี',type:'unknown',stallId:s.id,color:6,manual:{by:'staff.guard',reason:'gate.reason.delivery'}});
+      const k=sim.key('3ฆง 6047','ชลบุรี');t.appear(k);document.querySelector('[data-sim="exit"]').click();return !t.parkedKeys().includes(k);})()`);
+    expect(left, 'Exit sent the only parked car, the unknown one, on its way out');
+  }},
+  {name: 'the timeline\'s current minute is now, not a day ahead', async run(p, expect) {
+    // At 15:00:20 the 15:00 moment counted as a day ahead: the jump ran the logs through a whole day.
+    await p.goto(parking('&time=15:00'));
+    await p.until(ready, {timeout: 40000});
+    // (The clock reads the same either way: a day ahead wraps back at 03:00. The jump itself is the harm.)
+    const seen = await p.eval(`(()=>{const seen=[],off=__world.subscribe(k=>{if(k!=='tick')seen.push(k);});__world.jumpTo(Math.floor(__world.minute()));off();return seen.join(',');})()`);
+    expect(!seen, `jumping to the minute it is changed nothing (${seen || 'no events'})`);
+    // The next minute is a few seconds on, not out of reach (the slider's Arrow Right step snapped back).
+    const next = await p.eval(`(()=>{const m=Math.floor(__world.minute())+1;__world.jumpTo(m);return Math.floor(__world.minute())-m;})()`);
+    expect(next === 0, `jumping to the next minute got there (${next} min off)`);
+  }},
+  {name: 'the plate camera\'s picture stays up while paused', async run(p, expect) {
+    // Its dismissal ran on wall-clock time: paused as a car cleared the barrier, the picture went anyway.
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const v=__parking.sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(__parking.sim.key(v.plate,v.province)));
+      window.__k=__parking.sim.key(v.plate,v.province);void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-40});})()`);
+    // Paused as the arm starts down behind the car: past the gate, so the picture's dismissal is already counting.
+    await p.eval(`(()=>{const sim=__parking.sim,set=sim.setGate;sim.setGate=g=>{set(g);if(g==='closing'&&sim.state.presence.has(__k)){sim.setGate=set;__world.setPaused(true);window.__feedUp=!document.querySelector('.pk-feed').hidden;}};})()`);
+    await p.until('__world.paused', {timeout: 30000, what: 'the car past the barrier'});
+    expect(await p.eval('__feedUp'), 'the camera picture was up as the car went through');
+    await p.sleep(4000);
+    expect(!(await p.eval(`document.querySelector('.pk-feed').hidden`)), 'still up after 4 s paused');
+    await p.eval('__world.setPaused(false)');
+  }},
+  {name: 'Requests: a focused row keeps its request when a new one comes in', async run(p, expect) {
+    // Rows were reused by position: a request arriving at the top moved every row's content down one, so a focused
+    // row (Enter opens it) went on to stand for another request.
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.click('[data-tab="requests"]');
+    await p.click('[data-req-filter="all"]');
+    await p.eval(`(()=>{const b=document.querySelectorAll('[data-request]')[1];window.__id=b.dataset.request;window.__b=b;b.focus();})()`);
+    await p.eval(`__parking.sim.submitRequest({visitor:{name:'ทดสอบ ใหม่',phone:'080-000-0000',email:'new@example.com',company:'—'},contact:'host.demo@osd.example',plate:'1กก 1234',province:'กรุงเทพมหานคร',arrival:__world.now(),departure:__world.now()})`);
+    await p.until(`document.querySelectorAll('[data-request]')[0].dataset.request!==document.querySelectorAll('[data-request]')[1].dataset.request && [...document.querySelectorAll('[data-request]')].some(b=>b.textContent.includes('ทดสอบ'))`, {timeout: 5000, what: 'the new request listed'});
+    const r = JSON.parse(await p.eval(`JSON.stringify({id:document.activeElement?.dataset?.request,same:document.activeElement===__b})`));
+    expect(r.id === await p.eval('__id') && r.same, `the focused row still stands for its request (${r.id} vs ${await p.eval('__id')}, same element ${r.same})`);
+  }},
+  {name: 'Car leaving sends out a parked visitor too', async run(p, expect) {
+    // The button shared the background's choice of leavers, which never takes visitors: with only a visitor parked,
+    // it did nothing, and a request's visit could not be ended by hand.
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.click('[data-tab="gate"]');
+    const left = await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic;
+      for(const k of t.parkedKeys()){const q=sim.state.presence.get(k);t.vanish(k,()=>sim.recordExit({plate:q.plate,province:q.province}));}
+      const v=sim.state.vehicles.find(v=>v.type==='guest'&&!sim.state.presence.has(sim.key(v.plate,v.province)));const s=sim.freeStall('guest');
+      sim.recordEntry({plate:v.plate,province:v.province,type:'guest',stallId:s.id,color:v.color});const k=sim.key(v.plate,v.province);t.appear(k);
+      document.querySelector('[data-sim="exit"]').click();return !t.parkedKeys().includes(k);})()`);
+    expect(left, 'Car leaving sent the only parked car, a visitor\'s, on its way out');
+  }},
+  {name: 'opened late in the day, the car park is that hour\'s at once', async run(p, expect) {
+    // Every start after 09:00 began from the seeded morning: at 23:00, 27 cars stood in the bays and drove out
+    // through the barrier one by one.
+    await p.goto(parking('&time=23:00'));
+    await p.until(ready, {timeout: 40000});
+    const parked = await p.eval('__parking.sim.state.presence.size');
+    expect(parked <= 6, `${parked} cars parked at 23:00 (the evening's few)`);
+  }},
+  {name: 'Staff car sends a staff car, never a VIP', async run(p, expect) {
+    // The button shared the background's pool of arrivals, which takes VIPs in the morning.
+    await p.goto(parking('&time=09:00'));
+    await p.until(ready, {timeout: 40000});
+    await p.click('[data-tab="gate"]');
+    // No staff car free to come: the button has nobody to send (a VIP would have been sent instead).
+    const sent = await p.eval(`(()=>{const sim=__parking.sim;for(const v of sim.state.vehicles)if(v.type==='staff')v.enabled=false;
+      document.querySelector('[data-sim="registered"]').click();return sim.state.vehicles.filter(v=>v.type==='vip'&&__parking.traffic.isArriving(sim.key(v.plate,v.province))).length;})()`);
+    expect(sent === 0, `no VIP sent for Staff car (${sent})`);
+  }},
+  {name: 'Vehicles lists every vehicle', async run(p, expect) {
+    // It showed the first 60 only, without saying so: a staff car added by hand dropped out once it synced.
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.click('[data-tab="vehicles"]');
+    const r = JSON.parse(await p.eval(`JSON.stringify({rows:document.querySelectorAll('.pk-vrow').length,all:__parking.sim.state.vehicles.length})`));
+    expect(r.rows === r.all, `${r.rows} rows for ${r.all} vehicles`);
+  }},
   {quick: true, name: 'unknown car: Open once disabled while waiting; Open with a reason is audited', async run(p, expect) {
     // speed 10: the guard turns unanswered cars away after 45 s of demo time, 1.5 s of real time at speed 30.
     await p.goto('?dest=parking&debug=1&speed=10');
@@ -129,8 +346,10 @@ export const scenarios = [
 
   {quick: true, name: 'English switch leaves only names, plates and provinces in Thai', async run(p, expect) {
     await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
+    // The whole showcase up, not only the car park: a switch clicked before its button is wired does nothing.
+    await p.until(`${ready} && ${UP}`, {timeout: 40000});
     await p.click('#lang-toggle');
+    await p.until(`document.documentElement.lang==='en'`, {timeout: 3000, what: 'the page in English'});
     await p.sleep(300);
     const thai = JSON.parse(await p.eval(`JSON.stringify((()=>{const out=new Set();const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){const t=n.textContent.trim();const el=n.parentElement;if(!/[\\u0E00-\\u0E7F]/.test(t)||!el||el.offsetParent===null||el.closest('[hidden],#legacy-controls,.pk-plate-chip,.pk-plate-big,.ph-ticket-plate,.pk-feed-plate,option,.pk-attention small,.pk-row-main,.pk-vrow small'))continue;out.add(t.slice(0,40));}return [...out]})())`));
     await p.click('#lang-toggle');
@@ -155,19 +374,19 @@ export const scenarios = [
   }},
 
   {name: 'explore page shows the car park and a way back', async run(p, expect) {
-    await p.goto(`?explore=1&${FAST}#explore`);
-    await p.until("document.querySelector('#status')?.dataset.state === 'ready'", {timeout: 40000, what: 'model ready'});
+    await p.goto(EXPLORE);
+    await p.until(LOADED, {timeout: 40000, what: 'model ready'});
     expect(await p.eval(`document.querySelector('.back-link')?.getAttribute('href')`) === '#showcase', 'back link to the showcase');
     expect(await p.eval(`!document.querySelector('a[download]')`), 'no model download link (the demo runs locally)');
   }},
 
   {name: 'explore page follows the English choice', async run(p, expect) {
-    await p.goto(`?explore=1&${FAST}#explore`);
+    await p.goto(EXPLORE);
     await p.eval(`localStorage.setItem('osd-demo-language','en')`);
     try {
       await p.eval('location.reload()');
       await p.sleep(300);
-      await p.until("document.querySelector('#status')?.dataset.state === 'ready'", {timeout: 40000, what: 'model ready'});
+      await p.until(LOADED, {timeout: 40000, what: 'model ready'});
       await p.eval(`document.querySelector('.simulation-details').open=true`);
       // Every visible text, the room list included, is English (the device map's Thai room names are translated).
       const thai = await p.eval(`(()=>{const out=new Set();const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){const t=n.textContent.trim(),el=n.parentElement;if(/[\u0E00-\u0E7F]/.test(t)&&el&&(el.offsetParent!==null||el.tagName==='OPTION'))out.add(t.slice(0,40));}
@@ -178,8 +397,8 @@ export const scenarios = [
 
   {name: 'static building still moves where it should: exploded floors and swinging door leaves', async run(p, expect) {
     // The building's matrices are composed once at load (main.js); floors and door hinges must still move on screen.
-    await p.goto(`?explore=1&${FAST}#explore`);
-    await p.until("document.querySelector('#status')?.dataset.state === 'ready'", {timeout: 40000, what: 'model ready'});
+    await p.goto(EXPLORE);
+    await p.until(LOADED, {timeout: 40000, what: 'model ready'});
     const floorY = `(()=>{let m;__scene.getObjectByName('Floor_3').traverse(o=>{if(!m&&o.isMesh)m=o});return m.matrixWorld.elements[13]})()`;
     const y0 = await p.eval(floorY);
     await p.click('#explode'); await p.sleep(300);
@@ -213,8 +432,8 @@ export const scenarios = [
     await p.click('[data-bar="phone"]');
     await p.click('[data-ph="photo"]'); // free play: reads a sample plate after ~1.5 s
     await p.click('[data-bar="play"]');
-    await p.until(`__parking.sim.state.requests.some(q=>q.visitor.name===${JSON.stringify(VISITOR)})`, {timeout: 40000, what: 'story request submitted'});
-    const plate = await p.eval(`__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)}).plate`);
+    await p.until(`!!${STORY_REQUEST}`, {timeout: 40000, what: 'story request submitted'});
+    const plate = await p.eval(`${STORY_REQUEST}.plate`);
     expect(plate === STORY_PLATE, `story request has the story plate (${plate})`);
   }},
 
@@ -251,8 +470,8 @@ export const scenarios = [
     await p.click('[data-bar="play"]');
     await p.until(`!!document.querySelector('[data-ph="photo"]')`, {timeout: 20000, what: 'phone form open'});
     await p.click('[data-ph="photo"]'); // free play: fills the sample plate while the story is still typing
-    await p.until(`__parking.sim.state.requests.some(q=>q.visitor.name===${JSON.stringify(VISITOR)})`, {timeout: 40000, what: 'story request submitted'});
-    const plate = await p.eval(`__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)}).plate`);
+    await p.until(`!!${STORY_REQUEST}`, {timeout: 40000, what: 'story request submitted'});
+    const plate = await p.eval(`${STORY_REQUEST}.plate`);
     expect(plate === STORY_PLATE, `story request has the story plate (${plate})`);
   }},
 
@@ -265,8 +484,8 @@ export const scenarios = [
       const b=!window.__tapped&&document.querySelector('[data-ph="photo"][data-cue="true"]');if(b){window.__tapped=true;b.click();}});o.observe(document.body,{subtree:true,childList:true,attributes:true})})()`);
     await p.click('[data-bar="play"]');
     await p.until('window.__tapped', {timeout: 40000, what: 'photo cue tapped'});
-    await p.until(`__parking.sim.state.requests.some(q=>q.visitor.name===${JSON.stringify(VISITOR)})`, {timeout: 40000, what: 'story request submitted'});
-    const plate = await p.eval(`__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)}).plate`);
+    await p.until(`!!${STORY_REQUEST}`, {timeout: 40000, what: 'story request submitted'});
+    const plate = await p.eval(`${STORY_REQUEST}.plate`);
     expect(plate === STORY_PLATE, `story request has the story plate (${plate})`);
     expect(!(await p.eval('window.__flash')), 'the free-play sample plate never flashed in the phone photo');
   }},
@@ -278,8 +497,8 @@ export const scenarios = [
     await p.eval(`(()=>{const o=new MutationObserver(()=>{if(document.querySelector('.ph-photo-state.reading')){o.disconnect();window.__pressed=true;document.querySelector('[data-ph="photo"]').click();}});o.observe(document.body,{subtree:true,childList:true})})()`);
     await p.click('[data-bar="play"]');
     await p.until('window.__pressed', {timeout: 40000, what: 'photo pressed during the story read'});
-    await p.until(`__parking.sim.state.requests.some(q=>q.visitor.name===${JSON.stringify(VISITOR)})`, {timeout: 40000, what: 'story went on and submitted its request'});
-    const plate = await p.eval(`__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)}).plate`);
+    await p.until(`!!${STORY_REQUEST}`, {timeout: 40000, what: 'story went on and submitted its request'});
+    const plate = await p.eval(`${STORY_REQUEST}.plate`);
     expect(plate === STORY_PLATE, `story request keeps the story plate (${plate})`);
   }},
 
@@ -314,7 +533,7 @@ export const scenarios = [
   }},
   {name: 'typing during the tour\'s photo read keeps every keystroke', async run(p, expect) {
     await p.goto(`?${FAST}`);
-    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000});
+    await p.until(UP, {timeout: 40000});
     // The first keystroke lands the moment the story's read starts (the read lasts only 50 ms at test speed) and ends
     // the tour and its story; the second is typed after it.
     await p.eval(`(()=>{const o=new MutationObserver(()=>{if(document.querySelector('.ph-photo-state.reading')){o.disconnect();const i=document.querySelector('input[name="plate"]');i.focus();i.value='9';i.setSelectionRange(1,1);i.dispatchEvent(new Event('input',{bubbles:true}));window.__typed=true;}});o.observe(document.body,{subtree:true,childList:true})})()`);
@@ -340,7 +559,7 @@ export const scenarios = [
     expect(await p.eval(`document.querySelector('#pk-phone [name="plate"]').value === '6กม 3195'`), 'the new read fills the new form');
   }},
   {name: 'room-colour bar waits for a real landing (also after R); narrow views keep the title beside it', async run(p, expect) {
-    await p.cdp('Emulation.setDeviceMetricsOverride', {width: 760, height: 900, deviceScaleFactor: 1, mobile: false});
+    await viewport(p, 760, 900);
     try {
       // Real speed: the final approach then lasts ~1.5 s, so the drag below reliably lands inside it.
       await p.goto('?debug=1');
@@ -370,7 +589,7 @@ export const scenarios = [
       // The R key on the 3D view is Reset view too: it lands, the bar comes back.
       await p.eval(`__renderer.domElement.dispatchEvent(new KeyboardEvent('keydown',{key:'r',bubbles:true}))`);
       await p.until(`!document.querySelector('.insight-toolbar').hidden`, {timeout: 10000, what: 'bar after R (Reset view) lands'});
-    } finally { await p.cdp('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false}); }
+    } finally { await viewport(p); }
   }},
 
   {name: 'koi swim (in the shader, inside the water) and stand still when paused', async run(p, expect) {
@@ -389,13 +608,12 @@ export const scenarios = [
   {name: 'pond reflection: plain water flying in (never a stale, dark mirror), fading out and back in, never snapping', async run(p, expect) {
     await p.goto('?debug=1');
     await p.until(`${UP} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
-    const idle = `!document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
     // Read each time the pond is actually drawn (the mirror sets the value just before; when the pond is off screen it
     // is not drawn and the value is not used), with whether the camera was flying. The water's material may be a cut
     // copy mid-flight: it must still show the mirror's picture (a copy that lost it drew the pond black).
     await p.eval(`(()=>{window.__mixes=[];window.__blind=0;const w=__scene.getObjectByName('Courtyard_water_reflection'),before=w.onBeforeRender;w.onBeforeRender=function(...a){before.apply(this,a);const u=this.material.uniforms;if(u.reflectionMix.value>0&&!u.tDiffuse.value)__blind++;__mixes.push([document.querySelector('#viewport').classList.contains('flying'),u.reflectionMix.value]);};})()`);
     await p.click('[data-destination="pond"]');
-    await p.until(`document.body.dataset.tourDestination==='pond' && ${idle}`, {timeout: 20000, what: 'landed at the pond'});
+    await p.until(`document.body.dataset.tourDestination==='pond' && ${STILL}`, {timeout: 20000, what: 'landed at the pond'});
     await p.sleep(400);
     const flyingIn = (await p.eval('__mixes')).filter(([flying]) => flying).map(([, v]) => v);
     expect(flyingIn.length && flyingIn.every(v => v === 0), `flying in, the pond shows plain water (mix ${[...new Set(flyingIn)].join(', ')})`);
@@ -403,15 +621,14 @@ export const scenarios = [
     expect(landing.at(-1) === 1 && landing.some(v => v > 0 && v < 1), `landed: the reflection fades back in (mix ${landing.slice(0, 6).map(v => v.toFixed(2)).join(', ')} … ${landing.at(-1)})`);
     await p.eval('__mixes.length=0');
     await p.click('[data-destination="overview"]');
-    await p.until(`document.body.dataset.tourDestination==='overview' && ${idle}`, {timeout: 20000, what: 'landed at the overview'});
+    await p.until(`document.body.dataset.tourDestination==='overview' && ${STILL}`, {timeout: 20000, what: 'landed at the overview'});
     const leaving = (await p.eval('__mixes')).filter(([flying]) => flying).map(([, v]) => v);
     expect(leaving.length > 1 && leaving[0] > .5 && leaving.every((v, i) => !i || v <= leaving[i - 1]), `leaving, the reflection fades out (mix ${leaving.slice(0, 8).map(v => v.toFixed(2)).join(', ')})`);
     expect(await p.eval('__blind') === 0, `the water always had the mirror's picture while showing it (${await p.eval('__blind')} draws without)`);
   }},
   {name: 'flying between stops: one continuous move that speeds up and slows down once, the car park included', async run(p, expect) {
     await p.goto('?debug=1');
-    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
-    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
     // The camera's speed on every frame of each flight. The old route (back out to the overview, turn, then in) came
     // to a near standstill between its legs; a curve run at its own uneven pace crept, then rushed, or lurched halfway.
     // One flight's speed rises to a single peak and falls from it (frame-to-frame jitter of a few % aside).
@@ -422,7 +639,7 @@ export const scenarios = [
         window.__onMove=()=>{const t=document.timeline.currentTime;if(last.t!==null&&t>last.t)__speeds.push([c.position.distanceTo(last.p),t-last.t]);if(last.t===null||t>last.t){last.p.copy(c.position);last.t=t;}};
         __controls.addEventListener('change',__onMove);})()`);
       await p.click(`[data-destination="${to}"]`);
-      await p.until(`${idle} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
+      await p.until(`${IDLE} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
       await p.eval(`__controls.removeEventListener('change',__onMove)`);
       const raw = await p.eval('__speeds'), steps = raw.slice(raw.findIndex(([d]) => d > 0)), speeds = steps.map(([d, dt]) => d / dt);
       // Distance over time across three frames: around a frame drawn late, one sample can catch the camera half a step
@@ -438,28 +655,25 @@ export const scenarios = [
   }},
   {name: 'car park layout: a second stop picked during the layout change still ends in the right layout', async run(p, expect) {
     await p.goto('?debug=1');
-    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
-    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
     for (const [first, second, parked] of [['parking', 'energy', false], ['pond', 'parking', true]]) {
       await p.eval(`document.querySelector('[data-destination="${first}"]').click()`); await p.sleep(120);
       await p.eval(`document.querySelector('[data-destination="${second}"]').click()`);
-      await p.until(`${idle} && document.body.dataset.tourDestination==='${second}'`, {timeout: 20000, what: `landed at ${second}`});
+      await p.until(`${IDLE} && document.body.dataset.tourDestination==='${second}'`, {timeout: 20000, what: `landed at ${second}`});
       await p.sleep(900); // any layout change still queued has run
       expect(await p.eval(`document.body.classList.contains('parking-active')`) === parked, `${first} then ${second}: the ${parked ? 'car park' : 'building'} layout`);
     }
   }},
   {name: 'no shader is built mid-flight, by day or night: the loading screen prepared them all', async run(p, expect) {
     // A shader built on the spot froze the view mid-flight: 30 ms for the first cut copies of the building's materials,
-    // 0.1–0.2 s at night when hiding a floor (its room lights) changed the
-    // number of lights.
+    // 0.1–0.2 s at night when hiding a floor (its room lights) changed the number of lights.
     for (const time of ['10:00', '20:30']) {
       await p.goto(`?debug=1&time=${time}`);
-      const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
-      await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+      await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
       const before = await p.eval('__renderer.info.programs.length');
       for (const to of ['parking', 'meeting', 'pond', 'energy', 'access', 'overview']) {
         await p.click(`[data-destination="${to}"]`);
-        await p.until(`${idle} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
+        await p.until(`${IDLE} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
       }
       const built = await p.eval(`__renderer.info.programs.slice(${before}).map(x=>x.name)`);
       expect(!built.length, `${time}: no shader built during the flights (${built.join(', ') || 'none'})`);
@@ -483,20 +697,18 @@ export const scenarios = [
   }},
   {name: 'the car park layout changes as one animation (a view transition), not in a single frame', async run(p, expect) {
     await p.goto('?debug=1');
-    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
-    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
     const watch = `(()=>{window.__vt=new Set();const t0=performance.now();const f=()=>{for(const a of document.getAnimations())if(a.effect?.pseudoElement?.startsWith('::view-transition-group'))__vt.add(a.effect.pseudoElement);if(performance.now()-t0<600)requestAnimationFrame(f);};requestAnimationFrame(f);})()`;
     for (const to of ['parking', 'pond']) {
       await p.eval(watch); await p.click(`[data-destination="${to}"]`); await p.sleep(700);
       const groups = await p.eval('[...__vt]');
       expect(['tour-view', 'tour-dock', 'tour-panel'].every(n => groups.includes(`::view-transition-group(${n})`)), `to ${to}: the 3D view, the dock and the panel move to their new place (${groups.join(', ') || 'no transition'})`);
-      await p.until(`${idle} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
+      await p.until(`${IDLE} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
     }
   }},
   {quick: true, name: 'flying between stops: floors are sliced away and built up solid, never faded see-through', async run(p, expect) {
     await p.goto('?debug=1');
-    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
-    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
     // Every frame of the flights: named building meshes drawn more see-through than they were before (the stop's
     // marker, unnamed, fades on purpose), and frames where geometry is being cut.
     await p.eval(`(()=>{const scene=__scene,before=new Map();scene.traverse(o=>{if(o.isMesh&&o.name)before.set(o,[].concat(o.material).map(m=>({transparent:m.transparent,opacity:m.opacity})));});
@@ -505,7 +717,7 @@ export const scenarios = [
         if(cut)__cuts++;}requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
     for (const stop of ['meeting', 'pond', 'energy']) {
       await p.click(`[data-destination="${stop}"]`);
-      await p.until(`${idle} && document.body.dataset.tourDestination==='${stop}'`, {timeout: 20000, what: `landed at ${stop}`});
+      await p.until(`${IDLE} && document.body.dataset.tourDestination==='${stop}'`, {timeout: 20000, what: `landed at ${stop}`});
     }
     expect(await p.eval('__cuts') > 5, `floors were cut while changing (${await p.eval('__cuts')} frames)`);
     expect(await p.eval('__xray') === 0, `no floor faded see-through (${await p.eval('__xray')} mesh-frames)`);
@@ -533,8 +745,7 @@ export const scenarios = [
   }},
   {name: 'pond: the water is drawn on every frame from the overview to the pond and back (it never appears at once)', async run(p, expect) {
     await p.goto('?debug=1');
-    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
-    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
     // Each frame the pond is on screen: whether its water layer was drawn, and how far its mix moved since the last frame.
     await p.eval(`(()=>{const R=__renderer,w=__scene.getObjectByName('Courtyard_water_reflection'),pond=__scene.getObjectByName('Floor_1_koi_pond_0');window.__water={frames:0,missing:0,jump:0};let drawn=false,last=null;
       const ob=w.onBeforeRender;w.onBeforeRender=function(...a){ob.apply(this,a);drawn=true;const m=this.material.uniforms.reflectionMix.value;if(last!==null)__water.jump=Math.max(__water.jump,Math.abs(m-last));last=m;};
@@ -543,7 +754,7 @@ export const scenarios = [
         if(q.z<1&&Math.abs(q.x)<1&&Math.abs(q.y)<1){__water.frames++;if(!drawn)__water.missing++;}return o;};})()`);
     for (const to of ['pond', 'overview']) {
       await p.click(`[data-destination="${to}"]`);
-      await p.until(`${idle} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
+      await p.until(`${IDLE} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
       await p.sleep(400);
     }
     const water = await p.eval('__water');
@@ -553,13 +764,12 @@ export const scenarios = [
   }},
   {name: 'meeting room: its light cone fades in as the camera arrives and out as it leaves (no pop)', async run(p, expect) {
     await p.goto('?debug=1&time=10:00');
-    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
-    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
     // The cone's opacity on every frame (0 while hidden).
     await p.eval(`(()=>{window.__cone=[];const g=__scene.getObjectByName('Demo_meeting');let cone=null;g.traverse(o=>{if(o.geometry?.type==='CylinderGeometry')cone=o;});
       const f=()=>{let shown=true;for(let o=cone;o;o=o.parent)if(!o.visible)shown=false;__cone.push(shown?cone.material.opacity:0);if(__cone.length<600)requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
-    await p.click('[data-destination="meeting"]'); await p.until(`${idle} && document.body.dataset.tourDestination==='meeting'`, {timeout: 20000, what: 'at the meeting room'}); await p.sleep(500);
-    await p.click('[data-destination="pond"]'); await p.until(`${idle} && document.body.dataset.tourDestination==='pond'`, {timeout: 20000, what: 'at the pond'});
+    await p.click('[data-destination="meeting"]'); await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 20000, what: 'at the meeting room'}); await p.sleep(500);
+    await p.click('[data-destination="pond"]'); await p.until(`${IDLE} && document.body.dataset.tourDestination==='pond'`, {timeout: 20000, what: 'at the pond'});
     const c = await p.eval('__cone'), top = Math.max(...c);
     let step = 0; for (let i = 1; i < c.length; i++) step = Math.max(step, Math.abs(c[i] - c[i - 1]));
     expect(top > .15 && c.at(-1) === 0, `the cone showed at the meeting room (${top.toFixed(2)}) and is gone at the pond`);
@@ -622,8 +832,7 @@ export const scenarios = [
   }},
   {name: 'night flights: room lights moving between rooms (the floors change) fade out and in, never switch at once', async run(p, expect) {
     await p.goto('?debug=1&time=19:00');
-    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
-    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
     await p.sleep(600);
     // Each frame: each room spot's brightness as drawn (0 while it or its floor is hidden); a change of more than half
     // of full (the brightest seen) in one frame is a light switching at once. The fades run on time (0.22 s each way): a slow frame
@@ -635,12 +844,144 @@ export const scenarios = [
         last=now;requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
     for (const to of ['meeting', 'pond', 'energy', 'overview']) {
       await p.click(`[data-destination="${to}"]`);
-      await p.until(`${idle} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
+      await p.until(`${IDLE} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
       await p.sleep(500);
     }
     expect(await p.eval('__moves') >= 3, `the lights moved between rooms as the floors changed (${await p.eval('__moves')} moves)`);
     const full = await p.eval('__full'), jumps = (await p.eval('__jumps')).filter(j => j.d > full / 2).map(j => j.text);
     expect(!jumps.length, `no light switched at once (${jumps.slice(0, 4).join(', ') || 'none'})`);
+  }},
+  {name: 'a flight that starts during the warm-up leaves the real materials behind', async run(p, expect) {
+    // The warm-up lends every mesh a copy of its material while shaders compile (sceneTransition.prepare); a ?dest=
+    // flight can set off meanwhile, and once it ended after the lend it put those copies back as the meshes' own. Here
+    // a flight sets off inside a lend on purpose, rather than hoping the load's timing lines up.
+    // Real speed: a flight at ?speed=30 is over within a frame or two.
+    await p.goto('?debug=1&warm=0&time=10:00');
+    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
+    // The lend lasts until the flight's second change has begun (the approach, partway through the flight; the first
+    // is at take-off), and the flight outlasts it.
+    await p.eval(`__transition.prepare(async()=>{if(window.__flown)return;window.__flown=true;
+      const begun=new Promise(r=>{const begin=__transition.begin;let n=0;__transition.begin=(...a)=>{begin(...a);if(++n===2){__transition.begin=begin;r();}};});
+      document.querySelector('[data-destination="meeting"]').click();await begun;})`);
+    expect(await p.eval(`document.querySelector('#viewport').classList.contains('flying')`), 'the flight outlasts the lend');
+    await p.until(`document.body.dataset.tourDestination==='meeting' && ${STILL}`, {timeout: 20000, what: 'at the meeting room'});
+    const kept = await p.eval(`(()=>{let n=0;__scene.traverse(o=>{if(o.isMesh&&[].concat(o.material).some(m=>__transition.isCopy(m)))n++;});return n;})()`);
+    expect(kept === 0, `no mesh keeps a lent copy once both are over (${kept})`);
+  }},
+  {name: 'a warm-up that starts during a flight leaves the flight\'s materials alone', async run(p, expect) {
+    // The other way round: the flight's floor change is under way when a lend begins. It used to take the change's
+    // copies for the meshes' own (and put them back for good), and remake copies the change was drawing with.
+    await p.goto('?debug=1&warm=0&time=10:00');
+    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
+    const kept = await p.eval(`(async()=>{let n=0;const begin=__transition.begin;
+      await new Promise(r=>{__transition.begin=(...a)=>{begin(...a);if(++n===2){__transition.begin=begin;r();}};document.querySelector('[data-destination="meeting"]').click();});
+      await __transition.prepare(()=>new Promise(r=>{const t=setInterval(()=>{if(!document.querySelector('#viewport').classList.contains('flying')){clearInterval(t);r();}},20);}));
+      let k=0;__scene.traverse(o=>{if(o.isMesh&&[].concat(o.material).some(m=>__transition.isCopy(m)))k++;});return k;})()`);
+    expect(kept === 0, `no mesh keeps a copy once both are over (${kept})`);
+  }},
+  {name: 'the koi keep swimming while a flight cuts their floor', async run(p, expect) {
+    // The cut's material copies dropped the koi's shader hook (copy() leaves it out): the fish jumped back to their
+    // modelled places for the length of the flight.
+    await p.goto('?debug=1&warm=0&time=10:00');
+    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
+    const r = JSON.parse(await p.eval(`(async()=>{let n=0;const begin=__transition.begin;
+      await new Promise(r=>{__transition.begin=(...a)=>{begin(...a);if(++n===2){__transition.begin=begin;r();}};document.querySelector('[data-destination="meeting"]').click();});
+      const fish=[];__scene.traverse(o=>{if(o.isMesh&&/_koi_(?!pond)/.test(o.name))fish.push(o);});
+      return JSON.stringify({fish:fish.length,cut:fish.filter(o=>__transition.isCopy(o.material)).length,swimming:fish.filter(o=>o.material.customProgramCacheKey()==='koi').length});})()`));
+    expect(r.fish > 0 && r.cut > 0, `the flight cuts the koi (${r.cut} of ${r.fish} drawn through copies)`);
+    expect(r.swimming === r.fish, `every koi keeps its swimming shader (${r.swimming} of ${r.fish})`);
+  }},
+  {name: 'a spot light\'s shadow follows it to another room', async run(p, expect) {
+    // A new selection deals the night's spot lights again; each fades out, then moves. The shadow redraw came with the
+    // selection, before the move, so a shadow-casting light lit its new room with the old room's shadows.
+    // On the explore page with the clock at real time (?day=0): the showcase's car park and a fast clock's sky steps
+    // redraw the shadows often enough to hide it. (Paused, the lights would not move at all.)
+    await p.goto(`?explore=1&debug=1&warm=0&time=22:00&day=0#explore`);
+    await p.until(`${LOADED} && !!window.__simulationApi`, {timeout: 40000, what: 'explore page ready'});
+    await p.sleep(800);
+    const spots = `JSON.stringify(__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.castShadow&&l.name.startsWith('Simulation_spot')).map(l=>l.getWorldPosition(l.position.clone()).toArray().map(v=>v.toFixed(2))))`;
+    await p.eval(`(()=>{const sm=__renderer.shadowMap,render=sm.render.bind(sm);sm.render=(...a)=>{if(sm.needsUpdate)window.__shadowFor=${spots};return render(...a);};})()`);
+    const before = await p.eval(spots);
+    await p.eval(`__simulationApi.selectRoom('f1_lobby')`);
+    await p.until(`${spots}!==${JSON.stringify(before)}`, {timeout: 5000, what: 'a shadow-casting spot light moved'});
+    await p.sleep(1500);
+    const now = await p.eval(spots), drawn = await p.eval('window.__shadowFor');
+    expect(drawn === now, `the last shadow redraw saw the lights where they are (${drawn} vs ${now})`);
+  }},
+  {name: 'a door stops mid-swing while paused', async run(p, expect) {
+    // The swing ran on frame time: paused as a door began to open, it carried on to the end with everything else still.
+    await p.goto(`?dest=meeting&${FAST}&time=10:00`);
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
+    const hinges = `(()=>{const h=[];__scene.traverse(o=>{if(o.userData.deviceKind==='door'&&o.userData.doorId&&!o.isMesh)h.push(o.rotation.y.toFixed(4));});return h.join(',');})()`;
+    await p.click('[data-control="door"]');
+    await p.eval('__world.setPaused(true)');
+    // A frame already on its way draws the door where it was at the moment of the pause; from then on it stands still.
+    await p.sleep(150);
+    const at = await p.eval(hinges);
+    await p.sleep(900);
+    expect(await p.eval(hinges) === at, 'the door did not move while paused');
+    // Nor are the shadows redrawn meanwhile: a still door's shadow has nothing new to show (the room's air keeps
+    // the view itself drawing).
+    const draws = await p.eval(`new Promise(done=>{const R=__renderer,render=R.render.bind(R);let n=0;R.render=(...a)=>{if(!R.getRenderTarget()&&R.shadowMap.needsUpdate)n++;return render(...a);};setTimeout(()=>{R.render=render;done(n);},600);})`);
+    expect(draws <= 2, `no shadow redraws while it stands paused (${draws} in 0.6 s)`);
+    await p.eval('__world.setPaused(false)');
+    await p.sleep(900);
+    expect(await p.eval(hinges) !== at, 'and finished its swing on Resume');
+  }},
+  {name: 'the meeting room\'s light fade holds while paused', async run(p, expect) {
+    // The lamp's fade ran on frame time: switched off and paused at once, the cone still faded out.
+    await p.goto(`?dest=meeting&${FAST}&time=10:00`);
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
+    const cone = `(()=>{let c=null;__scene.getObjectByName('Demo_meeting').traverse(o=>{if(o.geometry?.type==='CylinderGeometry')c=o;});return c.material.opacity;})()`;
+    await p.sleep(800); // the stop's own fade-in on arrival (on frame time, like the flight) is over
+    await p.click('[data-control="light"]');
+    await p.eval('__world.setPaused(true)');
+    await p.sleep(150);
+    const at = await p.eval(cone);
+    await p.sleep(600);
+    const later = await p.eval(cone);
+    expect(at > .05 && later === at, `the fade held (opacity ${at.toFixed(2)} → ${later.toFixed(2)})`);
+    await p.eval('__world.setPaused(false)');
+  }},
+  {name: 'the meeting room\'s fittings and air hold their fades while paused', async run(p, expect) {
+    // The fittings' glow and the AC's airflow faded on frame time: switched off and paused at once, both went out.
+    await p.goto(`?dest=meeting&${FAST}&time=10:00`);
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
+    await p.sleep(800);
+    const read = `JSON.stringify((()=>{let glow=0,air=0;__scene.traverse(o=>{if(o.userData.roomId==='f4_meeting_2'&&o.userData.deviceKind==='light')for(const m of [].concat(o.material))glow+=m.emissiveIntensity||0;});
+      __scene.getObjectByName('Demo_meeting').traverse(o=>{if(o.material?.isLineDashedMaterial)air+=o.material.opacity*(o.visible?1:0);});return {glow:+glow.toFixed(3),air:+air.toFixed(3)};})())`;
+    await p.click('[data-control="light"]');
+    await p.click('[data-control="climate"]');
+    await p.eval('__world.setPaused(true)');
+    await p.sleep(150);
+    const at = JSON.parse(await p.eval(read));
+    await p.sleep(600);
+    const later = JSON.parse(await p.eval(read));
+    expect(at.glow > 0 && at.air > 0 && later.glow === at.glow && later.air === at.air, `held (glow ${at.glow} → ${later.glow}, air ${at.air} → ${later.air})`);
+    await p.eval('__world.setPaused(false)');
+  }},
+  {name: 'the meeting room\'s air draws nothing while paused', async run(p, expect) {
+    // The airflow stood still while paused but went on uploading its lines and redrawing the scene on every frame.
+    await p.goto(`?dest=meeting&${FAST}&time=10:00`);
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
+    await p.sleep(800);
+    await p.eval('__world.setPaused(true)');
+    await p.sleep(300);
+    const draws = await p.eval(`new Promise(done=>{const R=__renderer,render=R.render.bind(R);let n=0;R.render=(...a)=>{if(!R.getRenderTarget())n++;return render(...a);};setTimeout(()=>{R.render=render;done(n);},1000);})`);
+    expect(draws <= 3, `${draws} redraws in a paused second`);
+    await p.eval('__world.setPaused(false)');
+  }},
+  {name: 'a room light paused mid-fade draws nothing', async run(p, expect) {
+    // The fade held while paused but repainted and redrew the scene on every frame.
+    await p.goto(`?dest=meeting&${FAST}&time=10:00`);
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
+    await p.sleep(800);
+    await p.click('[data-control="light"]');
+    await p.eval('__world.setPaused(true)');
+    await p.sleep(200);
+    const draws = await p.eval(`new Promise(done=>{const R=__renderer,render=R.render.bind(R);let n=0;R.render=(...a)=>{if(!R.getRenderTarget())n++;return render(...a);};setTimeout(()=>{R.render=render;done(n);},750);})`);
+    expect(draws <= 3, `${draws} redraws in 0.75 s paused`);
+    await p.eval('__world.setPaused(false)');
   }},
   {name: 'a door\'s shadow follows it as it swings, not only once it is open', async run(p, expect) {
     await p.goto('?debug=1&dest=meeting&time=10:00');
@@ -668,10 +1009,12 @@ export const scenarios = [
     // cameras' snapshots of passing cars draw into targets too, through named cameras).
     await p.eval(`(()=>{const R=__renderer,render=R.render.bind(R);window.__passes={screen:0,mirror:0};R.render=(s,c)=>{if(!R.getRenderTarget())__passes.screen++;else if(c.isPerspectiveCamera&&!c.name)__passes.mirror++;return render(s,c);};})()`);
     // Still camera, the view kept redrawing (as passing cars do).
-    const redraw = `(()=>{let n=0;const f=()=>{__controls.dispatchEvent({type:'change'});if(++n<60)requestAnimationFrame(f);};requestAnimationFrame(f);})()`;
-    await p.eval('Object.assign(__passes,{screen:0,mirror:0})'); await p.eval(redraw); await p.sleep(1200);
-    const still = await p.eval('({...__passes})');
-    expect(still.screen >= 30 && still.mirror <= Math.ceil(still.screen / 4), `still: the mirror is not redrawn every frame (${still.mirror} mirror passes for ${still.screen} frames)`);
+    // Its limit is time, not frames (one pass per 100 ms, render-kit STILL_MS): at under 10 frames a second, as with
+    // eight software-rendering browsers, it may rightly redraw on every frame.
+    const redraw = `new Promise(done=>{let n=0;const t0=performance.now();const f=()=>{__controls.dispatchEvent({type:'change'});if(++n<60)requestAnimationFrame(f);else requestAnimationFrame(()=>done(performance.now()-t0));};requestAnimationFrame(f);})`;
+    await p.eval('Object.assign(__passes,{screen:0,mirror:0})'); const ms = await p.eval(redraw);
+    const still = await p.eval('({...__passes})'), limit = Math.ceil(ms / 100) + 1;
+    expect(still.screen >= 30 && still.mirror <= limit, `still: the mirror is redrawn at most every 100 ms (${still.mirror} mirror passes for ${still.screen} frames in ${Math.round(ms)} ms; at most ${limit})`);
     // The camera turns a little: the mirror follows on that same frame.
     // Counted from the move on, in one step: a frame drawn in between (cars passing, the camera still) is not it.
     await p.eval(`(()=>{Object.assign(__passes,{screen:0,mirror:0});const c=__controls.object,t=__controls.target;c.position.sub(t).applyAxisAngle({x:0,y:1,z:0,isVector3:true},.02).add(t);__controls.update();})()`);
@@ -736,7 +1079,344 @@ export const scenarios = [
     await p.sleep(300);
     expect(!(await p.eval('__parking.story.running')), 'touch stopped the story');
   }},
+  {name: 'kiosk: a wheel step the view keeps for itself still counts as a touch', async run(p, expect) {
+    // The close zoom stops its wheel steps at the canvas (stopImmediatePropagation, capture phase); the kiosk's activity
+    // listener has to see them before that, or scrolling in close never paused the loop or put off its return.
+    await p.goto(`?kiosk=1&${FAST}&time=12:00`);
+    await p.until(`${UP} && document.querySelector('#kiosk-toggle').checked`, {timeout: 40000, what: 'the kiosk following the day'});
+    await p.eval(`(()=>{const c=document.querySelector('#viewport canvas');c.addEventListener('wheel',e=>e.stopImmediatePropagation(),{capture:true,once:true});c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaY:-100}));})()`);
+    await p.sleep(300);
+    const progress = await p.eval(`document.querySelector('#tour-progress').textContent`);
+    expect(/หยุดโหมดจัดแสดงชั่วคราว|Paused the showcase loop/.test(progress), `the wheel step paused the loop (progress: ${progress})`);
+  }},
 
+  {name: 'kiosk: Stop following stops following', async run(p, expect) {
+    // The kiosk's activity listener stopped following on the button's pointerdown; its click then started it again.
+    await p.goto(`?kiosk=1&${FAST}&time=12:00`);
+    await p.until(`${UP} && document.querySelector('#day-play')?.getAttribute('aria-pressed')==='true'`, {timeout: 40000, what: 'the kiosk following the day'});
+    await p.click('#day-play');
+    await p.sleep(300);
+    expect(await p.eval(`document.querySelector('#day-play').getAttribute('aria-pressed')`) === 'false', 'the button shows following stopped');
+  }},
+  {name: 'kiosk: Stop tour stops the tour, Pause pauses the parking story', async run(p, expect) {
+    // Like Stop following: the activity listener stopped the tour on pointerdown and the click started it again; and
+    // Pause ended the kiosk's morning parking story instead of pausing it.
+    await p.goto(`?kiosk=1&${FAST}&time=07:35`);
+    await p.until('window.__parking && __parking.story.running', {timeout: 60000, what: 'the morning car park plays the parking story'});
+    await p.click('#day-pause');
+    await p.sleep(300);
+    expect(await p.eval('__world.paused') && await p.eval('__parking.story.running'), `Pause paused the story (clock paused ${await p.eval('__world.paused')}, story running ${await p.eval('__parking.story.running')})`);
+    await p.click('#day-pause');
+    const label = `document.querySelector('#tour-play span').textContent`;
+    await p.click('#tour-play');
+    await p.until(`/หยุดพาชม|Stop tour/.test(${label})`, {timeout: 5000, what: 'the tour started'});
+    await p.click('#tour-play');
+    await p.sleep(300);
+    expect(/เริ่มพาชม|Start tour/.test(await p.eval(label)), `Stop tour stopped it (button: ${await p.eval(label)})`);
+  }},
+  {name: 'kiosk: Pause on the way to the car park holds the story until Resume', async run(p, expect) {
+    // Following the day, the kiosk flies to the car park and starts the morning story on landing; starting, the story
+    // set the clock going, so a Pause tapped on the way lasted only until the camera landed.
+    // Real speed: at ?speed=30 the flight is over before it can be tapped.
+    await p.goto('?kiosk=1&debug=1&warm=0&time=07:50');
+    await p.until(`${UP} && document.body.dataset.tourDestination==='parking' && document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'the kiosk flying to the car park'});
+    await p.click('#day-pause');
+    await p.until(STILL, {timeout: 10000, what: 'landed'});
+    await p.sleep(500);
+    const paused = JSON.parse(await p.eval(`JSON.stringify({paused:__world.paused,story:__parking.story.running})`));
+    expect(paused.paused && !paused.story, `still paused after landing, no story yet (paused ${paused.paused}, story ${paused.story})`);
+    await p.click('#day-pause');
+    await p.until('__parking.story.running', {timeout: 5000, what: 'the story starting on Resume'});
+    expect(true, 'the story started on Resume');
+  }},
+  {name: 'tour: Pause on the way to the car park holds the story until Resume', async run(p, expect) {
+    // As for the kiosk: the tour's car park stop started the story on landing, which set a paused clock going again.
+    // The Pause comes the moment the tour sets off for the car park (at ?speed=30 the flight is too short to tap).
+    await p.goto(`?${FAST}`);
+    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
+    await p.eval(`new MutationObserver((_,o)=>{if(document.body.dataset.tourDestination==='parking'){o.disconnect();__world.setPaused(true);}}).observe(document.body,{attributes:true,attributeFilter:['data-tour-destination']})`);
+    await p.click('#tour-play');
+    await p.until(`document.body.dataset.tourDestination==='parking' && ${STILL}`, {timeout: 20000, what: 'the tour at the car park'});
+    await p.sleep(500);
+    const r = JSON.parse(await p.eval(`JSON.stringify({paused:__world.paused,story:__parking.story.running})`));
+    expect(r.paused && !r.story, `still paused after landing, no story yet (paused ${r.paused}, story ${r.story})`);
+    await p.click('#day-pause');
+    await p.until('__parking.story.running', {timeout: 5000, what: 'the story starting on Resume'});
+    expect(true, 'the story started on Resume');
+  }},
+  {name: 'Follow the day again: a story left waiting for Resume does not start mid-flight', async run(p, expect) {
+    // Paused on the way to the car park, the story waits for Resume. Following stopped, then started again, the old
+    // wait still held: Follow's Resume started the story at once, while the camera was still on its way.
+    await p.goto(`?${FAST}&time=07:50`);
+    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
+    await p.eval(`new MutationObserver((_,o)=>{if(document.body.dataset.tourDestination==='parking'){o.disconnect();__world.setPaused(true);}}).observe(document.body,{attributes:true,attributeFilter:['data-tour-destination']})`);
+    await p.click('#day-play');
+    await p.until(`document.body.dataset.tourDestination==='parking' && ${STILL}`, {timeout: 20000, what: 'following, paused at the car park'});
+    await p.click('#day-play');
+    await p.click('[data-destination="pond"]');
+    await p.until(`document.body.dataset.tourDestination==='pond' && ${STILL}`, {timeout: 20000, what: 'at the pond'});
+    // Where the camera is when the story is started (once there, the story moves the camera itself).
+    await p.eval(`(()=>{const play=__parking.playStory;__parking.playStory=(...a)=>{window.__early=document.querySelector('#viewport').classList.contains('flying')||document.body.dataset.tourDestination!=='parking';return play(...a);};})()`);
+    await p.click('#day-play');
+    await p.until(`__parking.story.running`, {timeout: 20000, what: 'the story at the car park'});
+    expect(!(await p.eval('__early')), 'the story started only once the camera was at the car park');
+  }},
+  {name: 'timeline: a time picked while following the day is the one gone to', async run(p, expect) {
+    // Let go, the slider stopped Follow first, which put the slider back to the live time before its value was read.
+    await p.goto(`?${FAST}&time=12:00`);
+    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
+    await p.click('#day-play');
+    await p.eval(`(()=>{const r=document.querySelector('#day-time');r.value='900';r.dispatchEvent(new Event('input',{bubbles:true}));r.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    const m = await p.eval('Math.floor(__world.minute())');
+    expect(m >= 900 && m < 910, `the clock went to 15:00 (minute ${m})`);
+  }},
+  {name: 'timeline: a jump stops a parking story played on its own', async run(p, expect) {
+    // The story holds the clock and sets it at each step: left running, it put a jump to 20:00 back to the morning.
+    await p.goto(parking('&story=1'));
+    await p.until('__parking.story.running', {timeout: 40000, what: 'the story playing'});
+    await p.eval(`(()=>{const r=document.querySelector('#day-time');r.value='1200';r.dispatchEvent(new Event('input',{bubbles:true}));r.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await p.sleep(1500);
+    const r = JSON.parse(await p.eval(`JSON.stringify({story:__parking.story.running,m:Math.floor(__world.minute())})`));
+    expect(!r.story && r.m >= 1200 && r.m < 1320, `the story stopped and the clock stayed in the evening (story ${r.story}, minute ${r.m})`);
+  }},
+  {name: 'a parking story stopped while it resets the world sets no clock after', async run(p, expect) {
+    // Stopped during its reset (the first 50 ms), the story still went on into its first step, which sets the clock
+    // to 09:02: a timeline jump made then was undone.
+    await p.goto(parking('&time=20:00'));
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`(()=>{const sim=__parking.sim,set=sim.setNow;window.__late=[];void __parking.playStory();__parking.stopStory();sim.setNow=ms=>{__late.push(ms);return set(ms);};})()`);
+    await p.sleep(400);
+    const late = await p.eval('__late.length');
+    expect(late === 0 && !(await p.eval('__parking.story.running')), `no step ran after the stop (${late} clock settings)`);
+  }},
+  {name: 'Follow the day: Pause on the way to the meeting holds its scenario until Resume', async run(p, expect) {
+    // Like the car park's story: the meeting's cooling scenario started on landing, over a Pause.
+    await p.goto(`?${FAST}&time=09:05`);
+    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
+    await p.eval(`new MutationObserver((_,o)=>{if(document.body.dataset.tourDestination==='meeting'){o.disconnect();__world.setPaused(true);}}).observe(document.body,{attributes:true,attributeFilter:['data-tour-destination']})`);
+    await p.click('#day-play');
+    await p.until(`document.body.dataset.tourDestination==='meeting' && ${STILL}`, {timeout: 20000, what: 'following, paused at the meeting room'});
+    await p.sleep(500);
+    const temp = `+document.querySelector('#dashboard-content .metric-value').firstChild.textContent`;
+    const paused = await p.eval(temp);
+    expect(paused !== 27.4, `no scenario while paused (room at ${paused} °C, the scenario's start is 27.4)`);
+    await p.click('#day-pause');
+    await p.until(`${temp}===27.4 || ${temp}<${paused}`, {timeout: 5000, what: 'the scenario on Resume'});
+    expect(true, 'the scenario started on Resume');
+  }},
+  {name: 'kiosk: a flight cut short by leaving the page is flown again on return', async run(p, expect) {
+    // The moment was marked as gone to before its flight: hidden on the way (another tab), the kiosk came back to
+    // the overview and stayed there until the next moment.
+    // Real speed: at ?speed=30 the flight is over before the page can be hidden.
+    await p.goto('?kiosk=1&debug=1&warm=0&time=12:05');
+    await p.until(`${UP} && document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'the kiosk on its way'});
+    // Where it is going: the dock's pressed stop (the page's stop changes only on landing).
+    const to = await p.eval(`document.querySelector('[data-destination][aria-pressed=true]').dataset.destination`);
+    const hide = on => `(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>${on}});Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>'${on ? 'hidden' : 'visible'}'});document.dispatchEvent(new Event('visibilitychange'));})()`;
+    await p.eval(hide(true));
+    await p.sleep(400);
+    await p.eval(hide(false));
+    await p.until(`document.body.dataset.tourDestination===${JSON.stringify(to)} && ${STILL}`, {timeout: 15000, what: `the kiosk back on its way to ${to}`});
+    expect(true, `flew to ${to} again`);
+  }},
+  {name: 'Night stops a parking story played on its own', async run(p, expect) {
+    // Like the timeline: the header's Night jumped to 20:00, and the story's next step set the morning again.
+    await p.goto(parking('&story=1'));
+    await p.until('__parking.story.running', {timeout: 40000, what: 'the story playing'});
+    await p.click('#tour-night');
+    await p.sleep(1500);
+    const r = JSON.parse(await p.eval(`JSON.stringify({story:__parking.story.running,m:Math.floor(__world.minute())})`));
+    expect(!r.story && r.m >= 1200 && r.m < 1320, `the story stopped and it stayed night (story ${r.story}, minute ${r.m})`);
+  }},
+  {name: 'kiosk: a flight cut short on its final approach is flown again too', async run(p, expect) {
+    // On the final approach the stop counts as reached (its title shows), though the camera is still on its way:
+    // hidden then, the kiosk took the moment as seen and never finished the flight.
+    await p.goto('?kiosk=1&debug=1&warm=0&time=12:05');
+    await p.until(`${UP} && document.body.dataset.tourDestination==='energy' && document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'the kiosk on its final approach to the energy stop'});
+    const hide = on => `(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>${on}});Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>'${on ? 'hidden' : 'visible'}'});document.dispatchEvent(new Event('visibilitychange'));})()`;
+    await p.eval(hide(true));
+    await p.sleep(400);
+    await p.eval(hide(false));
+    await p.until(`document.querySelector('#viewport').classList.contains('flying')`, {timeout: 10000, what: 'the flight to the energy stop again'});
+    expect(true, 'flown again');
+  }},
+  {name: 'kiosk: the parking story\'s own Pause pauses it', async run(p, expect) {
+    // The kiosk's activity listener stopped the story on the bar's pointerdown, before its Pause got the click.
+    await p.goto(`?kiosk=1&${FAST}&time=07:35`);
+    await p.until('window.__parking && __parking.story.running && !!document.querySelector(\'[data-bar="pause"]\')', {timeout: 60000, what: 'the morning story with its Pause'});
+    await p.click('[data-bar="pause"]');
+    await p.sleep(300);
+    const r = JSON.parse(await p.eval(`JSON.stringify({running:__parking.story.running,paused:__parking.story.paused})`));
+    expect(r.running && r.paused, `the story paused, not ended (running ${r.running}, paused ${r.paused})`);
+  }},
+  {name: 'kiosk: Stop following stops the flight under way too', async run(p, expect) {
+    // It turned Follow off but left the flight Follow had started to land, and the panel moved on to its stop.
+    // Real speed: at ?speed=30 the flight is over before it can be tapped.
+    await p.goto('?kiosk=1&debug=1&warm=0&time=12:05');
+    await p.until(`${UP} && document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'the kiosk on its way'});
+    await p.click('#day-play');
+    await p.sleep(2500);
+    const r = JSON.parse(await p.eval(`JSON.stringify({flying:document.querySelector('#viewport').classList.contains('flying'),dest:document.body.dataset.tourDestination})`));
+    expect(!r.flying && r.dest === 'overview', `the flight stopped where it was (flying ${r.flying}, stop ${r.dest})`);
+  }},
+  {name: 'kiosk: Stop following on the final approach leaves no floor half cut', async run(p, expect) {
+    // Cancelling the flight stopped the camera but not the floors' change: the building stayed half cut away.
+    // Real speed: at ?speed=30 the flight is over before it can be tapped.
+    await p.goto('?kiosk=1&debug=1&warm=0&time=14:45');
+    await p.until(`${UP} && document.body.dataset.tourDestination==='meeting' && document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'the kiosk on its final approach to the meeting room'});
+    await p.click('#day-play');
+    await p.sleep(800);
+    const kept = await p.eval(`(()=>{let n=0;__scene.traverse(o=>{if(o.isMesh&&[].concat(o.material).some(m=>__transition.isCopy(m)))n++;});return n;})()`);
+    expect(kept === 0, `no mesh left mid-cut (${kept})`);
+  }},
+  {name: 'kiosk: Exit story hands the screen to the visitor', async run(p, expect) {
+    // The whole story bar was left out of the kiosk's touches, so Exit ended the story and the loop flew straight on.
+    await p.goto(`?kiosk=1&${FAST}&time=07:35`);
+    await p.until('window.__parking && __parking.story.running && !!document.querySelector(\'[data-bar="free"]\')', {timeout: 60000, what: 'the morning story with its Exit'});
+    await p.click('[data-bar="free"]');
+    await p.sleep(1500);
+    const r = JSON.parse(await p.eval(`JSON.stringify({following:document.querySelector('#day-play').getAttribute('aria-pressed'),dest:document.body.dataset.tourDestination,flying:document.querySelector('#viewport').classList.contains('flying')})`));
+    expect(r.following === 'false' && r.dest === 'parking' && !r.flying, `the visitor has the car park (following ${r.following}, stop ${r.dest}, flying ${r.flying})`);
+    // And Exit did its own work too (the touch must not end the story before Exit's click): the console's Gate.
+    expect(await p.eval(`document.querySelector('[data-tab="gate"]').getAttribute('aria-selected')`) === 'true', 'Exit opened the Gate tab');
+  }},
+  {name: 'kiosk: Restart story restarts it for the visitor', async run(p, expect) {
+    // The touch ended the story (and its bar) before Restart's click arrived: nothing restarted.
+    await p.goto(`?kiosk=1&${FAST}&time=07:35`);
+    await p.until('window.__parking && __parking.story.running && __parking.story.index >= 1 && !!document.querySelector(\'[data-bar="restart"]\')', {timeout: 60000, what: 'the morning story past its first step'});
+    await p.click('[data-bar="restart"]');
+    await p.sleep(400);
+    const r = JSON.parse(await p.eval(`JSON.stringify({running:__parking.story.running,index:__parking.story.index,following:document.querySelector('#day-play').getAttribute('aria-pressed')})`));
+    expect(r.running && r.index <= 0 && r.following === 'false', `the story started again, the visitor's (running ${r.running}, step ${r.index + 1}, following ${r.following})`);
+  }},
+  {name: 'kiosk: Stop following ends the entrance scenario Follow started', async run(p, expect) {
+    // The entrance's scripted sequence kept going: the main gate's arm rose seconds after Follow was turned off.
+    // Real speed and a real-time clock (?day=0): at ?speed=30 the next moment takes Follow away before the arm's turn.
+    await p.goto('?kiosk=1&debug=1&warm=0&day=0&time=08:20');
+    await p.until(`document.body.dataset.tourDestination==='access' && ${STILL}`, {timeout: 40000, what: 'the kiosk at the entrance'});
+    await p.eval(`(()=>{window.__pulses=0;const t=__parking.traffic,pulse=t.pulse;t.pulse=(...a)=>{__pulses++;return pulse(...a);};})()`);
+    await p.click('#day-play');
+    await p.sleep(4000); // the scenario lifts the arm 3 s in
+    expect(await p.eval('__pulses') === 0, 'the gate was not lifted after Follow stopped');
+  }},
+  {name: 'kiosk: any touch during the entrance sequence ends it, a queued arm lift too', async run(p, expect) {
+    // Only Stop following ended Follow's scenario: a touch elsewhere (the language switch) left it running, and its
+    // arm lift, queued behind another car at the barrier, still came after Follow was off.
+    // Real speed and a real-time clock (?day=0): at ?speed=30 the next moment takes Follow away before the arm's turn.
+    await p.goto('?kiosk=1&debug=1&warm=0&day=0&time=08:20');
+    await p.until(`document.body.dataset.tourDestination==='access' && ${STILL}`, {timeout: 40000, what: 'the kiosk at the entrance'});
+    // The barrier busy for a while (a manual open held 6 s), so the scenario's lift (3 s in) queues behind it.
+    // The scenario's own arm lift is timed: skipped, it ends as its turn comes (once the 6 s open ahead of it is over);
+    // carried out, it holds the arm 4 s more. (The morning's cars keep the barrier busy, so lifts alone tell nothing.)
+    await p.eval(`(()=>{const tr=__parking.traffic,pulse=tr.pulse;void pulse(6000);tr.pulse=(...a)=>{const t0=performance.now();tr.pulse=pulse;return pulse(...a).then(()=>{window.__lift=(performance.now()-t0)/1000;});};})()`);
+    await p.sleep(3600);
+    await p.click('#lang-toggle');
+    await p.until('window.__lift!==undefined', {timeout: 15000, what: "the scenario's arm lift over"});
+    const r = JSON.parse(await p.eval(`JSON.stringify({lift:__lift,following:document.querySelector('#day-play').getAttribute('aria-pressed')})`));
+    expect(r.following === 'false' && r.lift < 7, `Follow off and its queued arm lift dropped (following ${r.following}, the lift took ${r.lift.toFixed(1)} s)`);
+  }},
+  {name: 'a flight stopped before its approach leaves the stop it left on show', async run(p, expect) {
+    // Stopped early, the flight settled the floors on the whole building while the dock and panel stayed on the
+    // meeting room (and Reset view, already at its pose, left it so).
+    // Real speed: at ?speed=30 the flight is over before it can be stopped.
+    await p.goto('?debug=1&warm=0&time=10:00&dest=meeting');
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
+    const floor = await p.eval('__simulation().view.currentFloor');
+    await p.click('[data-destination="pond"]');
+    await p.until(`document.querySelector('#viewport').classList.contains('flying')`, {timeout: 5000, what: 'on its way to the pond'});
+    await p.sleep(150);
+    await p.eval(`(()=>{__controls.dispatchEvent({type:'start'});__controls.dispatchEvent({type:'end'});})()`); // the visitor takes the view
+    await p.sleep(300);
+    const r = JSON.parse(await p.eval(`JSON.stringify({floor:__simulation().view.currentFloor,pressed:document.querySelector('[data-destination][aria-pressed=true]')?.dataset.destination,kept:(()=>{let n=0;__scene.traverse(o=>{if(o.isMesh&&[].concat(o.material).some(m=>__transition.isCopy(m)))n++;});return n;})()})`));
+    expect(r.pressed === 'meeting' && r.floor === floor && r.kept === 0, `the meeting room's floor ${floor} on show with its stop (floor ${r.floor}, stop ${r.pressed}, ${r.kept} meshes mid-cut)`);
+  }},
+  {name: 'the parking story taking over a flight to the car park leaves no floor half cut', async run(p, expect) {
+    // Its first camera move ended the dock's flight, whose floors' change was left mid-cut until the next flight.
+    // Real speed: at ?speed=30 the flight is over before the story can take it over.
+    await p.goto('?debug=1&warm=0&time=10:00&dest=meeting');
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
+    await p.click('[data-destination="parking"]');
+    await p.until(`document.querySelector('#viewport').classList.contains('flying')`, {timeout: 5000, what: 'on its way to the car park'});
+    await p.sleep(150);
+    await p.eval('void __parking.playStory()');
+    await p.sleep(1500);
+    const kept = await p.eval(`(()=>{let n=0;__scene.traverse(o=>{if(o.isMesh&&[].concat(o.material).some(m=>__transition.isCopy(m)))n++;});return n;})()`);
+    expect(await p.eval('__parking.story.running') && kept === 0, `the story at the car park, no floor mid-cut (${kept} meshes)`);
+    // And the dock shows the car park (it marked its stop before the story's takeover made the car park the stop).
+    expect(await p.eval(`document.querySelector('[data-destination][aria-pressed=true]')?.dataset.destination`) === 'parking', 'the dock shows the car park');
+  }},
+  {name: 'tapping the stop again on its final approach ends its floors\' change', async run(p, expect) {
+    // There already (within 0.1 m), the repeat tap stopped the flight and returned, leaving the change mid-cut.
+    await p.goto('?debug=1&warm=0&time=10:00&dest=meeting');
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
+    const pose = await p.eval('JSON.stringify({eye:__camera.position.toArray(),target:__controls.target.toArray()})');
+    await p.click('[data-destination="overview"]');
+    await p.until(`document.body.dataset.tourDestination==='overview' && ${STILL}`, {timeout: 20000, what: 'at the overview'});
+    await p.click('[data-destination="meeting"]');
+    await p.until(`document.body.dataset.tourDestination==='meeting' && document.querySelector('#viewport').classList.contains('flying')`, {timeout: 10000, what: 'on the final approach'});
+    // The camera at the stop's pose (as at the approach's very end), and the stop tapped again.
+    await p.eval(`(()=>{const p=${pose};__camera.position.fromArray(p.eye);__controls.target.fromArray(p.target);__camera.updateProjectionMatrix();document.querySelector('[data-destination="meeting"]').click();})()`);
+    await p.sleep(500);
+    const kept = await p.eval(`(()=>{let n=0;__scene.traverse(o=>{if(o.isMesh&&[].concat(o.material).some(m=>__transition.isCopy(m)))n++;});return n;})()`);
+    expect(kept === 0, `no floor left mid-cut (${kept} meshes)`);
+  }},
+  {name: 'kiosk: tapping Auto-advance (its label) keeps the loop going', async run(p, expect) {
+    // The checkbox was left to the story, its label not: one tap toggled Auto-advance and also turned Follow off.
+    await p.goto(`?kiosk=1&${FAST}&time=07:35`);
+    await p.until(`window.__parking && __parking.story.running && !!document.querySelector('#parking-bar .pk-switch span')`, {timeout: 60000, what: 'the morning story'});
+    await p.click('#parking-bar .pk-switch span');
+    await p.sleep(300);
+    const r = JSON.parse(await p.eval(`JSON.stringify({following:document.querySelector('#day-play').getAttribute('aria-pressed'),story:__parking.story.running})`));
+    expect(r.following === 'true' && r.story, `Follow and the story carry on (following ${r.following}, story ${r.story})`);
+  }},
+  {name: 'kiosk: switching kiosk mode off stops the flight under way', async run(p, expect) {
+    // Follow went off at once, but the camera flew on and the panel moved to its stop.
+    // Real speed: at ?speed=30 the flight is over before it can be tapped.
+    await p.goto('?kiosk=1&debug=1&warm=0&time=12:05');
+    await p.until(`${UP} && document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'the kiosk on its way'});
+    await p.click('#kiosk-toggle');
+    await p.sleep(2500);
+    const r = JSON.parse(await p.eval(`JSON.stringify({flying:document.querySelector('#viewport').classList.contains('flying'),dest:document.body.dataset.tourDestination,kiosk:document.querySelector('#kiosk-toggle').checked})`));
+    expect(!r.kiosk && !r.flying && r.dest === 'overview', `kiosk off, the flight stopped where it was (flying ${r.flying}, stop ${r.dest})`);
+  }},
+  {name: 'energy: the sun returning keeps the power figures sensible', async run(p, expect) {
+    // 8.4 kW of sun against a 4.3 kW building: -4.1 kW from the grid and a 195 % solar share.
+    await p.goto(`?dest=energy&${FAST}&time=07:30`);
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='energy'`, {timeout: 40000, what: 'at the energy stop'});
+    await p.click('[data-action="energy"]');
+    await p.sleep(300);
+    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const t=document.querySelector('#dashboard-content').textContent;return {negative:/-\\d+(\\.\\d)? kW/.test(t),share:Math.max(0,...[...t.matchAll(/(\\d+)%/g)].map(m=>+m[1]))};})())`));
+    expect(!r.negative && r.share <= 100, `no negative power, a share of at most 100 % (negative ${r.negative}, largest ${r.share} %)`);
+  }},
+  {name: 'energy: a sun-returning override ends at sunset', async run(p, expect) {
+    // Held for an hour, it kept 8.4 kW of output after the sun had set, beside a button saying there was no sun.
+    await p.goto(`?dest=energy&${FAST}&time=17:40`);
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='energy'`, {timeout: 40000, what: 'at the energy stop'});
+    await p.click('[data-action="energy"]');
+    await p.sleep(5500); // the scenario owns the readings for its 5 s; then its override holds them
+    await p.eval('__world.jumpTo(18*60+20)');
+    await p.sleep(300);
+    const now = await p.eval(`+document.querySelector('#dashboard-content .metric-value').firstChild.textContent`);
+    expect(now === 0, `producing ${now} kW after sunset`);
+  }},
+  {name: 'the parking chart has room for an hour of many departures', async run(p, expect) {
+    // Scaled to entries alone, an evening hour's exits drew taller than the chart.
+    await p.goto(parking('&time=19:00'));
+    await p.until(ready, {timeout: 40000});
+    // 35 cars logged in over the eight hours before and all out this hour: one hour's exits far above any hour's entries.
+    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId)),now=__world.now();let i=0;
+      for(const v of sim.state.vehicles.filter(v=>v.type==='staff'&&!inside.has(v.id)).slice(0,35)){const s=sim.freeStall('staff');if(!s)break;sim.recordEntry({plate:v.plate,province:v.province,type:'staff',stallId:s.id,color:v.color,at:now-(1+i++%8)*3600e3});sim.recordExit({plate:v.plate,province:v.province});}})()`);
+    await p.click('[data-tab="overview"]');
+    await p.sleep(300);
+    const over = await p.eval(`[...document.querySelectorAll('.pk-bars rect')].filter(r=>+r.getAttribute('y')<0).length`);
+    expect(over === 0, `no bar taller than the chart (${over})`);
+  }},
+  {name: 'timeline: the readout shows the minute the slider does', async run(p, expect) {
+    // The readout rounded, the slider floored: at 23:59:45 one said 00:00, the other 23:59.
+    await p.goto(`?${FAST}`);
+    await p.until(UP, {timeout: 40000, what: 'model ready'});
+    expect(await p.eval(`import('osd/viewer/building-day.js').then(m=>m.formatTime(23*60+59.75))`) === '23:59', '23:59:45 reads 23:59');
+  }},
   {name: 'Play the story at once after tapping Parking: the story keeps the car park', async run(p, expect) {
     // Real speed: the flight to the car park is still on its way when Play is tapped, and the story's first camera
     // move ends it.
@@ -761,7 +1441,7 @@ export const scenarios = [
     expect(true, 'hidden during the story, back after it');
   }},
   {name: 'narrow window: both gate cameras show a picture, the story step and the disclosure stay on one line', async run(p, expect) {
-    await p.cdp('Emulation.setDeviceMetricsOverride', {width: 1000, height: 900, deviceScaleFactor: 1, mobile: false});
+    await viewport(p, 1000, 900);
     try {
       await p.goto(parking());
       await p.until(ready, {timeout: 40000});
@@ -774,7 +1454,19 @@ export const scenarios = [
       expect(await p.eval(line('.pk-bar-progress > span')), `step label on one line (${await p.eval(`document.querySelector('.pk-bar-progress > span').getBoundingClientRect().height`)} px tall)`);
       const rows = await p.eval(`new Set([...document.querySelector('#parking-bar').children].map(e=>Math.round(e.getBoundingClientRect().top/10))).size`);
       expect(rows <= 2, `story bar in at most two rows (${rows})`);
-    } finally { await p.cdp('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false}); }
+    } finally { await viewport(p); }
+  }},
+  {name: 'phone widths: the header\'s buttons stay on screen', async run(p, expect) {
+    // The two logos and the buttons need about 450 px in one row: at 390 px, Explore started off the screen.
+    try {
+      for (const width of [390, 320]) {
+        await viewport(p, width, 800);
+        await p.goto(`?${FAST}`);
+        await p.until(LOADED, {timeout: 40000, what: 'model ready'});
+        const out = await p.eval(`[...document.querySelectorAll('.header-actions > *')].filter(e=>getComputedStyle(e).display!=='none'&&e.getBoundingClientRect().right>innerWidth+1).map(e=>e.id||e.className).join(', ')`);
+        expect(!out, `at ${width} px every header button is on screen (${out || 'all'})`);
+      }
+    } finally { await viewport(p); }
   }},
   {name: 'metric pairs stay aligned when one label wraps', async run(p, expect) {
     await p.goto(`?${FAST}`);
@@ -797,13 +1489,39 @@ export const scenarios = [
     await p.until(`document.body.dataset.tourDestination !== 'parking' || (__parking.story.running && __parking.story.auto)`, {timeout: 30000, what: 'loop takes over (60 s / 5)'});
     expect(true, 'loop resumed');
   }},
+  {name: 'the car park sign counts the cars that left in a jump in time', async run(p, expect) {
+    // Cars that vanish from their bays (a jump in time, departures off screen) used to redraw the sign and the bay
+    // lights before their exit was recorded: the last one still counted as parked.
+    await p.goto(`?${FAST}&time=12:00`);
+    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
+    await p.eval(`(()=>{const lot=__parking.lot,draw=lot.drawSign;lot.drawSign=(free,capacity)=>{window.__signFree=free;return draw(free,capacity);};})()`);
+    // Read at once: the next traffic update redraws it anyway.
+    const r = JSON.parse(await p.eval(`(()=>{__world.jumpTo(20*60);return JSON.stringify({sign:window.__signFree,free:__parking.sim.state.capacity-__parking.sim.state.presence.size});})()`));
+    expect(r.sign === r.free, `the sign shows ${r.sign} free, the car park has ${r.free}`);
+  }},
+  {name: 'a reading set by hand goes back to the schedule after the 03:00 wrap too', async run(p, expect) {
+    // A meeting's temperature is held for an hour of world time; started just before the day wraps at 03:00 (back to
+    // the same morning), its deadline stayed on the next day and the reading never went back to the schedule.
+    // (02:50 the next morning: a page opened at 02:50 starts before the day it wraps.)
+    await p.goto(`?dest=meeting&${FAST}&time=23:00`);
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
+    await p.eval('__world.jumpTo(2*60+50)');
+    await p.sleep(300);
+    await p.click('[data-action="meeting"]');
+    await p.sleep(800);
+    await p.click('[data-action="meeting-end"]');
+    const shown = `+document.querySelector('#dashboard-content .metric-value').firstChild.textContent`;
+    const r = JSON.parse(await p.eval(`(async()=>{const {daySnapshot}=await import('osd/viewer/building-day.js');__world.jumpTo(3*60+10);__world.jumpTo(4*60+10);
+      await new Promise(r=>setTimeout(r,300));return JSON.stringify({shown:${shown},planned:daySnapshot(4*60+10,new Map()).telemetry.temp});})()`));
+    expect(r.shown === r.planned, `at 04:10 the room shows the schedule's ${r.planned} °C (shows ${r.shown} °C)`);
+  }},
   {name: 'car park keeps living at building stops (staff cars come and go)', async run(p, expect) {
     await p.goto(`?${FAST}`);
-    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
+    await p.until(UP, {timeout: 40000, what: 'model ready'});
     await p.click('[data-destination="pond"]');
     await p.sleep(1500);
     const before = await p.eval('__parking.sim.state.events.length');
-    // Background lot traffic skips a turn while another car is moving; with four browsers sharing the GPU that can take a while.
+    // Background lot traffic skips a turn while another car is moving; with several browsers sharing the GPU that can take a while.
     await p.until(`__parking.sim.state.events.length > ${before}`, {timeout: 30000, what: 'an entry or exit while on the pond stop'});
     const kinds = await p.eval(`__parking.sim.state.events.slice(0, __parking.sim.state.events.length - ${before}).map(e=>e.kind+':'+e.type).join(',')`);
     expect(!/unknown/.test(kinds), `no unknown cars away from the parking stop (got ${kinds})`);
@@ -867,7 +1585,7 @@ export const scenarios = [
   }},
   {quick: true, name: 'night: switching the meeting-room light changes only that room', async run(p, expect) {
     await p.goto(`?${FAST}`);
-    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
+    await p.until(UP, {timeout: 40000, what: 'model ready'});
     await p.click('[data-destination="meeting"]');
     await p.until("document.body.dataset.tourDestination === 'meeting' && !document.querySelector('#tour-night').disabled", {timeout: 20000});
     await p.click('#tour-night');
@@ -891,7 +1609,7 @@ export const scenarios = [
     // not wait at the barrier for good (the bug: through-traffic never left a long enough gap).
     await p.eval('window.__pump=setInterval(()=>__parking.traffic.passBy(1),30)');
     await p.sleep(1500);
-    const key = await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');void __parking.traffic.leave(k);return k})()`);
+    const key = await p.eval(LEAVE_STAFF);
     try { await p.until(`!__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 12000, what: 'exit through the barrier (6 min of demo time)'}); }
     finally { await p.eval('clearInterval(window.__pump)'); }
     expect(true, 'car left');
@@ -899,7 +1617,7 @@ export const scenarios = [
 
   {name: 'dock: first visit to the meeting room is quick and does not stall', async run(p, expect) {
     // Real speed and no ?debug, as visitors get it.
-    await p.goto('?probe=1');
+    await p.goto('/');
     await p.until(`document.documentElement.dataset.warm === 'done'`, {timeout: 40000, what: 'startup warm-up'});
     await p.eval(`(()=>{window.__gaps=[];let last=performance.now();const f=t=>{window.__gaps.push(t-last);last=t;requestAnimationFrame(f)};requestAnimationFrame(f)})()`);
     const t0 = Date.now();
@@ -912,7 +1630,7 @@ export const scenarios = [
   }},
   {quick: true, name: 'meeting room: effects show after arriving by the dock, and the light switch is visible', async run(p, expect) {
     await p.goto(`?${FAST}`);
-    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
+    await p.until(UP, {timeout: 40000, what: 'model ready'});
     await p.click('[data-destination="meeting"]');
     await p.until(`document.body.dataset.tourDestination === 'meeting' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 20000});
     await p.sleep(300);
@@ -928,7 +1646,7 @@ export const scenarios = [
 
   {name: 'pond, energy and entrance cameras aim at the real objects', async run(p, expect) {
     await p.goto(`?${FAST}`);
-    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
+    await p.until(UP, {timeout: 40000, what: 'model ready'});
     const centre = expr => (p.eval(`JSON.stringify((()=>{const V=__camera.position.constructor,objs=${expr};const min=new V(1e9,1e9,1e9),max=new V(-1e9,-1e9,-1e9);for(const o of objs)o.traverse(m=>{if(!m.geometry)return;m.geometry.computeBoundingBox();const g=m.geometry.boundingBox;for(const x of [g.min.x,g.max.x])for(const y of [g.min.y,g.max.y])for(const z of [g.min.z,g.max.z]){const v=new V(x,y,z).applyMatrix4(m.matrixWorld);min.min(v);max.max(v)}});return min.add(max).multiplyScalar(.5).toArray()})())`)).then(JSON.parse);
     const stops = {pond: `(()=>{const a=[];__scene.traverse(o=>{if(o.isMesh&&o.name.includes('_koi_pond_'))a.push(o)});return a})()`, energy: `[__scene.getObjectByName('Floor_5_solar_modules')]`, access: `[__scene.getObjectByName('Demo_main_barrier')]`};
     for (const [stop, objects] of Object.entries(stops)) {
@@ -941,7 +1659,7 @@ export const scenarios = [
   }},
   {name: 'one gate on site: the Entrance stop uses the main gate', async run(p, expect) {
     await p.goto(`?${FAST}`);
-    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
+    await p.until(UP, {timeout: 40000, what: 'model ready'});
     expect(!(await p.eval(`!!__scene.getObjectByName('Demo_barrier_arm')`)), 'no second (original) barrier arm');
     await p.click('[data-destination="access"]');
     await p.until(`document.body.dataset.tourDestination === 'access' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 20000});
@@ -973,12 +1691,12 @@ export const scenarios = [
     expect(waited < limit, `leaving car through the barrier within ${limit} s of demo time, plate read included (waited ${waited.toFixed(1)} s, ${others} other car(s) at the gate meanwhile)`);
   }},
   {name: 'camera card labels fit and the alert never covers it (narrow window, English)', async run(p, expect) {
-    await p.cdp('Emulation.setDeviceMetricsOverride', {width: 1200, height: 900, deviceScaleFactor: 1, mobile: false});
+    await viewport(p, 1200, 900);
     try {
       await p.goto(parking());
       await p.until(ready, {timeout: 40000});
       await p.click('#lang-toggle');
-      const k = await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');void __parking.traffic.leave(k);return k})()`);
+      const k = await p.eval(LEAVE_STAFF);
       // The exit camera's card (a background car at the entry may show its own card first).
       await p.until(`!document.querySelector('.pk-feed').hidden && document.querySelector('.pk-feed-head').textContent.includes('LPR-OUT') && document.querySelector('.pk-feed-meta .pk-pill')`, {timeout: 30000, what: 'exit camera card'});
       const fit = JSON.parse(await p.eval(`JSON.stringify((()=>{const card=document.querySelector('.pk-feed').getBoundingClientRect(),plate=document.querySelector('.pk-feed-plate').getBoundingClientRect();return [...document.querySelectorAll('.pk-feed-meta .pk-pill')].map(e=>{const r=e.getBoundingClientRect(),inner=e.scrollWidth<=e.clientWidth+1;return {inCard:r.right<=card.right-4&&r.left>=card.left,clearOfPlate:r.left>=plate.right,inner}})})())`));
@@ -988,12 +1706,12 @@ export const scenarios = [
       const overlap = await p.eval(`(()=>{const a=document.querySelector('.pk-alert-pop').getBoundingClientRect(),b=document.querySelector('.pk-feed').getBoundingClientRect();return !(a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top)})()`);
       expect(!overlap, 'alert does not overlap the camera card');
       await p.click('#lang-toggle');
-    } finally { await p.cdp('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false}); }
+    } finally { await viewport(p); }
   }},
   {name: 'meeting room: the door swings and the AC airflow flows and fades', async run(p, expect) {
     // Real speed: these animations are not scaled.
     await p.goto('?debug=1');
-    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
+    await p.until(UP, {timeout: 40000, what: 'model ready'});
     await p.click('[data-destination="meeting"]');
     await p.until(`document.body.dataset.tourDestination === 'meeting' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 20000});
     await p.eval(`(()=>{const hs=[];__scene.traverse(o=>{if(o.userData.doorId==='meeting-4'&&o.name.startsWith('Door_hinge'))hs.push(o)});window.__hinge=hs[0];window.__air=__scene.getObjectByName('Demo_meeting').children.filter(o=>o.isLine)})()`);
@@ -1066,7 +1784,6 @@ export const scenarios = [
     // Real speed. Street cars run at exactly 7 m/s (eastbound) or 9 m/s (westbound).
     await p.goto('?dest=parking&debug=1');
     await p.until("window.__parking && __parking.active && document.documentElement.dataset.warm==='done'", {timeout: 40000});
-    await p.until(`[...__parking.lot.root.children].some(c=>c.name==='Demo_car_'&&c.position.x>-60&&c.position.x<20)`, {timeout: 20000, what: 'a street car'});
     // Pick and follow one car in the same frame loop (a car picked earlier may already have left the stretch).
     // Keeps the longest trace (a car may leave the stretch during the window); up to three windows under load.
     let s = [], ticks = 0;
@@ -1087,7 +1804,7 @@ export const scenarios = [
   {name: 'the barrier closes soon after a car drives out', async run(p, expect) {
     await p.goto('?dest=parking&debug=1&speed=10');
     await p.until(ready, {timeout: 40000});
-    const key = await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');void __parking.traffic.leave(k);return k})()`);
+    const key = await p.eval(LEAVE_STAFF);
     await p.until(`!__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 20000, what: 'exit recorded'});
     const t0 = Date.now();
     await p.until(`__parking.sim.state.gate === 'closed'`, {timeout: 10000, what: 'barrier closed'});
@@ -1114,7 +1831,7 @@ export const scenarios = [
 
   {name: 'leaving a story that is part of the tour ends the tour too', async run(p, expect) {
     await p.goto(`?${FAST}`);
-    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000});
+    await p.until(UP, {timeout: 40000});
     await p.click('#tour-play');
     await p.until('__parking.story.running && __parking.story.index >= 1', {timeout: 40000, what: 'tour reaches the parking story'});
     await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
@@ -1329,9 +2046,9 @@ export const scenarios = [
     const lit = `Object.values(__simulation().rooms).filter(r=>r.light).length`;
     // The page is ready before its car park (and with it the schedule) loads: wait for the rooms to follow.
     await p.goto('?debug=1&time=22:00#explore');
-    await p.until(`document.querySelector('#status')?.dataset.state === 'ready' && !!window.__simulation && ${lit} <= 2`, {timeout: 40000, what: 'offices dark at 22:00 on the explore page'});
+    await p.until(`${LOADED} && !!window.__simulation && ${lit} <= 2`, {timeout: 40000, what: 'offices dark at 22:00 on the explore page'});
     await p.goto('?debug=1&time=10:00#explore');
-    await p.until(`document.querySelector('#status')?.dataset.state === 'ready' && !!window.__simulation && ${lit} > 10`, {timeout: 40000, what: 'offices lit at 10:00 on the explore page'});
+    await p.until(`${LOADED} && !!window.__simulation && ${lit} > 10`, {timeout: 40000, what: 'offices lit at 10:00 on the explore page'});
     await p.goto(`?dest=energy&${FAST}&time=22:00`);
     await p.until(`${UP} && document.body.dataset.tourDestination === 'energy' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 40000});
     expect(await p.eval(`document.querySelector('[data-action="energy"]').disabled`), 'the solar demo button is off at night');
@@ -1349,7 +2066,7 @@ export const scenarios = [
   }},
   {name: 'day cycle: the explore page follows the clock too (night at 20:00)', async run(p, expect) {
     await p.goto('?debug=1&day=10&time=20:00#explore');
-    await p.until(`document.querySelector('#status')?.dataset.state === 'ready'`, {timeout: 40000});
+    await p.until(LOADED, {timeout: 40000});
     await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 5000, what: 'night on the explore page'});
     expect(true, 'explore page is dark at 20:00');
   }},

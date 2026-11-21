@@ -49,6 +49,7 @@ export function createStory(ctx) {
     return {alive, wait, until, userAction};
   }
 
+  const captionFor = i => ({step: t('story.step', {n: i + 1, total: steps.length}), title: t(`${steps[i].key}.t`), body: t(`${steps[i].key}.b`)});
   const steps = [
     {key: 's1', cam: 'lot', async run(s) {
       ctx.panel.show('overview');
@@ -150,8 +151,10 @@ export function createStory(ctx) {
     try {
       if (from === 0) await ctx.resetWorld();
       for (index = from; index < steps.length; index++) {
+        // Stopped meanwhile (while the world reset, or a step's hold): no further step, which would set the clock.
         const step = steps[index], s = api(my);
-        ctx.caption({step: t('story.step', {n: index + 1, total: steps.length}), title: t(`${step.key}.t`), body: t(`${step.key}.b`)});
+        s.alive();
+        ctx.caption(captionFor(index));
         emit();
         ctx.fly(step.cam, 1600);
         await step.run(s);
@@ -185,11 +188,7 @@ export function createStory(ctx) {
     resume() { paused = false; emit(); },
     next() { if (nextWaiter) nextWaiter(); },
     stop() { token++; running = false; paused = false; index = -1; if (nextWaiter) nextWaiter(); nextWaiter = null; ctx.caption(null); ctx.cue(null); ctx.hint(null); emit(); },
-    refreshCaption() {
-      if (!running || index < 0) return;
-      const step = steps[index];
-      ctx.caption({step: t('story.step', {n: index + 1, total: steps.length}), title: t(`${step.key}.t`), body: t(`${step.key}.b`)});
-    },
+    refreshCaption() { if (running && index >= 0) ctx.caption(captionFor(index)); },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   };
 }

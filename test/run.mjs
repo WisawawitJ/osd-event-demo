@@ -2,7 +2,7 @@
 // `npm run test:quick` (or `quick` among the words) runs only the quick set: one or two short checks per area, about
 // 10 s, for while you work; the full run is the check before a commit.
 // WebGL renders on the NVIDIA GPU when present, else in software; never on the Intel iGPU (see browser.mjs for why).
-// JOBS=n runs n browsers side by side (default 8 on NVIDIA, 3 in software, which is CPU work); SPEED=n sets the demo
+// JOBS=n runs n browsers side by side (default 6 on NVIDIA, 3 in software, which is CPU work); SPEED=n sets the demo
 // time scale (default 30).
 import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {open, DEFAULT_GPU} from './browser.mjs';
@@ -16,7 +16,7 @@ const TIMES = new URL('out/times.json', import.meta.url);
 let times = {};
 try { times = JSON.parse(readFileSync(TIMES, 'utf8')); } catch {}
 chosen.sort((a, b) => (times[b.name] ?? 6) - (times[a.name] ?? 6));
-const jobs = Math.max(1, Math.min(Number(process.env.JOBS) || ((process.env.GPU || DEFAULT_GPU) === 'software' ? 3 : 8), chosen.length));
+const jobs = Math.max(1, Math.min(Number(process.env.JOBS) || ((process.env.GPU || DEFAULT_GPU) === 'software' ? 3 : 6), chosen.length));
 // Rendering noise the demo cannot avoid; anything else in the console fails the check.
 // (SwiftShader has no parallel shader compiling; three.js warns and compiles normally.)
 const NOISE = /GL_INVALID_OPERATION|PCFSoftShadowMap|UniformsUtils: Textures of render targets|KHR_parallel_shader_compile extension not supported/;
@@ -34,8 +34,7 @@ async function worker() {
       try { await scenario.run(page, expect); } catch (error) { problems.push(error.message); }
       problems.push(...page.logs.filter(line => !NOISE.test(line)));
       const shot = problems.length ? await page.shot(scenario.name.replace(/\W+/g, '-')).catch(() => '') : '';
-      results[index] = {name: scenario.name, problems, shot, time: (Date.now() - t0) / 1000};
-      const r = results[index];
+      const r = results[index] = {name: scenario.name, problems, shot, time: (Date.now() - t0) / 1000};
       console.log(`${r.problems.length ? '✗' : '✓'} ${r.name} (${r.time.toFixed(1)} s)${r.problems.length ? `\n    ${r.problems.join('\n    ')}${r.shot ? `\n    screenshot: ${r.shot}` : ''}` : ''}`);
     }
   } finally { close(); }

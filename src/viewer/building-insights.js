@@ -44,7 +44,9 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
   // A running scenario (the meeting room cooling, the barrier demo) owns the readings until it ends.
   if(!state.scenario){
    const telemetry={...snapshot.telemetry};
-   for(const [key,h] of held){if('until' in h?now<h.until:telemetry[key]===h.base)delete telemetry[key];else held.delete(key);}
+   // The sun set: a sun-returning override ends with it (it kept 8.4 kW of output into the evening).
+   const dark=snapshot.telemetry.solar===0;
+   for(const [key,h] of held){if(!(dark&&(key==='solar'||key==='load'))&&('until' in h?now<h.until:telemetry[key]===h.base))delete telemetry[key];else held.delete(key);}
    write(telemetry);
   }
   // The panels redraw when something they show as a state changes, otherwise every 2 s (each redraw rebuilds their
@@ -72,14 +74,15 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
   layers.update({layer,roomData:data,states:sim.rooms,floor,hidden:traveling||floor!==sim.view.currentFloor});
   const incidents=incidentsFor(state,sim.rooms);
   $('#incident-count').textContent=String(incidents.length);
-  const html=incidents.length?incidents.map(i=>`<button class="incident-item" data-incident="${i.id}" data-target="${i.destination}" data-insight-layer="${i.layer}"><span class="incident-mark" aria-hidden="true">!</span><span><strong>${i.title}</strong><small>${i.detail}</small><small>${i.hint}</small></span><span aria-hidden="true">↗</span></button>`).join(''):`<p class="incident-clear"><span aria-hidden="true">✓</span> ${L('สถานะตัวอย่างอยู่ในช่วงปกติ','Sample readings are within normal range')}</p>`;
+  const html=incidents.length?incidents.map(i=>`<button class="incident-item" data-key="${i.id}" data-incident="${i.id}" data-target="${i.destination}" data-insight-layer="${i.layer}"><span class="incident-mark" aria-hidden="true">!</span><span><strong>${i.title}</strong><small>${i.detail}</small><small>${i.hint}</small></span><span aria-hidden="true">↗</span></button>`).join(''):`<p class="incident-clear"><span aria-hidden="true">✓</span> ${L('สถานะตัวอย่างอยู่ในช่วงปกติ','Sample readings are within normal range')}</p>`;
   morph(incidentList,html);
   $('#insight-room').hidden=layer==='none'||destination!=='meeting';
   $('#insight-room').textContent=`${L('ห้องประชุมย่อย 2 ชั้น 4','Meeting room 2, floor 4')} · ${layer==='temperature'?state.temp.toFixed(1)+' °C':layer==='occupancy'?(state.occupied?L('มีคน 6 คน','6 people'):L('ไม่มีคน','Empty')):sim.rooms['f4_meeting_2'].light?L('ไฟเปิด','Lights on'):L('ไฟปิด','Lights off')}`;
  }
  // The slider previews a time while dragged and moves the world there when let go.
  listen(range,'input',()=>{dragging=true;paint();});
- listen(range,'change',()=>{dragging=false;stopActivity();jumpTo(Number(range.value));});
+ // The value is read first: stopping Follow repaints the slider with the live time.
+ listen(range,'change',()=>{const minute=Number(range.value);dragging=false;stopActivity();jumpTo(minute);});
  listen($('#day-play'),'click',()=>onFollow(!following()));
  listen($('#day-pause'),'click',()=>{world.setPaused(!world.paused);paint();});
  listen($('#day-speed'),'click',()=>{const next=DAY_LENGTHS.find(n=>n>world.dayLength)??DAY_LENGTHS[0];world.setDayLength(next);paint();});
@@ -87,9 +90,10 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
  listen(incidentList,'click',e=>{const b=e.target.closest('[data-incident]');if(!b)return;stopActivity();setLayer(b.dataset.insightLayer);void navigate(b.dataset.target);});
  document.querySelectorAll('[data-layer]').forEach(b=>{b.disabled=false;listen(b,'click',()=>{stopActivity();setLayer(b.dataset.layer);});});
  for(const selector of ['#day-play','#day-pause','#day-speed','#day-time'])$(selector).disabled=false;
- const offClock=world.subscribe(kind=>{if(kind==='tick')sync();else if(kind==='jump'||kind==='set')sync({all:true});else if(kind==='rate')paint();});
+ // The day wraps at 03:00 (back 24 h): a hand-set reading held past it keeps its time left.
+ const offClock=world.subscribe((kind,payload)=>{if(kind==='wrap'){for(const h of held.values())if('until' in h)h.until+=payload;}else if(kind==='tick')sync();else if(kind==='jump'||kind==='set')sync({all:true});else if(kind==='rate')paint();});
  sync({all:true});
- return {update,sync,hold,jumpTo,relabel,paint,
+ return {update,hold,jumpTo,relabel,paint,
   history:key=>dayHistory(world.minute(),simulation.rooms,key),
   timeLabel:()=>L(`ข้อมูลจำลอง ณ เวลา ${formatTime(world.minute())}`,`Simulated data at ${formatTime(world.minute())}`),
   getState:()=>({minute:world.minute(),layer,following:following()}),

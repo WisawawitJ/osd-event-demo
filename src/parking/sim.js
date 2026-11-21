@@ -114,7 +114,7 @@ export function createParkingSim() {
         const plateText = `${v() < .5 ? 1 + Math.floor(v() * 9) : ''}${letters} ${1000 + Math.floor(v() * 9000)}`;
         const day = 20 + Math.floor(v() * 4), h = 9 + Math.floor(v() * 8), m = Math.floor(v() * 60), made = bkk(2026, 11, day, h, m), ok = made + (20 + Math.floor(v() * 90)) * 60e3;
         addRequest({status: 'approved', visitor: {name: `${vpick(FIRST)} ${vpick(LAST)}`, phone: `08${Math.floor(v() * 10)}-${String(100 + Math.floor(v() * 900))}-${String(1000 + Math.floor(v() * 9000))}`, email: `visitor${i + 1}@example.com`, company: vpick(COMPANIES)},
-          contact: 'host.demo@osd.example', plate: plateText, province: v() < .6 ? PROVINCES[0][0] : vpick(PROVINCES.slice(1, 6))[0], arrival: DAY_START, departure: DAY_START, createdAt: made, color: Math.floor(v() * 9), visit: true,
+          contact: 'host.demo@osd.example', plate: plateText, province: v() < .6 ? PROVINCES[0][0] : vpick(PROVINCES.slice(1, 6))[0], arrival: DAY_START, departure: DAY_START, createdAt: made, color: Math.floor(v() * 9),
           history: [{at: made, key: 'h.submitted'}, {at: ok, key: 'h.approved', by: 'staff.name'}, {at: ok, key: 'h.atom'}, {at: ok + 60e3, key: 'h.email'}]});
       }
     }
@@ -169,15 +169,26 @@ export function createParkingSim() {
   }
 
   // The seeded morning is the car park at 09:00. Started at another time of day, whatever lies in its future is left
-  // out (the traffic then brings the car park to the level for that hour).
+  // out (the traffic then brings the car park to the level for that hour): cars that came later, the leaving of those
+  // that left later (who are then still in, back in a free bay), and requests made later.
   function reset() {
     idCounter = 1;
     state = seed();
     const at = now();
     if (at < bkk(2026, 11, 24, 9, 0)) {
+      const leftLater = state.events.filter(e => e.at > at && e.kind === 'exit');
       state.events = state.events.filter(e => e.at <= at);
       state.audit = state.audit.filter(a => a.at <= at);
+      state.requests = state.requests.filter(q => q.status !== 'pending' || q.createdAt <= at); // not sent yet
       for (const [k, p] of state.presence) if (p.since > at) { state.presence.delete(k); state.stalls.find(s => s.id === p.stallId).occupant = null; }
+      for (const e of leftLater) {
+        const k = key(e.plate, e.province), entry = state.events.find(x => x.kind === 'entry' && key(x.plate, x.province) === k);
+        const stall = entry && !state.presence.has(k) && freeStall(e.type);
+        if (!stall) continue;
+        const v = findVehicle(e.plate, e.province)[0];
+        stall.occupant = k;
+        state.presence.set(k, {plate: e.plate, province: e.province, type: e.type, stallId: stall.id, since: entry.at, color: v?.color ?? 0, vehicleId: v?.id});
+      }
     }
     emit('reset');
   }
@@ -378,14 +389,18 @@ export function createParkingSim() {
     const hourly = [];
     // The whole day (the car park is open round the clock), counted from the day's start, so the small hours after
     // midnight (before the day wraps at 03:00) still show the evening behind them.
+    // After midnight, until the day wraps at 03:00, the small hours are charted on after 23:00 (they count in the totals).
     const nowHour = Math.floor((at - DAY_START) / 3600e3);
-    for (let h = 0; h < 24; h++) {
+    for (let h = 0; h < Math.min(27, Math.max(24, nowHour + 1)); h++) {
       const from = DAY_START + h * 3600e3, to = from + 3600e3;
-      hourly.push({h, in: h > nowHour ? null : entries.filter(e => e.at >= from && e.at < to).length, out: h > nowHour ? null : exits.filter(e => e.at >= from && e.at < to).length});
+      hourly.push({h: h % 24, in: h > nowHour ? null : entries.filter(e => e.at >= from && e.at < to).length, out: h > nowHour ? null : exits.filter(e => e.at >= from && e.at < to).length});
     }
     const byType = {staff: 0, vip: 0, guest: 0, unknown: 0};
     for (const e of entries) byType[e.type] = (byType[e.type] || 0) + 1;
-    let level = 0, peak = 0, peakAt = null;
+    // Cars parked since before the day began (overnight: the 03:00 wrap moved their entries into yesterday) count from
+    // its start: today's in and out, taken back from the cars there now.
+    const cameIn = today.filter(e => e.kind === 'entry' || e.kind === 'manual').length, wentOut = today.filter(e => e.kind === 'exit').length;
+    let level = Math.max(0, state.presence.size - cameIn + wentOut), peak = level, peakAt = level ? DAY_START : null;
     for (const e of [...today].sort((a, b) => a.at - b.at)) {
       if (e.kind === 'entry' || e.kind === 'manual') level++; else if (e.kind === 'exit') level = Math.max(0, level - 1);
       if (level > peak) { peak = level; peakAt = e.at; }

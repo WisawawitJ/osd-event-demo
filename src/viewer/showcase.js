@@ -4,7 +4,7 @@ import {t as pt, onLang, getLang, L} from 'osd/parking/i18n.js';
 import {SPEED, world, later, cancelLater, demoNow, isPaused} from 'osd/parking/clock.js';
 import {dayEvents,formatTime} from 'osd/viewer/building-day.js';
 import {morph} from 'osd/parking/dom.js';
-const icons={building:'M3 21V5h12v16M15 11h6v10M7 9h4M7 13h4M7 17h4',light:'M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0l-1 2H9Z',air:'M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h5',people:'M4 21v-3a5 5 0 0 1 10 0v3m3-9a4 4 0 0 1 4 4v5M12 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',water:'M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z',solar:'m5 9-2 10h18L19 9ZM8 9l-1 10m9-10 1 10M4 14h16M12 19v3M12 2v3M5 3l2 2m12-2-2 2',door:'M5 21V3h14v18M9 21V5l8 2v14M13 13h.01',arrow:'M4 12h16m-5-5 5 5-5 5',play:'m8 5 11 7-11 7Z',pause:'M8 5v14M16 5v14',check:'m5 12 4 4L19 6'};
+const icons={building:'M3 21V5h12v16M15 11h6v10M7 9h4M7 13h4M7 17h4',light:'M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0l-1 2H9Z',air:'M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h5',water:'M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z',solar:'m5 9-2 10h18L19 9ZM8 9l-1 10m9-10 1 10M4 14h16M12 19v3M12 2v3M5 3l2 2m12-2-2 2',door:'M5 21V3h14v18M9 21V5l8 2v14M13 13h.01',arrow:'M4 12h16m-5-5 5 5-5 5',play:'m8 5 11 7-11 7Z',pause:'M8 5v14M16 5v14',check:'m5 12 4 4L19 6'};
 const icon=name=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[name]||icons.building}"/></svg>`;
 // Thai (default) or English, picked when the text is drawn; applyLanguage() redraws on a switch.
 // Each field is a getter, so a destination's texts follow the TH/EN switch.
@@ -70,12 +70,12 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  let traveling=false,pendingDestination=null,landed=false;
  let destination='overview',state=initial(),tourTimer=0,scenarioFrame=0,scenarioStart=0,touring=false,disposed=false,sequence=0,cameraImage='',lastPreview=0,lastTick=0;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
- const listen=(el,event,fn)=>el.addEventListener(event,fn,{signal});
+ const listen=(el,event,fn,options)=>el.addEventListener(event,fn,{...options,signal});
  const actual=()=>simulation.getState().rooms[meetingId];
  function row(label,value){return `<div class="data-row"><span>${label}</span><strong>${value}</strong></div>`;}
  function metric(label,value,unit,note=''){return `<div><span class="metric-label">${label}</span><div class="metric-value">${value}<small>${unit}</small></div>${note?`<span class="metric-note">${note}</span>`:''}</div>`;}
  function system(name,title,desc,value){return `<div class="system-row"><div class="system-icon">${icon(name)}</div><div class="system-copy"><strong>${title}</strong><span>${desc}</span></div><span class="system-value">${value}</span></div>`;}
- function chart(values,labels=['08:00','10:00','12:00','14:00'],unit='',historyKey=null){const history=historyKey&&insights?.history(historyKey);if(history){values=history.values;labels=history.labels;}const min=Math.min(...values)-1,max=Math.max(...values)+1;const points=values.map((v,i)=>[i*280/(values.length-1),74-(v-min)/(max-min)*60]);return `<svg class="chart" viewBox="0 0 280 100" role="img" aria-label="${L('กราฟตัวอย่าง','Sample chart:')} ${unit}"><path class="chart-grid" d="M0 18h280M0 46h280M0 74h280"/><path d="M${points.map(p=>p.join(',')).join(' L')} L280,82 L0,82Z" fill="#eaf1fb" stroke="none"/><path class="chart-line" d="M${points.map(p=>p.join(',')).join(' L')}"/>${labels.map((l,i)=>`<text x="${i*280/(labels.length-1)}" y="98" text-anchor="${i===0?'start':i===labels.length-1?'end':'middle'}">${l}</text>`).join('')}</svg>`;}
+ function chart(values,labels,unit,historyKey){const history=historyKey&&insights?.history(historyKey);if(history){values=history.values;labels=history.labels;}const min=Math.min(...values)-1,max=Math.max(...values)+1;const points=values.map((v,i)=>[i*280/(values.length-1),74-(v-min)/(max-min)*60]);return `<svg class="chart" viewBox="0 0 280 100" role="img" aria-label="${L('กราฟตัวอย่าง','Sample chart:')} ${unit}"><path class="chart-grid" d="M0 18h280M0 46h280M0 74h280"/><path d="M${points.map(p=>p.join(',')).join(' L')} L280,82 L0,82Z" fill="#eaf1fb" stroke="none"/><path class="chart-line" d="M${points.map(p=>p.join(',')).join(' L')}"/>${labels.map((l,i)=>`<text x="${i*280/(labels.length-1)}" y="98" text-anchor="${i===0?'start':i===labels.length-1?'end':'middle'}">${l}</text>`).join('')}</svg>`;}
  function events(items){return items.map(([time,text])=>`<div class="event-row"><time>${time}</time><p>${text}</p></div>`).join('');}
  function controls(){const s=actual(),door=Object.values(s.doors).some(Boolean);return `<div class="local-controls"><button data-control="light" aria-pressed="${s.light}">${icon('light')}${L(`ไฟ ${s.light?'เปิด':'ปิด'}`,`Light ${s.light?'on':'off'}`)}</button><button data-control="climate" aria-pressed="${s.climate}">${icon('air')}${L(`แอร์ ${s.climate?'เปิด':'ปิด'}`,`AC ${s.climate?'on':'off'}`)}</button><button data-control="door" aria-pressed="${door}">${icon('door')}${L(`ประตู ${door?'เปิด':'ปิด'}`,`Door ${door?'open':'closed'}`)}</button></div>`;}
  function render(){
@@ -85,14 +85,13 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   effects.update({...state,climate:s.climate,light:s.light});
   if(destination==='access'&&!traveling&&(!cameraImage||performance.now()-lastPreview>=400)){cameraImage=snapshot(gateCamera);lastPreview=performance.now();}
   $('#panel-title').textContent=d.panel;
-  $('#panel-status').textContent=destination==='pond'&&state.pondAlert?L('ควรตรวจสอบ','Check needed'):destination==='meeting'?(state.occupied?L('มีคนใช้งาน','In use'):L('ห้องว่าง','Vacant')):destination==='access'?L(...[['พร้อมสาธิต','Ready to demo'],['อ่านทะเบียนแล้ว','Plate read'],['อนุญาตผ่าน','Access granted'],['ไม้กั้นเปิด','Barrier open'],['ผ่านเรียบร้อย','Car through']][state.accessStep]):L('ข้อมูลจำลอง','Simulated data');
-  if(destination==='parking')$('#panel-status').textContent=pt('sim.data');
+  $('#panel-status').textContent=destination==='pond'&&state.pondAlert?L('ควรตรวจสอบ','Check needed'):destination==='meeting'?(state.occupied?L('มีคนใช้งาน','In use'):L('ห้องว่าง','Vacant')):destination==='access'?L(...[['พร้อมสาธิต','Ready to demo'],['อ่านทะเบียนแล้ว','Plate read'],['อนุญาตผ่าน','Access granted'],['ไม้กั้นเปิด','Barrier open'],['ผ่านเรียบร้อย','Car through']][state.accessStep]):pt('sim.data');
   $('#panel-status').classList.toggle('attention',destination==='pond'&&state.pondAlert);
   let html='';
   if(destination==='overview')html=`<p class="dashboard-intro">${L('มองเห็นสิ่งที่เกิดขึ้นในอาคาร แล้วไปยังจุดที่ต้องการได้ทันที','See what is happening in the building, then go straight to any spot')}</p><div class="metric-pair">${metric(L('พลังงานจากโซลาร์','Solar power'),state.solar.toFixed(1),'kW',insights?.timeLabel()||'')}${metric(L('ห้องประชุมตัวอย่าง','Sample meeting room'),state.occupied?L('ใช้งาน','In use'):L('ว่าง','Free'),'',L('สถานะจาก radar จำลอง','From simulated radar'))}</div><div class="dashboard-section"><h3>${L('ระบบในอาคาร','Building systems')}</h3>${system('light',L('แสงสว่าง','Lighting'),L('วงจรไฟในโมเดล','Light circuits in the model'),L(`${lights} เปิด`,`${lights} on`))}${system('air',L('เครื่องปรับอากาศ','Air conditioning'),L('สถานะในตัวจำลอง','Simulated status'),L(`${ac} เปิด`,`${ac} on`))}${system('water',L('บ่อปลา','Fish pond'),state.pondAlert?L('ระดับน้ำต่ำกว่าค่าที่ตั้ง','Water below the set level'):L('ระดับน้ำอยู่ในช่วงที่ตั้ง','Water within the set range'),state.water+'%')}</div><div class="dashboard-section"><h3>${L('จุดที่น่าสนใจ','Places to visit')}</h3>${events(getLang()==='en'?[['Meeting room','Tap the meeting room to try the lights and AC'],['Rooftop','Follow the energy path from the solar panels'],['Entrance','Play the plate and barrier event']]:[['ห้องประชุม','แตะห้องประชุมเพื่อทดลองไฟและแอร์'],['ดาดฟ้า','ดูเส้นทางพลังงานจากแผงโซลาร์'],['ทางเข้า','เล่นเหตุการณ์ทะเบียนและไม้กั้น']])}</div><button class="panel-action" data-action="tour">${icon('play')}${L('พาชมทุกระบบ','Tour every system')}</button>`;
   if(destination==='meeting')html=`<p class="dashboard-intro">${L('ห้องประชุมย่อย 2 ชั้น 4 · แสงและอากาศที่ปรับให้เข้ากับการใช้งาน','Meeting room 2, floor 4 · light and air tuned to how the room is used')}</p><div class="metric-pair">${metric(L('อุณหภูมิห้อง','Room temperature'),state.temp.toFixed(1),'°C')}${metric(L('ตั้งอุณหภูมิ','Set point'),state.target,'°C')}</div><div class="dashboard-section">${row(L('การใช้งาน','Occupancy'),state.occupied?L('มีคนอยู่ · 6 คนจำลอง','Occupied · 6 simulated people'):L('ไม่มีคน','Empty'))}${row(L('แอร์','AC'),s.climate?L('เปิดโหมดเย็น','Cooling'):L('ปิด','Off'))}${row(L('ประตู','Door'),Object.values(s.doors).some(Boolean)?L('เปิด','Open'):L('ปิด','Closed'))}</div>${controls()}<div class="dashboard-section"><h3>${L('แนวโน้มอุณหภูมิ · ตัวอย่าง','Temperature trend · sample')}</h3>${chart([27.5,27.2,26.8,26.2,25.9,state.temp],getLang()==='en'?['Start','5 min','10 min','Now']:['เริ่ม','5 นาที','10 นาที','ตอนนี้'],L('อุณหภูมิ','temperature'),'temp')}<div class="chart-caption"><span>${insights?.timeLabel()||L('อุณหภูมิห้อง','Room temperature')}</span><span>${L('เป้าหมาย','Target')} ${state.target} °C</span></div></div><button class="panel-action" data-action="${state.occupied?'meeting-end':'meeting'}">${state.occupied?icon('door')+L('จำลองเลิกประชุม','End the meeting'):icon('play')+L('จำลองเริ่มประชุม','Simulate a meeting')}</button><p class="scenario-note">${state.scenario==='meeting'?L('กำลังจำลองการทำความเย็น · เร่งเวลาเพื่อสาธิต','Simulating cooling · time sped up for the demo'):L('จุดสีเขียวเป็นตำแหน่งคนสมมติ ไม่ใช่ผลติดตามบุคคลจริง','Green dots are made-up positions, not real people tracking')}</p>`;
   if(destination==='pond')html=`<p class="dashboard-intro">${L('ข้อมูลน้ำและสภาพแวดล้อมของบ่อปลาริมห้องประชุม','Water and surroundings of the fish pond by the meeting room')}</p><div class="metric-pair">${metric(L('ระดับน้ำ','Water level'),state.water,'%')}${metric(L('อุณหภูมิน้ำ','Water temperature'),'27.1','°C')}</div><div class="water-level ${state.pondAlert?'warning':''}" aria-label="${L('ระดับน้ำ','Water level')} ${state.water}%">${Array.from({length:12},(_,i)=>`<i class="${i<Math.round(state.water/100*12)?'filled':''}"></i>`).join('')}</div>${state.pondAlert?`<div class="alert-strip">${L('ระดับน้ำต่ำ · ตรวจสอบบ่อและระบบเติมน้ำ<br>เหตุการณ์จำลอง ไม่ได้สั่งปั๊มน้ำ','Low water · check the pond and the refill system<br>Simulated event, no pump was switched')}</div>`:''}<div class="dashboard-section">${row(L('ความเป็นกรด–ด่าง','Acidity'),'pH 7.2')}${row(L('ออกซิเจนละลายน้ำ','Dissolved oxygen'),'6.4 mg/L')}${row(L('สถานะปั๊มจำลอง','Simulated pump'),L('ทำงาน','Running'))}${row(L('เกณฑ์ระดับน้ำในเดโม','Demo water threshold'),L('เตือนเมื่อ < 65%','Alert below 65%'))}</div><div class="dashboard-section"><h3>${L('ระดับน้ำ · ตัวอย่างวันนี้','Water level · sample day')}</h3>${chart([81,83,82,81,82,state.water],['08:00','10:00','12:00','13:30'],L('ระดับน้ำ','water level'),'water')}</div><button class="panel-action" data-action="pond">${icon(state.pondAlert?'check':'water')}${state.pondAlert?L('คืนค่าระดับน้ำ','Restore water level'):L('จำลองระดับน้ำต่ำ','Simulate low water')}</button><p class="scenario-note">${L('ค่าคุณภาพน้ำและเกณฑ์แจ้งเตือนเป็นตัวอย่างสำหรับเดโม','Water quality values and alert thresholds are demo examples')}</p>`;
-  if(destination==='energy')html=`<p class="dashboard-intro">${L('แผงโซลาร์ 24 แผง · เห็นแหล่งที่มาของพลังงานอาคาร','24 solar panels · see where the building gets its power')}</p><div class="metric-pair">${metric(L('ผลิตอยู่ตอนนี้','Producing now'),state.solar.toFixed(1),'kW')}${metric(L('ผลิตสะสมวันนี้','Produced today'),state.energy.toFixed(1),'kWh')}</div><div class="energy-flow"><div class="energy-node">${icon('solar')}<strong>${state.solar.toFixed(1)} kW</strong><span>${L('โซลาร์','Solar')}</span></div><span class="flow-arrow">${icon('arrow')}</span><div class="energy-node">${icon('building')}<strong>${state.load.toFixed(1)} kW</strong><span>${L('อาคาร','Building')}</span></div></div>${row(L('รับไฟจากกริด','From the grid'),(state.load-state.solar).toFixed(1)+' kW')}${row(L('สัดส่วนไฟจากโซลาร์','Solar share'),Math.round(state.solar/state.load*100)+'%')}<div class="dashboard-section"><h3>${L('กำลังผลิต · ตัวอย่างวันนี้','Output · sample day')}</h3>${chart([0,.4,2.3,5.1,7.4,9.1,state.solar,7.7,5.8,2.4,0],['06:00','10:00','14:00','18:00'],L('กำลังผลิตโซลาร์','solar output'),'solar')}<div class="chart-caption"><span>${insights?.timeLabel()||'Solar production'}</span><span>kW</span></div></div><button class="panel-action" data-action="energy"${sim.night?' disabled':''}>${icon('solar')}${sim.night?L('กลางคืน · ไม่มีแดดให้ผลิตไฟ','Night · no sun to make power'):state.solar<5?L('จำลองแดดกลับมา','Simulate the sun returning'):L('จำลองเมฆบังแผง','Simulate clouds over the panels')}</button><p class="scenario-note">${L('ตัวเลขเป็นตัวอย่าง ไม่ใช่กำลังผลิตที่คำนวณจากสเปกแผงจริง','Sample figures, not output calculated from real panel specs')}</p>`;
+  if(destination==='energy')html=`<p class="dashboard-intro">${L('แผงโซลาร์ 24 แผง · เห็นแหล่งที่มาของพลังงานอาคาร','24 solar panels · see where the building gets its power')}</p><div class="metric-pair">${metric(L('ผลิตอยู่ตอนนี้','Producing now'),state.solar.toFixed(1),'kW')}${metric(L('ผลิตสะสมวันนี้','Produced today'),state.energy.toFixed(1),'kWh')}</div><div class="energy-flow"><div class="energy-node">${icon('solar')}<strong>${state.solar.toFixed(1)} kW</strong><span>${L('โซลาร์','Solar')}</span></div><span class="flow-arrow">${icon('arrow')}</span><div class="energy-node">${icon('building')}<strong>${state.load.toFixed(1)} kW</strong><span>${L('อาคาร','Building')}</span></div></div>${row(L('รับไฟจากกริด','From the grid'),Math.max(0,state.load-state.solar).toFixed(1)+' kW')}${row(L('สัดส่วนไฟจากโซลาร์','Solar share'),Math.min(100,Math.round(state.solar/state.load*100))+'%')}<div class="dashboard-section"><h3>${L('กำลังผลิต · ตัวอย่างวันนี้','Output · sample day')}</h3>${chart([0,.4,2.3,5.1,7.4,9.1,state.solar,7.7,5.8,2.4,0],['06:00','10:00','14:00','18:00'],L('กำลังผลิตโซลาร์','solar output'),'solar')}<div class="chart-caption"><span>${insights?.timeLabel()||L('การผลิตไฟฟ้าจากแสงอาทิตย์','Solar production')}</span><span>kW</span></div></div><button class="panel-action" data-action="energy"${sim.night?' disabled':''}>${icon('solar')}${sim.night?L('กลางคืน · ไม่มีแดดให้ผลิตไฟ','Night · no sun to make power'):state.solar<5?L('จำลองแดดกลับมา','Simulate the sun returning'):L('จำลองเมฆบังแผง','Simulate clouds over the panels')}</button><p class="scenario-note">${L('ตัวเลขเป็นตัวอย่าง ไม่ใช่กำลังผลิตที่คำนวณจากสเปกแผงจริง','Sample figures, not output calculated from real panel specs')}</p>`;
   if(destination==='access')html=`<div class="camera-preview">${cameraImage?`<img src="${cameraImage}" alt="${L('ภาพจำลองจากจุดติดตั้งกล้องไม้กั้น','Simulated view from the barrier camera position')}">`:''}<span>${L('มุมกล้องทางรถเข้า · ภาพจำลอง','Entrance camera view · simulated')}</span></div><div class="plate">กข 1234<small>${L('ทะเบียนตัวอย่าง · กรุงเทพมหานคร','Sample plate · Bangkok')}</small></div><div class="dashboard-section">${row(L('ผลอ่านทะเบียน','Plate reading'),state.accessStep?L('พบทะเบียนตัวอย่าง','Sample plate found'):L('รอเหตุการณ์','Waiting for a car'))}${row(L('สิทธิ์เข้าอาคาร','Building access'),state.accessStep>=2?L('อนุญาต · รายการจำลอง','Allowed · simulated list'):L('ยังไม่ตรวจสอบ','Not checked yet'))}${row(L('ไม้กั้น','Barrier'),state.barrierAngle>.1?L('เปิด / กำลังเคลื่อน','Open / moving'):L('ปิด','Closed'))}${row('Face recognition',L('ผู้มาติดต่อ A · ตัวอย่าง','Visitor A · sample'))}</div><div class="dashboard-section"><h3>${L('ลำดับเหตุการณ์จำลอง','Simulated event log')}</h3>${events(state.accessStep===0?[[L('พร้อมสาธิต','Ready to demo'),L('กดปุ่มเพื่อเล่นเหตุการณ์รถเข้า','Press the button to play a car arriving')]]:[[accessAt,L('อ่านทะเบียน กข 1234','Plate กข 1234 read')],...(state.accessStep>=2?[[accessAt,L('ตรวจสิทธิ์ผ่าน','Access check passed')]]:[]),...(state.accessStep>=3?[[accessAt,L('ไม้กั้นเปิดให้รถผ่าน','Barrier opened for the car')]]:[]),...(state.accessStep>=4?[[accessAt,L('ปิดไม้กั้นหลังรถผ่าน','Barrier closed after the car passed')]]:[])])}</div><button class="panel-action" data-action="access">${icon('play')}${L('จำลองรถผ่านทางเข้า','Simulate a car entering')}</button><p class="scenario-note">${L('ไม่มีการวิเคราะห์ใบหน้าหรือทะเบียนจริงในเดโมนี้','No real face or plate analysis happens in this demo')}</p>`;
   // Updated in place (morph), not rebuilt: a rebuilt button under the pointer lost its hover on every refresh.
   const next=document.createElement('template');next.innerHTML=html;
@@ -102,16 +101,17 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   $('#tour-night').setAttribute('aria-pressed',String(sim.night));
   $('#tour-night span').textContent=sim.night?L('กลางวัน','Day'):L('กลางคืน','Night');
   content.inert=traveling;content.setAttribute('aria-busy',String(traveling));$('#tour-night').disabled=traveling;
-  if(traveling)$('#panel-status').textContent=L('กำลังเดินทาง','On the way');
-  if(!traveling)$('#scene-chip').textContent=d.chip;
+  if(traveling)$('#panel-status').textContent=L('กำลังเดินทาง','On the way');else $('#scene-chip').textContent=d.chip;
   insights?.update({destination,traveling,landed,state,sim});
  }
  function stopScenario(){cancelAnimationFrame(scenarioFrame);scenarioFrame=0;if(state.scenario==='access'){state.barrierAngle=0;state.accessStep=0;}state.scenario=null;}
  // The footer message is kept as [th,en] (or a function) so a language switch can redraw it.
- let progress=['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around'];
+ const PICK_SPOT=['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around'];
+ let progress=PICK_SPOT;
  function setProgress(message){progress=message;$('#tour-progress').textContent=typeof message==='function'?message():L(...message);}
  const playLabel=()=>touring?L('หยุดพาชม','Stop tour'):L('เริ่มพาชม','Start tour');
- function stopTour(message=['หยุดพาชมแล้ว · เลือกจุดต่อไปได้เอง','Tour stopped · pick the next spot yourself']){if(touring)parking?.stopStory();tourGeneration++;cancelLater(tourTimer);tourTimer=null;touring=false;play.innerHTML=icon('play')+`<span>${playLabel()}</span>`;setProgress(message);}
+ // `keepStory`: the visitor's touch is on the story's own bar (Exit, Restart): its click, not this, decides the story.
+ function stopTour(message=['หยุดพาชมแล้ว · เลือกจุดต่อไปได้เอง','Tour stopped · pick the next spot yourself'],{keepStory=false}={}){if(touring&&!keepStory)parking?.stopStory();tourGeneration++;cancelLater(tourTimer);tourTimer=null;touring=false;play.innerHTML=icon('play')+`<span>${playLabel()}</span>`;setProgress(message);}
  // The car park's layout (a wider panel, a taller view, no timeline) changes as one short animation, a view transition:
  // the 3D view, the dock and the panel move to their new size and place while the rest cross-fades. Switched in one
  // frame, the whole page jumped and the 3D picture zoomed by about 8% just as the camera set off. A switch asked for
@@ -132,7 +132,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   setTimeout(()=>{if(!done)transition.skipTransition();},250);
  }
  async function select(id,{guided=false,instant=false}={}){
-  if(!destinations[id]||disposed)return false;if(!guided){stopFollowing();stopTour(['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around']);}stopScenario();const ticket=++sequence,d=destinations[id];
+  if(!destinations[id]||disposed)return false;if(!guided){stopFollowing();stopTour(PICK_SPOT);}stopScenario();const ticket=++sequence,d=destinations[id];
   // The car park changes the page layout: switch it as the flight sets off, so the view is its final size while the
   // camera moves instead of jumping at the end.
   setParkingLayout(id==='parking');
@@ -151,9 +151,10 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   };
   const arrived=await navigate(id,{instant,onApproach:commit,onPhase(phase){if(ticket===sequence){$('#scene-chip').textContent=`${phase} → ${d.floor} · ${d.panel}`;$('#flight-status').textContent=L(`กำลังไป ${d.floor} · ${d.panel}`,`Heading to ${d.floor} · ${d.panel}`);}}});
   if(disposed||ticket!==sequence)return false;
-  traveling=false;landed=Boolean(arrived);pendingDestination=null;document.querySelectorAll('[data-destination]').forEach(b=>{b.removeAttribute('aria-busy');b.setAttribute('aria-pressed',String(b.dataset.destination===(arrived||committed?id:destination)));});
-  // The parking story started on the way (its camera move ends this flight): the car park is the stop all the same.
+  // The parking story started on the way (its camera move ends this flight): the car park is the stop all the same
+  // (committed first, so the dock shows it).
   if(!arrived&&!committed&&id==='parking'&&parking?.story.running)commit();
+  traveling=false;landed=Boolean(arrived);pendingDestination=null;document.querySelectorAll('[data-destination]').forEach(b=>{b.removeAttribute('aria-busy');b.setAttribute('aria-pressed',String(b.dataset.destination===(arrived||committed?id:destination)));});
   if(!arrived&&!committed){
    $('#scene-chip').textContent=L('หยุดการบินแล้ว · หมุนสำรวจหรือเลือกจุดต่อไป','Flight stopped · orbit to explore or pick the next spot');effects.select(destination);
    setParkingLayout(destination==='parking');
@@ -163,7 +164,6 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   commit();effects.select(id);render();return true;
  }
 
-
  function scenario(kind){
   if(traveling)return;
   stopScenario();state.scenario=kind;scenarioStart=demoNow();lastTick=-1;let lastVisual=0;
@@ -171,9 +171,9 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   // Ending it by hand: the room empties and its light and AC go off, until the building's schedule next changes them.
   if(kind==='meeting-end'){state.scenario=null;state.occupied=false;simulation.selectRoom(meetingId);simulation.setRoom(meetingId,{light:false,climate:false});insights?.hold(['occupied']);render();return;}
   if(kind==='pond'){state.pondAlert=!state.pondAlert;state.water=state.pondAlert?58:82;state.scenario=null;insights?.hold(['pondAlert','water']);render();return;}
-  if(kind==='energy'){if(simulation.getState().night){stopScenario();return;}state.solar=state.solar<5?8.4:3.1;}
+  if(kind==='energy'){if(simulation.getState().night){stopScenario();return;}state.solar=state.solar<5?8.4:3.1;state.load=Math.max(state.load,state.solar+.5);} // the building takes what the panels make, as in the day's schedule
   // What a scenario changed by hand stays a while before the building's schedule takes it back.
-  insights?.hold({meeting:['temp','occupied'],energy:['solar']}[kind]||[]);
+  insights?.hold({meeting:['temp','occupied'],energy:['solar','load']}[kind]||[]);
   if(kind==='access'){state.accessStep=1;state.barrierAngle=0;gatePulsed=false;accessAt=formatTime(world.minute());}
   render();
   function tick(time){if(disposed||document.hidden)return;const elapsed=(demoNow()-scenarioStart)/1000,limit=kind==='meeting'?12:kind==='access'?10:5;
@@ -181,12 +181,15 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
    if(kind==='access'){state.accessStep=elapsed<1.5?1:elapsed<3?2:elapsed<8?3:4;state.barrierAngle=elapsed<3?0:elapsed<5?(elapsed-3)/2*Math.PI/2:elapsed<7?Math.PI/2:elapsed<9?(9-elapsed)/2*Math.PI/2:0;}
    if(kind==='access'&&reduced.matches)state.barrierAngle=elapsed>=3&&elapsed<8?Math.PI/2:0;
    // The main gate's arm rises once access is granted (queued behind any car already at the gate).
-   if(kind==='access'&&parking&&!gatePulsed&&elapsed>=3){gatePulsed=true;parking.traffic.pulse(4200);}
+   if(kind==='access'&&parking&&!gatePulsed&&elapsed>=3){gatePulsed=true;const mine=scenarioStart;parking.traffic.pulse(4200,()=>state.scenario!=='access'||scenarioStart!==mine);} // dropped if the scenario ended while it queued
    if(!reduced.matches&&time-lastVisual>=50){effects.animate(elapsed);effects.update({...state,climate:actual().climate,light:actual().light});lastVisual=time;}
    if(Math.floor(elapsed*2)!==lastTick){lastTick=Math.floor(elapsed*2);render();}
    if(elapsed<limit)scenarioFrame=requestAnimationFrame(tick);else{scenarioFrame=0;state.scenario=null;render();}
   }scenarioFrame=requestAnimationFrame(tick);
  }
+ // Resolves once the clock runs: at once, or on Resume after a Pause tapped on the way to the car park (its story,
+ // started over the Pause, set the clock going again).
+ const running=()=>!world.paused?Promise.resolve():new Promise(done=>{const off=world.subscribe(kind=>{if(kind==='rate'&&!world.paused){off();done();}});signal.addEventListener('abort',off,{once:true});});
  async function startTour(){
   stopFollowing();
   if(touring){stopTour();cancelFlight();stopScenario();render();return;}
@@ -195,26 +198,33 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   let step=0;async function next(){if(!touring||disposed||generation!==tourGeneration)return;const id=order[step];const at=step+1;setProgress(()=>L(`กำลังพาชม ${at} / ${order.length} · ${destinations[id].panel}`,`Touring ${at} / ${order.length} · ${destinations[id].panel}`));const arrived=await select(id,{guided:true});if(!arrived||!touring||generation!==tourGeneration)return;
    const advance=()=>{if(generation!==tourGeneration)return;if(step<order.length)void next();else{stopTour(['พาชมครบแล้ว · เลือกสำรวจต่อได้ทุกจุด','Tour complete · explore any spot you like']);stopScenario();render();if(kiosk)tourTimer=later(()=>{if(kiosk&&!touring)startFollowing();},2500);}};
    // The car park stop plays the whole parking story, then the tour carries on.
-   if(id==='parking'&&parking){await parking.playStory({auto:true});if(!touring||generation!==tourGeneration)return;step++;tourTimer=later(advance,1200);return;}
-   if(id!=='overview')scenario(id);step++;tourTimer=later(advance,id==='meeting'?14000:11000);}void next();
+   if(id==='parking'&&parking){await running();if(!touring||generation!==tourGeneration)return;await parking.playStory({auto:true});if(!touring||generation!==tourGeneration)return;step++;tourTimer=later(advance,1200);return;}
+   if(id!=='overview'){await running();if(!touring||generation!==tourGeneration)return;scenario(id);}step++;tourTimer=later(advance,id==='meeting'?14000:11000);}void next();
  }
  // "Follow the day": the camera goes to what the day is doing (its moments, dayEvents) and stays at the stop that fits
  // the hour until the next one. The kiosk does this when left alone. The car park's morning moment plays the guided
  // story, once a day: it holds the clock at real speed and sets its own times (09:02 … 11:30).
- let following=false,followed=null,day=0,storyDay=-1;
+ let following=false,followed=null,day=0,storyDay=-1,followTicket=0;
  const PLAN=[[0,'overview'],...dayEvents.map(e=>[e.minute,e.destination])];
  function startFollowing(){if(disposed)return;stopTour(['กำลังตามวันในอาคาร','Following the day in the building']);world.setPaused(false);following=true;followed=null;insights?.paint();follow();}
- function stopFollowing(message=null){if(!following)return;following=false;followed=null;if(parking?.story.running)parking.stopStory();if(message)setProgress(message);insights?.paint();}
+ // A scenario running while following is Follow's (any touch stops Follow first): it stops too, however Follow stops.
+ function stopFollowing(message=null,{keepStory=false}={}){if(!following)return;following=false;followTicket++;followed=null;if(parking?.story.running&&!keepStory)parking.stopStory();stopScenario();if(message)setProgress(message);insights?.paint();}
  function follow(){
-  if(!following||disposed||traveling||parking?.story.running)return;
+  // Hidden (another tab): the moment waits for the page to show again.
+  if(!following||disposed||traveling||document.hidden||parking?.story.running)return;
   const minute=world.minute(),at=PLAN.findLast(([start])=>minute>=start),key=`${day}:${at[0]}`;
   if(followed===key)return;followed=key;
   const id=at[1],event=dayEvents.find(e=>e.minute===at[0]);
   setProgress(()=>`${L('ตามวันในอาคาร','Following the day')} · ${event?event.title:L('กลางคืน อาคารพักผ่อน','Night, the building rests')}`);
+  // Each go has its ticket: a story waiting for Resume belongs to it, not to a later go to the same moment.
+  const ticket=++followTicket;
   void select(id,{guided:true}).then(arrived=>{
-   if(!arrived||!following||followed!==key)return;
-   if(id==='parking'&&parking&&event&&event.minute<720&&storyDay!==day){storyDay=day;void parking.playStory({auto:true});}
-   else if(event&&(id==='meeting'&&event.layer==='occupancy'||id==='access'))scenario(id);
+   // A flight cut short (the page hidden on the way) leaves the moment to be gone to again, not marked as seen.
+   // (`landed`: a flight cancelled on its final approach still counts as the stop for select, not as being there.)
+   if(!arrived||!landed){if(followed===key&&ticket===followTicket)followed=null;return;}
+   if(!following||followed!==key)return;
+   if(id==='parking'&&parking&&event&&event.minute<720&&storyDay!==day)void running().then(()=>{if(following&&followed===key&&ticket===followTicket&&storyDay!==day){storyDay=day;void parking.playStory({auto:true});}});
+   else if(event&&(id==='meeting'&&event.layer==='occupancy'||id==='access'))void running().then(()=>{if(following&&followed===key&&ticket===followTicket)scenario(id);});
   });
  }
  const offFollow=world.subscribe(kind=>{if(kind==='wrap')day++;if(kind==='tick'||kind==='jump'||kind==='set')follow();});
@@ -224,23 +234,27 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  for(const id of ['#tour-play','#tour-reset','#tour-night'])$(id).disabled=false;
  listen(play,'click',()=>void startTour());listen($('#tour-reset'),'click',()=>{stopFollowing();stopTour();stopScenario();state=initial();simulation.reset();insights?.jumpTo(9*60);void select('overview');});
  // Night and day are the world clock's: the button moves it on to 20:00, or to 07:30.
- listen($('#tour-night'),'click',()=>{stopFollowing();insights?.jumpTo(simulation.getState().night?7*60+30:20*60);});
+ listen($('#tour-night'),'click',()=>{stopFollowing();if(parking?.story.running)parking.stopStory();insights?.jumpTo(simulation.getState().night?7*60+30:20*60);});
  const unsubscribe=simulation.subscribe(()=>{cameraImage='';render();});
  simulation.setInteractionFilter(room=>!traveling&&destination==='meeting'&&room.id===meetingId);
  listen(document,'visibilitychange',()=>{if(document.hidden){stopTour(['พักการพาชมเมื่อออกจากหน้านี้','Tour paused while you were away']);stopScenario();cancelFlight();render();}});
  onUserOrbit(()=>{stopFollowing();stopTour(['กำลังสำรวจด้วยตัวเอง','Exploring on your own']);cancelFlight();});
  insights=createBuildingInsights({model,simulation,schedule,read:()=>state,write:value=>{Object.assign(state,structuredClone(value));},render,navigate:id=>select(id,{guided:true}),
-  stopActivity:()=>{stopFollowing();stopTour(['กำลังสำรวจข้อมูลจำลอง','Exploring simulated data']);stopScenario();cancelFlight();},
-  following:()=>following,onFollow:on=>on?startFollowing():stopFollowing(['หยุดตามวันแล้ว · เลือกจุดต่อไปได้เอง','Stopped following · pick the next spot yourself'])});
+  // A parking story played on its own (?story=1, the bar's Play) stops too: it holds the clock, and set a jump back.
+  stopActivity:()=>{stopFollowing();stopTour(['กำลังสำรวจข้อมูลจำลอง','Exploring simulated data']);if(parking?.story.running)parking.stopStory();stopScenario();cancelFlight();},
+  following:()=>following,onFollow:on=>{if(on){startFollowing();return;}stopFollowing(['หยุดตามวันแล้ว · เลือกจุดต่อไปได้เอง','Stopped following · pick the next spot yourself']);cancelFlight();}}); // a flight Follow started stops with it (its scenario stops in stopFollowing)
  // Showcase loop for an unattended screen: it follows the day; any touch hands control to the visitor,
  // and it comes back after a quiet minute.
  const kioskToggle=$('#kiosk-toggle');let kiosk=false,idleTimer=0;const IDLE_MS=60000/SPEED;
  // Left alone, the kiosk follows the day (a paused screen stays paused). A parking story playing on auto-advance is left to finish; one waiting for
  // Next or paused is abandoned like any idle screen.
  function armIdle(){clearTimeout(idleTimer);if(kiosk)idleTimer=setTimeout(()=>{const s=parking?.story,playing=s?.running&&s.auto&&!s.paused;if(kiosk&&!touring&&!following&&!playing&&!isPaused()){s?.stop();startFollowing();}else armIdle();},IDLE_MS);}
- function setKiosk(on){kiosk=on;kioskToggle.checked=on;document.body.classList.toggle('kiosk-on',on);if(on){if(!touring&&!following)startFollowing();}else{clearTimeout(idleTimer);if(touring)stopTour();stopFollowing();}}
+ function setKiosk(on){kiosk=on;kioskToggle.checked=on;document.body.classList.toggle('kiosk-on',on);if(on){if(!touring&&!following)startFollowing();}else{clearTimeout(idleTimer);const guided=touring||following;if(touring)stopTour();stopFollowing();if(guided)cancelFlight();}} // switched off mid-flight: the guided flight stops too
  listen(kioskToggle,'change',()=>setKiosk(kioskToggle.checked));
- for(const type of ['pointerdown','keydown','wheel'])listen(document,type,event=>{if(!kiosk||event.target.closest?.('.kiosk-toggle'))return;if(touring||following){stopFollowing();stopTour(['หยุดโหมดจัดแสดงชั่วคราว · ทดลองได้เลย','Paused the showcase loop · explore freely']);cancelFlight();}armIdle();},{capture:true});
+ // The tour, Follow the day and Pause buttons (and the parking story's Pause, Next and Auto) handle the loop themselves:
+ // stopped here first, the tour's and Follow's clicks started it again, and the Pause buttons ended the story they meant
+ // to pause. The story's Exit is the visitor taking over, like any other touch.
+ for(const type of ['pointerdown','keydown','wheel'])listen(document,type,event=>{if(!kiosk||event.target.closest?.('.kiosk-toggle'))return;if((touring||following)&&!event.target.closest?.('#tour-play,#day-play,#day-pause,#parking-bar [data-bar=pause],#parking-bar [data-bar=resume],#parking-bar [data-bar=next],#parking-bar .pk-switch')){const bar=Boolean(event.target.closest?.('#parking-bar'));stopFollowing(null,{keepStory:bar});stopTour(['หยุดโหมดจัดแสดงชั่วคราว · ทดลองได้เลย','Paused the showcase loop · explore freely'],{keepStory:bar});if(!bar)cancelFlight();}armIdle();},{capture:true});
  // Parking UI activity counts as hands-on use, like the building controls.
  parking?.setInteractHandler(()=>{if(kiosk)return;stopFollowing();if(touring)stopTour(['กำลังทดลองด้วยตัวเอง','Trying it yourself']);});
  // Runs on every TH/EN switch: static markup, then everything the showcase draws itself.
@@ -254,6 +268,6 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  if(params.get('kiosk')==='1')setTimeout(()=>setKiosk(true),600);
  else{const dest=params.get('dest');if(dest&&destinations[dest])setTimeout(async()=>{const arrived=await select(dest);if(arrived&&dest==='parking'&&params.get('story')==='1')void parking?.playStory({auto:params.get('auto')!=='0'});},300);}
  // Back to the current stop's own camera pose (the view controls and the R key use this).
- function resetView(){if(disposed||traveling)return;cancelFlight();landed=false;render();void navigate(destination,{}).then(arrived=>{if(arrived&&!disposed&&!traveling){landed=true;render();}});}
- return {resetView,dispose(){disposed=true;sequence++;insights?.dispose();stopTour();stopScenario();unsubscribe();simulation.setInteractionFilter(()=>true);abort.abort();effects.dispose();},getState(){return{insights:insights?.getState(),destination,traveling,pendingDestination,touring,scenario:state.scenario,...state};}};
+ function resetView(){if(disposed||traveling)return;cancelFlight();landed=false;render();void navigate(destination).then(arrived=>{if(arrived&&!disposed&&!traveling){landed=true;render();}});}
+ return {resetView,dispose(){disposed=true;sequence++;insights?.dispose();stopTour();stopScenario();unsubscribe();simulation.setInteractionFilter(()=>true);abort.abort();effects.dispose();},getState(){return{insights:insights?.getState(),destination,traveling,pendingDestination,touring,...state};}};
 }

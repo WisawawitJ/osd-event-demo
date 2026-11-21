@@ -1,6 +1,7 @@
 // This module is deliberately local: device state never leaves this page.
 // spotLights / shadowSpots: the night room light pool and how many of it cast shadows.
 import {L} from 'osd/parking/i18n.js';
+import {demoNow} from 'osd/parking/clock.js';
 
 // Texts follow the saved TH/EN choice. The device map names rooms in Thai; English names are kept here by room id.
 const ROOM_EN = {
@@ -41,7 +42,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   let selectedId = rooms[0].id, night = false, disposed = false;
   let view = { currentFloor: 'all', cutaway: false, exploded: false };
   const abort = new AbortController();
-  const listen = (element, event, handler, options = {}) => element.addEventListener(event, handler, { ...options, signal: abort.signal });
+  const listen = (element, event, handler) => element.addEventListener(event, handler, { signal: abort.signal });
 
   model.traverse(object => {
     const data = object.userData;
@@ -112,12 +113,16 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     lights.forEach((light, i) => { const d = dealt[i]; light.intensity = d.at ? SPOT_INTENSITY * lightLevel.get(d.at.room.id) * d.presence : 0; });
     schedule();
   }
-  function relight() { updateLighting(); paintLights(); renderer.shadowMap.needsUpdate = true; schedule(); }
-  function lightStep(time) {
+  function relight() { updateLighting(); renderer.shadowMap.needsUpdate = true; schedule(); }
+  // On demo time: paused, the lights' fades and moves hold where they are.
+  function lightStep() {
+    const time = demoNow();
     lightFrame = 0;
-    const d = Math.max(0, time - (lightLast || time)) / LIGHT_FADE_MS; lightLast = time;
+    const fade = Math.max(0, time - (lightLast || time)) / LIGHT_FADE_MS; lightLast = time;
     let moving = false;
     const dd = Math.max(0, time - (dealLast || time)) / DEAL_MS; dealLast = time;
+    // Paused (no demo time passed): nothing to repaint; keep watching for Resume.
+    if (fade === 0 && dd === 0 && lightLast && !disposed) { lightFrame = requestAnimationFrame(lightStep); return; }
     lights.forEach((light, i) => {
       const d = dealt[i];
       if (d.next !== undefined) {
@@ -131,7 +136,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     for (const room of rooms) {
       const to = states.get(room.id).light ? 1 : 0, from = lightLevel.get(room.id);
       if (from === to) continue;
-      lightLevel.set(room.id, to > from ? Math.min(to, from + d) : Math.max(to, from - d));
+      lightLevel.set(room.id, to > from ? Math.min(to, from + fade) : Math.max(to, from - fade));
       if (lightLevel.get(room.id) !== to) moving = true;
     }
     paintLights();
@@ -219,6 +224,8 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     light.angle = Math.min(1.16, Math.max(.68, Math.atan((room.lightRadius || 3.7) / Math.max(light.position.y, 1))));
     light.target.position.set(position[0], .05, position[2]);
     light.userData.roomId = room.id;
+    // Moved once it has faded out, long after the selection asked for its shadows: they follow it here.
+    if (light.castShadow) renderer.shadowMap.needsUpdate = true;
   }
   // Doors swing to their new angle over ~0.6 s (eased) instead of snapping, their shadows redrawn on every frame of the
   // swing (redrawn only once settled, the closed door's shadow stayed until the door was fully open, then jumped).
@@ -227,17 +234,22 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   function swingDoor(hinge, angle) {
     if (Math.abs(hinge.rotation.y - angle) < 1e-4) { swinging.delete(hinge); return; }
     if (disposed || matchMedia('(prefers-reduced-motion: reduce)').matches) { hinge.rotation.y = angle; return; }
-    swinging.set(hinge, {from: hinge.rotation.y, to: angle, start: performance.now()});
+    // On demo time: a swing stands still while the demo is paused, like everything else.
+    swinging.set(hinge, {from: hinge.rotation.y, to: angle, start: demoNow()});
     if (!swingFrame) swingFrame = requestAnimationFrame(swingStep);
   }
-  function swingStep(time) {
+  function swingStep() {
     swingFrame = 0;
+    const time = demoNow();
+    let moved = false;
     for (const [hinge, s] of swinging) {
-      const t = Math.min(1, (time - s.start) / 600), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-      hinge.rotation.y = s.from + (s.to - s.from) * e;
+      const t = Math.min(1, (time - s.start) / 600), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2, angle = s.from + (s.to - s.from) * e;
+      if (angle !== hinge.rotation.y) { hinge.rotation.y = angle; moved = true; }
       if (t === 1) swinging.delete(hinge);
     }
     if (swinging.size) swingFrame = requestAnimationFrame(swingStep);
+    // Paused mid-swing, the door stands still: no redraw (its shadow neither) until it moves again.
+    if (!moved) return;
     renderer.shadowMap.needsUpdate = true;
     schedule();
   }
@@ -260,7 +272,6 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       }
     }
     updateLighting();
-    paintLights(); fadeLights();
     renderer.shadowMap.needsUpdate = true;
     schedule();
     for(const listener of listeners)listener();
@@ -295,9 +306,8 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     let enabled;
     if (kind === 'door') {
       if (!Object.hasOwn(state.doors, doorId)) return;
-      enabled = state.doors[doorId] = !state.doors[doorId];
-      // A shared doorway must have a single pose across adjacent rooms.
-      for (const other of states.values()) if (Object.hasOwn(other.doors, doorId)) other.doors[doorId] = enabled;
+      enabled = !state.doors[doorId];
+      patchRoom(selectedId, {doors: {[doorId]: enabled}});
     } else if (kind === 'light' || kind === 'climate') enabled = state[kind] = !state[kind];
     else return;
     renderControls();
@@ -321,13 +331,21 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   });
   // With a clock to follow (onNightRequest), the button asks it for night or day; night then follows the clock.
   listen(nightButton, 'click', () => {
-    if (onNightRequest) { onNightRequest(!night); return; }
-    night = !night;
+    if (onNightRequest) onNightRequest(!night); else setNight(!night);
+  });
+  function setNight(value) {
+    night = Boolean(value);
     nightButton.setAttribute('aria-pressed', String(night));
     nightButton.textContent = nightText(night);
     onNightChange(night);
     updateModel();
-  });
+  }
+  // A light/climate/door patch for one room. A shared doorway keeps a single pose across the rooms it opens into.
+  function patchRoom(id, patch) {
+    const room = byId.get(id), state = states.get(id);
+    for (const key of ['light', 'climate']) if (typeof patch[key] === 'boolean' && room.capabilities?.[key] !== false) state[key] = patch[key];
+    for (const [door, value] of Object.entries(patch.doors || {})) if (typeof value === 'boolean' && Object.hasOwn(state.doors, door)) for (const other of states.values()) if (Object.hasOwn(other.doors, door)) other.doors[door] = value;
+  }
 
   // Ray picking only follows a short, stationary, single-pointer gesture.
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
@@ -373,7 +391,6 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     panel.querySelector('details').open = true;
     toggle(data.deviceKind, data.doorId);
   });
-  // Camera moves no longer re-pick the night lights (see updateLighting), so nothing to do on wheel.
   renderControls();
   updateModel();
 
@@ -384,27 +401,18 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     subscribe(listener){listeners.add(listener);return ()=>listeners.delete(listener);},
     applySnapshot(snapshot){
       if(disposed)return;
-      for(const [id,patch] of Object.entries(snapshot.rooms||{})){
-        const room=byId.get(id),state=states.get(id);if(!room)continue;
-        for(const key of ['light','climate'])if(typeof patch[key]==='boolean'&&room.capabilities?.[key]!==false)state[key]=patch[key];
-        for(const [door,value] of Object.entries(patch.doors||{}))if(typeof value==='boolean'&&Object.hasOwn(state.doors,door))for(const other of states.values())if(Object.hasOwn(other.doors,door))other.doors[door]=value;
-      }
-      if(byId.has(snapshot.selectedRoom))selectedId=snapshot.selectedRoom;
-      if(typeof snapshot.night==='boolean'&&night!==snapshot.night){night=snapshot.night;nightButton.setAttribute('aria-pressed',String(night));nightButton.textContent=nightText(night);onNightChange(night);}
+      for(const [id,patch] of Object.entries(snapshot.rooms||{}))if(byId.has(id))patchRoom(id,patch);
       renderControls();updateModel();
     },
     // The night's spot lights are dealt around the selected room: deal them again now, not at the next switch (that
     // moved several of them between rooms at once, long after the selection).
     selectRoom(id){if(!byId.has(id))return;const changed=selectedId!==id;selectedId=id;renderControls();if(changed)relight();},
     setRoom(id,patch){
-      const room=byId.get(id),state=states.get(id);if(!room)return;
-      for(const key of ['light','climate'])if(typeof patch[key]==='boolean'&&room.capabilities?.[key]!==false)state[key]=patch[key];
-      for(const [door,value] of Object.entries(patch.doors||{}))if(typeof value==='boolean'&&Object.hasOwn(state.doors,door))for(const other of states.values())if(Object.hasOwn(other.doors,door))other.doors[door]=value;
+      if(!byId.has(id))return;
+      patchRoom(id,patch);
       renderControls();updateModel();
     },
-    // The lit rooms (a Set of room ids), e.g. the kiosk's night set; null puts back every room with a light.
-    setLitRooms(ids){for(const room of rooms)states.get(room.id).light=room.capabilities?.light!==false&&(!ids||ids.has(room.id));renderControls();updateModel();},
-    setNight(value){night=Boolean(value);nightButton.setAttribute('aria-pressed',String(night));nightButton.textContent=nightText(night);onNightChange(night);updateModel();},
+    setNight,
     setView(next) {
       if (disposed) return;
       view = { ...view, ...next, currentFloor: String(next.currentFloor ?? view.currentFloor) };

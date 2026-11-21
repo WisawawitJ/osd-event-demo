@@ -6,7 +6,7 @@
 // horizon at night (the moon), never lower than LOWEST so shadows stay a sensible length.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 
-export const SUNRISE = 380, SUNSET = 1075;
+const SUNRISE = 380, SUNSET = 1075;
 // Room lights, car-park lamps and the page's night styling come on shortly after sunset and go off before sunrise.
 export const isDark = minute => minute < SUNRISE - 10 || minute >= SUNSET + 10;
 
@@ -18,7 +18,7 @@ const SOLAR_NOON = (SUNRISE + SUNSET) / 2, LOWEST = .3; // radians, about 17°
 // The sun's elevation through the day: a cosine around solar noon, at NOON_ELEVATION then and zero at sunrise and sunset.
 const DIP = Math.cos(Math.PI * (SUNSET - SUNRISE) / 1440), SWING = NOON_ELEVATION / (1 - DIP);
 const elevationAt = minute => SWING * (Math.cos(2 * Math.PI * (minute - SOLAR_NOON) / 1440) - DIP);
-const DAY = {sky: 0xebf6ff, ground: 0x7b8066, key: 0xffe7ba, fill: 0xc9e2ed}, NIGHT = {sky: 0x7d93b0, key: 0xb7d4ff,
+const DAY = {sky: 0xebf6ff, key: 0xffe7ba}, NIGHT = {sky: 0x7d93b0, key: 0xb7d4ff,
   // A real night: the moon and sky give only enough light to make out shapes, so what is lit (street lights, rooms,
   // headlights) carries the scene. Brighter, the whole site read as dusk.
   moon: .16, skyLight: .22, fill: .05, environment: .09, background: '#111f2d'}, LOW_SUN = 0xffad70;

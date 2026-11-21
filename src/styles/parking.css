@@ -1,4 +1,4 @@
-/* Parking access demo, layered on the showcase styles (app.css). Same palette: ink #253b43, accent #0055b8. */
+/* Parking access demo, layered on the showcase styles (app.css). Same palette: ink #000334, accent #0055b8. */
 :root { --pk-blue: #0055b8; --pk-blue-soft: #eef4fc; --pk-ok: #236b54; --pk-ok-bg: #e5f5ee; --pk-warn: #8d510d; --pk-warn-bg: #fff0dd; --pk-bad: #a3352b; --pk-bad-bg: #fde9e6; --pk-mute: #5d6b78; --pk-mute-bg: #eef1f5; --pk-info: #1f5f8a; --pk-info-bg: #e3f1fa; --pk-line: #e6ebf1; }
 
 /* Shared chrome added to the showcase */
@@ -137,7 +137,6 @@
 .pk-first { margin-top: 2px !important; }
 
 .pk-occupancy { display: grid; grid-template-columns: 120px 1fr; gap: 18px; align-items: center; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
-.pk-donut { width: 120px; height: 120px; }
 .pk-donut-main { font-size: 30px; font-weight: 650; fill: var(--ink); letter-spacing: -.03em; }
 .pk-donut-sub { font-size: 13px; fill: var(--muted); }
 .pk-live { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-top: 8px; }
@@ -155,7 +154,7 @@
 .pk-attention strong { display: block; font-size: 12px; font-weight: 600; }
 .pk-attention small { font-size: 11px; color: var(--muted); }
 .pk-attention > svg:last-child { width: 16px !important; color: #8a99aa; }
-.pk-bars { width: 100%; height: auto; display: block; }
+.pk-bars { display: block; }
 .pk-bars rect.in { fill: var(--pk-blue); }
 .pk-bars rect.out { fill: #9fb0c6; }
 .pk-bars .axis { stroke: #dfe5ec; }
@@ -184,12 +183,11 @@
 .pk-toolbar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
 .pk-toolbar input[type=search] { font: inherit; font-size: 12.5px; padding: 9px 12px; border: 1px solid #d8e0e8; border-radius: 9px; background: #fff; }
 .pk-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.pk-chips button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 11.5px; line-height: 1; padding: 0 12px !important; min-height: 32px !important; border-radius: 16px; background: #f1f4f8; color: #55565a; }
+.pk-chips button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 11.5px; line-height: 1; padding: 3px 12px 0 !important; min-height: 32px !important; border-radius: 16px; background: #f1f4f8; color: #55565a; }
+/* The 3px top padding: the page font's line box sits high in the pill (it keeps room above for Thai marks), so the label
+   moves down about 1.25px and the letters' bodies (Thai and Latin) sit within half a pixel of the middle. Measured on the rendered ink. */
 .pk-chips button[aria-pressed=true] { background: var(--ink); color: #fff; }
 .pk-chips small { opacity: .7; font-size: 10.5px; }
-/* The page font's line box sits high in the pill (it keeps room above for Thai marks): the label moves down about 1.25px, so
-   the letters' bodies (Thai and Latin) sit within half a pixel of the middle. Measured on the rendered ink. */
-.pk-chips button { padding-top: 3px !important; }
 .pk-list { display: flex; flex-direction: column; }
 .pk-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 10px 8px !important; border-bottom: 1px solid var(--pk-line); border-radius: 8px; min-height: 0 !important; }
 .pk-row.is-new { background: #f1f5ff; }
@@ -213,7 +211,6 @@
 .pk-reject label { display: block; font-size: 12px; color: var(--muted); margin-top: 12px; }
 .pk-reject textarea { width: 100%; font: inherit; font-size: 12.5px; margin-top: 6px; padding: 9px 11px; border: 1px solid #d8e0e8; border-radius: 9px; resize: vertical; }
 .pk-qr-row { display: flex; align-items: center; gap: 14px; padding: 12px; border: 1px solid var(--pk-line); border-radius: 12px; }
-.pk-qr-row .qr { width: 84px; height: 84px; }
 .pk-qr-row strong { display: block; font-size: 12.5px; font-weight: 600; }
 .pk-qr-row small { font-size: 11px; color: var(--muted); }
 
@@ -283,15 +280,13 @@
 .pk-feed-box { position: absolute; border: 2px solid #38d36b; border-radius: 3px; box-shadow: 0 0 0 1px #0007; }
 .pk-feed-box.reading { border-style: dashed; border-color: #ffd34d; animation: pk-blink .7s steps(2) infinite; }
 .pk-feed-result { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 11px 11px; }
-.pk-feed-plate { background: #fbfbf7; color: #121820; border-radius: 6px; padding: 4px 10px 3px; text-align: center; line-height: 1.15; min-width: 110px; }
+.pk-feed-plate { background: #fbfbf7; color: #121820; border-radius: 6px; padding: 4px 10px 3px; text-align: center; line-height: 1.15; min-width: 110px; flex-shrink: 0; }
 .pk-feed-plate b { font-size: 19px; letter-spacing: .03em; }
 .pk-feed-plate small { display: block; font-size: 9.5px; }
 .pk-feed-plate.reading { background: #2a3642; color: #c5d1dc; }
-.pk-feed-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 10.5px; color: #9fb0c0; text-align: right; }
 /* The card can be 270 px wide: the meta column shrinks and its labels wrap instead of running off the card. */
-.pk-feed-meta { flex: 1; min-width: 0; }
+.pk-feed-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 10.5px; color: #9fb0c0; text-align: right; }
 .pk-feed-meta .pk-pill { white-space: normal; text-align: right; line-height: 1.3; }
-.pk-feed-plate { flex-shrink: 0; }
 @keyframes pk-in { from { opacity: 0; transform: translateY(-6px); } }
 
 /* Unknown-car alert overlay */
@@ -368,14 +363,13 @@ html[data-night=true] .ph-caption { background: #ffffffe6; }
 .ph-photo-btn svg { width: 16px !important; height: 16px !important; }
 .ph-photo-btn.small { margin: 4px 0 0; }
 .ph-photo-wrap { position: relative; margin-bottom: 6px; }
-.ph-photo { width: 100%; display: block; border-radius: 8px; }
+.ph-photo { display: block; border-radius: 8px; }
 .ph-scan { animation: pk-blink .6s steps(2) infinite; }
 .ph-photo-state { position: absolute; left: 6px; top: 6px; font-size: 9.5px; padding: 2px 6px; border-radius: 4px; background: #000334d9; color: #fff; }
 .ph-photo-state.done { background: #1f6b52e6; }
 .ph-check { display: flex; gap: 7px; align-items: flex-start; font-size: 10.5px; line-height: 1.45; color: #3b4d59; margin: 4px 0 8px; cursor: pointer; }
 .ph-check input { accent-color: var(--pk-blue); margin-top: 2px; }
 .ph-face-row { display: flex; justify-content: center; }
-.ph-face { width: 74px; height: 74px; }
 .ph-error { color: var(--pk-bad); font-size: 10.5px; margin: 0 0 6px; }
 .ph-submit { width: 100%; background: var(--pk-blue); color: #fff; font-size: 13px !important; font-weight: 600; border-radius: 10px; min-height: 42px !important; }
 .ph-done { text-align: center; padding: 20px 6px; }
@@ -388,7 +382,6 @@ html[data-night=true] .ph-caption { background: #ffffffe6; }
 .ph-receipt span { color: var(--muted); }
 .ph-receipt b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 .ph-cc-note { font-size: 9.5px; color: var(--muted); text-align: center; margin: 0 12px 10px; }
-@keyframes pk-spin { to { transform: rotate(360deg); } }
 .ph-link { font-size: 11px !important; color: #023e8a; min-height: 30px !important; }
 .ph-banner { position: absolute; left: 8px; right: 8px; top: 30px; z-index: 4; display: flex; align-items: center; gap: 9px; text-align: left; padding: 9px 10px !important; border-radius: 14px; background: #ffffffF5; box-shadow: 0 10px 26px #10203033; animation: pk-drop .45s cubic-bezier(.2, .9, .3, 1.2); min-height: 0 !important; }
 .ph-banner b { display: block; font-size: 11px; }
@@ -409,7 +402,6 @@ html[data-night=true] .ph-caption { background: #ffffffe6; }
 .ph-ticket-rows span { color: var(--muted); }
 .ph-ticket-how { font-size: 10px; line-height: 1.55; color: #3b4d59; margin: 8px 12px; }
 .ph-ticket-qr { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0 8px; font-size: 9.5px; color: var(--muted); }
-.ph-ticket-qr .qr { width: 104px; height: 104px; }
 .ph-cal { display: flex; align-items: center; justify-content: center; gap: 6px; width: calc(100% - 24px); margin: 0 12px 12px; font-size: 11px !important; background: #f1f4f8; border-radius: 8px; min-height: 34px !important; }
 .ph-cal svg { width: 15px !important; height: 15px !important; }
 .ph-mail-body { font-size: 11.5px; line-height: 1.6; }

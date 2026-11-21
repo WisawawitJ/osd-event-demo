@@ -40,12 +40,24 @@ export const icon = (name, cls = '') => `<svg viewBox="0 0 24 24" aria-hidden="t
 export function morph(el, markup) {
   let source = markup;
   if (typeof markup === 'string') { const template = document.createElement('template'); template.innerHTML = markup; source = template.content; }
+  const active = document.activeElement;
   morphChildren(el, source);
+  // A keyed row moved into place takes its focused button with it, but moving it drops the focus.
+  if (active && active !== document.activeElement && el.contains(active)) active.focus({preventScroll: true});
 }
+// Rows with a `data-key` (a list that reorders) are matched by it, not by position: matched by position, a focused
+// row's buttons went on to act on whichever item moved into its place.
 function morphChildren(target, source) {
-  const want = [...source.childNodes];
+  const want = [...source.childNodes], keyed = new Map();
+  for (const child of target.children) if (child.dataset.key) keyed.set(child.dataset.key, child);
   want.forEach((node, i) => {
-    const current = target.childNodes[i];
+    let current = target.childNodes[i];
+    const key = node.nodeType === 1 ? node.dataset.key : undefined;
+    if (key !== undefined && current?.dataset?.key !== key) {
+      const match = keyed.get(key);
+      if (match) { target.insertBefore(match, current || null); current = match; }
+      else { target.insertBefore(node, current || null); return; }
+    }
     if (!current) target.appendChild(node);
     else if (current.nodeType === node.nodeType && current.nodeName === node.nodeName) morphNode(current, node);
     else target.replaceChild(node, current);
@@ -64,7 +76,8 @@ function morphNode(current, node) {
     if (current.value !== value) current.value = value;
   } else if (tag === 'SELECT') {
     const chosen = [...node.options].find(o => o.hasAttribute('selected')) || node.options[0];
-    if (chosen && current.value !== (chosen.getAttribute('value') ?? chosen.textContent)) current.value = chosen.getAttribute('value') ?? chosen.textContent;
+    const value = chosen && (chosen.getAttribute('value') ?? chosen.textContent);
+    if (chosen && current.value !== value) current.value = value;
   }
 }
 

@@ -113,7 +113,7 @@ export function createLot({scene, stalls, schedule}) {
   put(mergeGeometries(stalls.filter(s => s.reserved === 'vip').map(s => rect(s.x - 2.4, s.x + 2.4, s.z - 1.15, s.z + 1.15, Y.site + .013))), vipFill);
 
   // Planting in the building model's own style: tall slim trunks under rounded multi-blob canopies in three
-  // greens, and hedges as rows of rounded shrubs. All instanced, so the extra greenery costs five draw calls.
+  // greens, and hedges as rows of rounded shrubs. All instanced, so the extra greenery costs four draw calls.
   const GREENS = ['#47634b', '#607c4f', '#7d9057'];
   const leafMats = GREENS.map(color => mat({color, roughness: .65}));
   const trunkMat = mat({color: '#776c56', roughness: .65});
@@ -247,7 +247,7 @@ export function createLot({scene, stalls, schedule}) {
     c.fillStyle = '#fff'; c.font = '700 76px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('P', 70, 78);
     c.textAlign = 'left'; c.font = '700 40px Arial'; c.fillStyle = '#e8eef4'; c.fillText('OSD PARKING', 136, 58);
     c.font = '500 26px "OSD Thai", Arial'; c.fillStyle = '#9fb3c4'; c.fillText('ที่จอดว่าง · FREE', 136, 102);
-    c.font = '700 96px Arial'; c.fillStyle = free > 0 ? '#5df08a' : '#ff6a5c'; c.textAlign = 'left'; c.fillText(String(free).padStart(2, '0'), 36, 196);
+    c.font = '700 96px Arial'; c.fillStyle = free > 0 ? '#5df08a' : '#ff6a5c'; c.fillText(String(free).padStart(2, '0'), 36, 196);
     c.font = '500 34px Arial'; c.fillStyle = '#9fb3c4'; c.fillText(`/ ${capacity}`, 170, 206);
     c.font = '600 28px "OSD Thai", Arial'; c.fillStyle = free > 0 ? '#5df08a' : '#ff6a5c'; c.textAlign = 'right'; c.fillText(free > 0 ? 'เปิด · OPEN' : 'เต็ม · FULL', 488, 206);
     signTexture.needsUpdate = true;
@@ -271,8 +271,6 @@ export function createLot({scene, stalls, schedule}) {
   function setBays(list) {
     list.forEach((s, i) => leds.setColorAt(i, s.occupant ? ledColors.used : s.reserved === 'guest' ? ledColors.guest : s.reserved === 'vip' ? ledColors.vip : ledColors.free));
     leds.instanceColor.needsUpdate = true;
-    const free = list.filter(s => !s.occupant).length;
-    return free;
   }
 
   // Boom motion

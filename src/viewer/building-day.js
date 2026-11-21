@@ -4,7 +4,7 @@ import {sunAt} from 'osd/viewer/daylight.js';
 // solar panels do at each time of day. A deterministic schedule that repeats every day: no real sensors, device
 // calls or random values. Titles and details follow the TH/EN switch (getters), so a re-render picks up the language.
 const event=(minute,destination,layer,title,detail)=>({minute,destination,layer,get title(){return L(...title);},get detail(){return L(...detail);}});
-// Moments worth a look, in time order: the timeline's buttons, each stop's panel and the "Follow the day" camera.
+// Moments worth a look, in time order: the timeline's buttons and the "Follow the day" camera (and its footer line).
 export const dayEvents = [
  event(450,'parking','none',['รถเข้างานช่วงเช้า','Morning arrivals'],['รถพนักงานทยอยเข้าลานจอด','Staff cars stream into the car park']),
  event(495,'access','none',['อาคารเริ่มวันใหม่','The building starts its day'],['อ่านทะเบียนและเปิดทางเข้า','Plate read and entrance opened']),
@@ -18,7 +18,8 @@ export const dayEvents = [
 const lerp=(points,t)=>{for(let i=1;i<points.length;i++){const[a,x]=points[i-1],[b,y]=points[i];if(t<=b)return x+(y-x)*Math.max(0,(t-a)/(b-a));}return points.at(-1)[1];};
 const round=n=>Math.round(n*10)/10;
 const dayMinute=value=>(((Number.isFinite(value)?Math.round(value):0)%1440)+1440)%1440;
-export const formatTime=minute=>{const m=dayMinute(minute);return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;};
+// The minute it is (floored, as a clock and the timeline's slider show it: 23:59:45 is 23:59).
+export const formatTime=minute=>{const m=dayMinute(Math.floor(minute));return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;};
 // Solar output follows the sun's height: 9.4 kW at noon, nothing before sunrise or after sunset.
 const solarAt=minute=>round(9.4*Math.pow(sunAt(minute).height,1.15));
 export function incidentsFor(telemetry,rooms){

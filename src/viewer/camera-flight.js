@@ -45,5 +45,5 @@ export function createCameraFlight({read,write,request=fn=>requestAnimationFrame
    handle=request(tick);
   });
  }
- return {fly:(to,duration=1800)=>flyPath([{to,duration}]),flyPath,stop,get running(){return Boolean(handle);}};
+ return {flyPath,stop,get running(){return Boolean(handle);}};
 }

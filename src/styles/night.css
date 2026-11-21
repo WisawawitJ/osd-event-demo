@@ -1,7 +1,7 @@
 /* Night: the page around the 3D view goes dark with the scene. main.js sets html[data-night=true]. */
 html[data-night=true] {
   color-scheme: dark;
-  --paper: #0e151c; --canvas: #182b3c; --ink: #e4ebf2; --muted: #96a8b8; --line: #283746; --accent: #00a1df; --active: #22314a;
+  --paper: #0e151c; --ink: #e4ebf2; --muted: #96a8b8; --line: #283746; --accent: #00a1df; --active: #22314a;
   --pk-blue-soft: #1d2a45; --pk-line: #253442;
   --pk-ok: #7fd8b0; --pk-ok-bg: #173329; --pk-warn: #f1bf73; --pk-warn-bg: #3a2b14; --pk-bad: #ff9c8f; --pk-bad-bg: #3d1f1c;
   --pk-mute: #a4b3c2; --pk-mute-bg: #222f3c; --pk-info: #8fcbf2; --pk-info-bg: #16303f;
@@ -57,7 +57,7 @@ html[data-night=true] .chart text { fill: #8c9db0; }
 html[data-night=true] .chart path[fill="#eaf1fb"] { fill: #1b2740; }
 html[data-night=true] .plate { border-color: #3a4a5a; }
 html[data-night=true] .kiosk-toggle { color: var(--muted); }
-html[data-night=true].kiosk-on .kiosk-toggle, html[data-night=true] .kiosk-on .kiosk-toggle { background: #1d2a45; color: #7fd0f3; }
+html[data-night=true] .kiosk-on .kiosk-toggle { background: #1d2a45; color: #7fd0f3; }
 
 /* Staff console */
 html[data-night=true] .pk-tabs { background: #1b2632; }
@@ -97,8 +97,7 @@ html[data-night=true] .pk-phone { --ink: #253b43; --muted: #526870; --line: #cbd
 html[data-night=true] .pk-plate-chip, html[data-night=true] .pk-plate-big, html[data-night=true] .plate { color: #121820; background: #fdfdfb; }
 html[data-night=true] .pk-plate-chip small, html[data-night=true] .pk-plate-big small, html[data-night=true] .plate small { color: #2b3540; }
 
-/* Explore page */
-html[data-night=true] .header { border-bottom-color: var(--line); }
+/* Explore page. Its pressed-button rule reaches the showcase too, where the dock and console tabs keep their own colours. */
 html[data-night=true] button[aria-pressed="true"] { background: #e4ebf2; color: #0e151c; }
 html[data-night=true] .showcase-page .destination-dock button[aria-pressed=true] { background: #0055b8; color: #fff; }
 html[data-night=true] .showcase-page .pk-tabs button[aria-selected=true] { background: #253445; }

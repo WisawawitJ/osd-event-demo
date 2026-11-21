@@ -1,5 +1,5 @@
 // Headless Chromium driven over the DevTools protocol, with no npm dependencies.
-// It starts its own static server on a free port and renders WebGL in software (SwiftShader) by default.
+// It starts its own static server on a free port; WebGL renders on the NVIDIA GPU when present, else in software.
 import {spawn} from 'node:child_process';
 import {existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync} from 'node:fs';
 import {createServer} from 'node:net';
@@ -16,14 +16,21 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // The default is the NVIDIA GPU when its driver is installed (it does not drive the display, and is the fastest:
 // a check that took 9 s on the iGPU takes 5 s), otherwise software WebGL (SwiftShader, on the CPU). A hardware
 // browser that turns out to have opened the iGPU anyway is closed at once and the run falls back to software.
+const NVIDIA_EGL = '/usr/share/glvnd/egl_vendor.d/10_nvidia.json';
 const GPU_MODES = {
   software: ['--disable-gpu', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
   // The NVIDIA GPU only (it does not drive the display): EGL through NVIDIA's vendor library alone, so Mesa and with it
   // the Intel iGPU are never loaded.
-  nvidia: {flags: ['--use-angle=gl-egl', '--ignore-gpu-blocklist'], env: {__EGL_VENDOR_LIBRARY_FILENAMES: '/usr/share/glvnd/egl_vendor.d/10_nvidia.json', __NV_PRIME_RENDER_OFFLOAD: '1', __GLX_VENDOR_LIBRARY_NAME: 'nvidia'}},
+  nvidia: {flags: ['--use-angle=gl-egl', '--ignore-gpu-blocklist'], env: {__EGL_VENDOR_LIBRARY_FILENAMES: NVIDIA_EGL, __NV_PRIME_RENDER_OFFLOAD: '1', __GLX_VENDOR_LIBRARY_NAME: 'nvidia'}},
   egl: ['--use-angle=gl-egl', '--ignore-gpu-blocklist'],
   vulkan: ['--use-angle=vulkan', '--enable-features=Vulkan,DefaultANGLEVulkan,VulkanFromANGLE', '--ignore-gpu-blocklist'],
 };
+
+// Browsers and servers still running when the runner exits or is interrupted are killed: a left-over headless page
+// keeps drawing the demo at full speed and slowed (and hung) later runs on the same GPU.
+const running = new Set();
+process.on('exit', () => { for (const chrome of running) chrome.kill('SIGKILL'); });
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => process.exit(130));
 
 function freePort() {
   return new Promise((ok, fail) => { const s = createServer(); s.once('error', fail); s.listen(0, '127.0.0.1', () => { const {port} = s.address(); s.close(() => ok(port)); }); });
@@ -38,12 +45,6 @@ async function startServer() {
   stop();
   throw new Error('test server did not start');
 }
-
-// Browsers and servers still running when the runner exits or is interrupted are killed: a left-over headless page
-// keeps drawing the demo at full speed and slowed (and hung) later runs on the same GPU.
-const running = new Set();
-process.on('exit', () => { for (const chrome of running) chrome.kill('SIGKILL'); });
-for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => process.exit(130));
 
 async function startBrowser(mode, profileRoot) {
   const {flags, env = {}} = Array.isArray(mode) ? {flags: mode} : mode;
@@ -84,7 +85,6 @@ async function startBrowser(mode, profileRoot) {
   } catch (error) { close(); throw error; } // a browser that started but does not answer is not left running
 }
 
-const NVIDIA_EGL = '/usr/share/glvnd/egl_vendor.d/10_nvidia.json';
 export const DEFAULT_GPU = existsSync('/dev/nvidia0') && existsSync(NVIDIA_EGL) ? 'nvidia' : 'software';
 // The iGPU's device nodes (vendor 8086), and whether any process of the browser using `profile` has one open.
 const IGPU = (() => { try { return readdirSync('/sys/class/drm').filter(n => /^(card|renderD)\d+$/.test(n) && readFileSync(`/sys/class/drm/${n}/device/vendor`, 'utf8').trim() === '0x8086').map(n => `/dev/dri/${n}`); } catch { return []; } })();
@@ -100,7 +100,7 @@ function usesIgpu(profile) {
 
 // Opens a browser and server. `gpu` is a GPU_MODES key: DEFAULT_GPU unless GPU= says otherwise (see GPU_MODES).
 export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(root, 'test/out')} = {}) {
-  if (!GPU_MODES[gpu]) throw new Error(`GPU=${gpu}: use software (default), or nvidia / vulkan / egl to opt in to hardware`);
+  if (!GPU_MODES[gpu]) throw new Error(`GPU=${gpu}: use nvidia or software (default here: ${DEFAULT_GPU}), or vulkan / egl to opt in to other hardware (egl is the Intel iGPU: don't)`);
   const profileRoot = join(process.env.TEST_TMP || tmpdir(), 'osd-demo-test');
   mkdirSync(profileRoot, {recursive: true});
   mkdirSync(shots, {recursive: true});
@@ -115,8 +115,7 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
       await probe();
       if (usesIgpu(browser.profile)) { console.error(`GPU=${gpu} opened the Intel iGPU: closed it, using software rendering`); browser.close(); gpu = 'software'; browser = await startBrowser(GPU_MODES.software, profileRoot); }
     }
-    renderer = await probe();
-    renderer = `${gpu}: ${renderer || 'no WebGL'}`;
+    renderer = `${gpu}: ${await probe() || 'no WebGL'}`;
   } catch (error) { browser?.close(); server.stop(); throw error; }
   const {send, on, logs} = browser;
   let shot = 0;

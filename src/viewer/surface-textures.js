@@ -7,7 +7,6 @@ export function createSurfaceTextures(renderer){
  function tile(kind){
   if(textures.has(kind))return textures.get(kind);
   const canvas=document.createElement('canvas');canvas.width=canvas.height=kind==='paving'?2048:512;const c=canvas.getContext('2d');
-  c.fillStyle='#ddddda';c.fillRect(0,0,512,512);
   if(kind==='solar'){
    c.fillStyle='#a2b8cc';c.fillRect(0,0,512,512);
    for(let row=0;row<12;row++)for(let col=0;col<6;col++){const x=col*512/6,y=row*512/12;c.fillStyle=(row+col)%3?'#b5c7d5':'#adbfce';c.fillRect(x+1.4,y+1.4,512/6-2.8,512/12-2.8);c.fillStyle='#d9e2e8';c.fillRect(x+512/18,y+2,.7,512/12-4);c.fillRect(x+1024/18,y+2,.7,512/12-4);}
@@ -60,7 +59,7 @@ export function createSurfaceTextures(renderer){
   model.traverse(object=>{
    if(!object.isMesh)return;const kind=classify(object);if(!kind)return;
    const geometry=object.geometry,position=geometry.attributes.position,normal=geometry.attributes.normal;if(!normal)return;
-   const uv=new Float32Array(position.count*2),scale=kind==='paving'?2.5:kind==='terrazzo'?.8:kind==='carpet'?.8:kind==='timber'?1.7:2;
+   const uv=new Float32Array(position.count*2),scale=kind==='paving'?2.5:kind==='terrazzo'||kind==='carpet'?.8:kind==='timber'?1.7:2;
    for(let i=0;i<position.count;i++){
     const x=position.getX(i),y=position.getY(i),z=position.getZ(i),nx=Math.abs(normal.getX(i)),ny=Math.abs(normal.getY(i)),nz=Math.abs(normal.getZ(i));
     const coords=ny>=nx&&ny>=nz?[x,z]:nx>=nz?[z,y]:[x,y];uv[i*2]=kind==='solar'?geometry.attributes.uv.getX(i):kind==='paving'?(x-(object.userData.pavingCenter?.[0]||0))/30+.5:coords[0]/scale;uv[i*2+1]=kind==='solar'?geometry.attributes.uv.getY(i):kind==='paving'?(z-(object.userData.pavingCenter?.[1]||0))/30+.5:coords[1]/scale;

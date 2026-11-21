@@ -7,7 +7,7 @@ import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const CAR_COLORS = ['#f2f1ec', '#b9bec2', '#22262b', '#6d747a', '#2f5d9a', '#b8322e', '#33584a', '#cdbb98', '#1f3150'];
-export const CAR = {length: 4.4, width: 1.8, frontPlateZ: 2.24, plateY: .52};
+export const CAR = {frontPlateZ: 2.24, plateY: .52};
 
 // Plate texture layout: the plate fills the top 120 px; a lamp strip (head left, tail right) sits below it.
 const TEX_W = 256, TEX_H = 144, PLATE_W = 248, PLATE_H = 120;
@@ -181,7 +181,6 @@ export function createCar({plate, province, color = 0}) {
   pool.receiveShadow = false; pool.visible = false; pool.name = 'Demo_car_headlights';
   const beams = add(p.beam, p.beamMaterial);
   beams.receiveShadow = false; beams.visible = false; beams.name = 'Demo_car_headlight_beams';
-  car.userData = {plate, province};
   return car;
 }
 

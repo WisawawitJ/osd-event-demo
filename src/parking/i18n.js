@@ -34,7 +34,6 @@ const S = {
   'none': ['ไม่มีรายการ', 'Nothing here'],
   'cars': ['คัน', 'cars'],
   'today': ['วันนี้', 'Today'],
-  'now': ['ตอนนี้', 'Now'],
   'staff.name': ['เจ้าหน้าที่ อรุณี (ตัวอย่าง)', 'Staff: Arunee (sample)'],
   'staff.guard': ['รปภ. ประตูหลัก (ตัวอย่าง)', 'Main-gate guard (sample)'],
 
@@ -313,9 +312,9 @@ export const L = (th, en) => (lang === 'en' ? en : th);
 
 const MONTHS_TH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-// Demo times are kept as Bangkok wall-clock minutes from 1 Jan 2026 to stay independent of the laptop's zone.
+// Demo times are epoch ms, always shown as Bangkok wall-clock time to stay independent of the laptop's zone.
 const pad = n => String(n).padStart(2, '0');
-export function parts(ms) {
+function parts(ms) {
   const d = new Date(ms + 7 * 3600e3);
   return {y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate(), h: d.getUTCHours(), min: d.getUTCMinutes(), s: d.getUTCSeconds()};
 }

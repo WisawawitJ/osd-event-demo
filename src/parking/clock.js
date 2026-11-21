@@ -34,7 +34,7 @@ export const sleep = ms => new Promise(resolve => later(resolve, ms));
 // the clock at real speed too, so its steps keep their own times.
 const DAY_MS = 864e5, DAY0 = Date.UTC(2026, 10, 24, -7); // 24 Nov 2026 00:00 in Bangkok
 export const minuteOf = ms => (((ms - DAY0) % DAY_MS) + DAY_MS) % DAY_MS / 60000;
-export const isNightMinute = m => m >= 21 * 60 || m < 5 * 60;
+const isNightMinute = m => m >= 21 * 60 || m < 5 * 60;
 const dayParam = params.get('day');
 const DAY_REAL = dayParam === null || !Number.isFinite(Number(dayParam)) ? 20 : Math.max(0, Number(dayParam));
 // Minutes of world time per real minute in the daytime for a day of `minutes`; the night's 8 hours take 1/1.5 of their share.
@@ -70,7 +70,6 @@ function createWorldClock() {
     },
     now() { advance(); return Math.round(time); },
     minute() { advance(); return minuteOf(time); },
-    get night() { return isNightMinute(this.minute()); },
     // Sets the time outright (a reset or a story step). Listeners get the old and new time.
     set(ms) { advance(); const from = time; time = ms >= WRAP ? ms - DAY_MS : ms; emit('set', {from, to: time}); },
     // Moves forward to the next time of day `minute` (a jump never goes back: what happened stays in the past).
@@ -78,8 +77,10 @@ function createWorldClock() {
     // whatever they log for the skipped hours lands before the new time.
     jumpTo(minute) {
       advance();
-      const ahead = (((minute - minuteOf(time)) % 1440) + 1440) % 1440;
-      if (ahead < 1) return;
+      // The minute it is already (at 15:00:20, the 15:00 moment) is now, not a day ahead; the next one is a few seconds on.
+      const current = minuteOf(time), target = ((minute % 1440) + 1440) % 1440;
+      if (Math.floor(current) === Math.floor(target)) return;
+      const ahead = (((target - current) % 1440) + 1440) % 1440;
       let from = time;
       if (time + ahead * 60000 >= WRAP) { time -= DAY_MS; from -= DAY_MS; emit('wrap', -DAY_MS); }
       time = from + ahead * 60000;

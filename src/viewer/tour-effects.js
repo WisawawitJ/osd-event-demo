@@ -51,14 +51,14 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
  const energy=group('energy',5),energyMaterial=mat('#21a790',.75);
  const path=new T.BufferGeometry().setFromPoints([new T.Vector3(-1.4,.16,-5.9),new T.Vector3(-1.4,.16,6.1),new T.Vector3(4,.16,6.1)]);owned.push(path);const lm=new T.LineDashedMaterial({color:'#239b87',dashSize:.22,gapSize:.18});materials.push(lm);const flow=new T.Line(path,lm);flow.computeLineDistances();energy.add(flow);
  const packet=mesh(energy,new T.SphereGeometry(.09,10,8),energyMaterial,[-1.4,.2,1]);
- const access=group('access',1),body=mat('#4b5d6b'),white=mat('#fffdf5'),red=mat('#e37753');
+ const access=group('access',1);
  // The original demo's barrier and camera at the P1 aisle mouth. With the car park's main gate present
  // (src/parking) there is one gate only: this one is not built, and the Entrance stop uses the main gate.
  let boom=null,securityCamera=null;
  if(ownBarrier){
   // Parking aisle: x -13.9 .. -7.9; south site edge z 15.96644.
   // One shared boom spans both arrow-marked directions, just inside that edge.
-  const gateX=-13.65,gateZ=15.7,boomLength=5.45,cameraX=-8.1,cameraZ=15.6;
+  const gateX=-13.65,gateZ=15.7,boomLength=5.45,cameraX=-8.1,cameraZ=15.6,body=mat('#4b5d6b'),white=mat('#fffdf5'),red=mat('#e37753');
   mesh(access,new T.BoxGeometry(.42,1.18,.45),body,[gateX,.59,gateZ]);
   boom=new T.Group();boom.position.set(gateX,1.12,gateZ);boom.name='Demo_barrier_arm';access.add(boom);
   mesh(boom,new T.BoxGeometry(boomLength,.12,.14),white,[boomLength/2,0,0]);for(let i=0;i<8;i++)mesh(boom,new T.BoxGeometry(.20,.125,.145),red,[.4+i*.65,0,0]);
@@ -92,23 +92,27 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
   cancelAnimationFrame(stopFrame);stopFrame=0;
   if(instant){for(const id of Object.keys(groups))level[id]=goal[id];paint();return;}
   let last=performance.now();
-  const step=time=>{const d=Math.max(0,time-last)/450;last=time;let moving=false;
+  // Each step is at most 50 ms of fade (as in fader below): one slow frame on arrival made the cone pop in.
+  const step=time=>{const d=Math.min(50,Math.max(0,time-last))/450;last=time;let moving=false;
    for(const id of Object.keys(groups)){const g=goal[id];level[id]=g>level[id]?Math.min(g,level[id]+d):Math.max(g,level[id]-d);if(level[id]!==g)moving=true;}
    paint();stopFrame=moving?requestAnimationFrame(step):0;};
   stopFrame=requestAnimationFrame(step);
  }
 
  // The AC's air: fades in and out with the switch, and while it is on the dashes flow down from the unit.
- let airLevel=1,airTarget=1,airFrame=0,airLast=0;
+ let airLevel=1,airTarget=1,airFrame=0,airLast=0,airShift=-1;
  const airBase=air.map(o=>o.material.opacity);
  for(const line of air)line.userData.distances=Float32Array.from(line.geometry.attributes.lineDistance.array);
  const setAir=()=>{air.forEach((o,i)=>{o.visible=airLevel>.001;own.set(o.material,airBase[i]*airLevel);});paint();};
- function airStep(time){
-  airFrame=0;const dt=Math.min(.1,(time-(airLast||time))/1000);airLast=time;
-  airLevel=airTarget>airLevel?Math.min(airTarget,airLevel+dt/.35):Math.max(airTarget,airLevel-dt/.35);
+ function airStep(){
+  // On demo time, like the air's flow below: paused, its fade holds too.
+  const time=demoNow();airFrame=0;const dt=Math.min(.1,(time-(airLast||time))/1000);airLast=time;
+  const level=airTarget>airLevel?Math.min(airTarget,airLevel+dt/.35):Math.max(airTarget,airLevel-dt/.35);
   const shift=(demoNow()/1000*.35)%.26; // demo time: the air stands still while paused
-  for(const o of air){const d=o.geometry.attributes.lineDistance,base=o.userData.distances;for(let j=0;j<base.length;j++)d.array[j]=base[j]-shift;d.needsUpdate=true;}
-  setAir();
+  // Paused, nothing changes: no upload, no redraw (the frames keep watching for Resume).
+  if(shift!==airShift||level!==airLevel){airLevel=level;airShift=shift;
+   for(const o of air){const d=o.geometry.attributes.lineDistance,base=o.userData.distances;for(let j=0;j<base.length;j++)d.array[j]=base[j]-shift;d.needsUpdate=true;}
+   setAir();}
   if(current==='meeting'&&(airLevel>0||airTarget>0)&&!document.hidden)airFrame=requestAnimationFrame(airStep);else airLast=0;
  }
  function fadeAir(on){airTarget=on?1:0;if(!airFrame&&current==='meeting')airFrame=requestAnimationFrame(airStep);if(current!=='meeting'){airLevel=airTarget;setAir();}}
@@ -117,8 +121,9 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
  // the fade then went most of the way in that one frame.
  function fader(ms,draw){
   let level=1,target=1,frame=0,last=0;
-  const step=time=>{const d=Math.min(50,Math.max(0,time-last))/ms;last=time;level=target>level?Math.min(target,level+d):Math.max(target,level-d);draw(level);frame=level===target?0:requestAnimationFrame(step);};
-  return {set(on){target=on?1:0;if(frame||level===target)return;last=performance.now();frame=requestAnimationFrame(step);},stop(){cancelAnimationFrame(frame);frame=0;}};
+  // On demo time: paused, the fade holds where it is (and draws nothing new).
+  const step=()=>{const now=demoNow(),d=Math.min(50,Math.max(0,now-last))/ms;last=now;if(d>0){level=target>level?Math.min(target,level+d):Math.max(target,level-d);draw(level);}frame=level===target?0:requestAnimationFrame(step);};
+  return {set(on){target=on?1:0;if(frame||level===target)return;last=demoNow();frame=requestAnimationFrame(step);},stop(){cancelAnimationFrame(frame);frame=0;}};
  }
  // The room light's pool and beam, and the seat markers (the meeting ending or starting), fade in and out (~0.35 s).
  const lampBase=lamp.map(o=>own.get(o.material)),peopleBase=own.get(teal);
@@ -127,6 +132,6 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
  let started=false;
  function select(id){current=id;if(id==='meeting'&&!airFrame&&airTarget>0)airFrame=requestAnimationFrame(airStep);for(const name of Object.keys(groups))goal[name]=name===id?1:0;fadeStops(!started);started=true;}
  function update(state){peopleFade.set(state.occupied);lampFade.set(state.light!==false);fadeAir(state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');if(boom)boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;own.set(energyMaterial,state.solar>5?.8:.35);paint();}
- function animate(t){if(current==='meeting')air.forEach((o,i)=>{o.material.dashSize=.12+.035*Math.sin(t*2+i);});if(current==='energy'){packet.position.z=-5.9+((t*.9)%12);packet.position.x=-1.4;}schedule();}
+ function animate(t){if(current==='meeting')air.forEach((o,i)=>{o.material.dashSize=.12+.035*Math.sin(t*2+i);});if(current==='energy')packet.position.z=-5.9+((t*.9)%12);schedule();}
  select('overview');return {securityCamera,select,update,animate,dispose(){lampFade.stop();peopleFade.stop();cancelAnimationFrame(airFrame);cancelAnimationFrame(stopFrame);for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
 }

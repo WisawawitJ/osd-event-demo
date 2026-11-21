@@ -29,7 +29,7 @@ const liftButton=document.querySelector('#lift');
 const courtyardButton=document.querySelector('#courtyard'),officeButton=document.querySelector('#office');
 const arrivalButton=document.querySelector('#arrival'),receptionButton=document.querySelector('#reception'),stairsButton=document.querySelector('#stairs');
 const parkingButton=document.querySelector('#parking'),servicesButton=document.querySelector('#services');
-const extraButtons=[servicesButton,parkingButton,arrivalButton,receptionButton,stairsButton,exteriorButton,frontButton,sideButton,liftButton,courtyardButton,officeButton];
+const viewButtons=[...floorButtons,explodeButton,cutButton,resetButton,servicesButton,parkingButton,arrivalButton,receptionButton,stairsButton,exteriorButton,frontButton,sideButton,liftButton,courtyardButton,officeButton];
 let exteriorEnabled=true, cameraSide=false, renderKit, simulation, surfaceTextures, interiorView=null;
 const ceilings=[],deviceMeshes=[];
 const presentationMeshes=[];
@@ -39,6 +39,7 @@ const abort = new AbortController();
 let currentFloor = 'all', exploded = false, cutaway = false;
 let renderer, controls, model, resizeObserver, showcase, flight, sceneTransition, securityPreview, parking = null;
 const isShowcase=Boolean(document.querySelector('#showcase'));
+const dayBackground=isShowcase?'#e6ecee':'#dce5e5'; // the 3D view's daytime background (the sky darkens it at night)
 // ?debug=1 (tests, the benchmark: test/) exposes the scene and the demo's parts on window.
 const params=new URLSearchParams(location.search),debug=params.has('debug');
 // The page's night look (night.css) switches in one go and cross-fades as a whole (a view transition). Fading each
@@ -70,14 +71,14 @@ function fail(message) {
   status.dataset.state = 'error';
   status.textContent = message;
   retry.hidden = false;
-  for (const button of [...floorButtons, explodeButton, cutButton, resetButton, ...extraButtons]) button.disabled = true;
+  for (const button of viewButtons) button.disabled = true;
 }
 
 try {
   const scene = new THREE.Scene();
   // The scene never moves. Left on, its matrix update each frame forced every object below it to recompute too.
   scene.matrixAutoUpdate = false;
-  scene.background = new THREE.Color('#dce5e5');
+  scene.background = new THREE.Color(dayBackground);
   const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 1000);
   // ?render=0.5 (the test harness sets it): the 3D view at that fraction of its resolution, without antialiasing and
   // with smaller shadow maps, so software WebGL keeps up (test/browser.mjs). The booth never sets it.
@@ -186,7 +187,7 @@ try {
     draw(); // resizing clears the canvas: redraw at once so no blank frame shows
   }
   function setInMotion(value) {
-    if (value === inMotion || !renderKit) return;
+    if (value === inMotion) return;
     inMotion = value;
     renderKit.setReflectionsPaused(value);
     applyPixelRatio();
@@ -216,8 +217,8 @@ try {
   const writePose=pose=>{camera.position.fromArray(pose.eye);controls.target.fromArray(pose.target);camera.fov=pose.fov;camera.updateProjectionMatrix();controls.update();schedule();};
   flight=createCameraFlight({read:readPose,write:writePose,onState(active){viewport.classList.toggle('flying',active);const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';setInMotion(active);}});
   // ?speed=N (tests, rehearsals) shortens every camera flight like the rest of the demo's timing.
-  if (SPEED !== 1) { const flyPath = flight.flyPath; flight.flyPath = steps => flyPath(steps.map(step => ({...step, duration: (step.duration ?? 1800) / SPEED}))); flight.fly = (to, duration = 1800) => flight.flyPath([{to, duration}]); }
-  if(isShowcase){scene.background.set('#e6ecee');renderKit.ground.material.color.set('#e6ecee');}
+  if (SPEED !== 1) { const flyPath = flight.flyPath; flight.flyPath = steps => flyPath(steps.map(step => ({...step, duration: (step.duration ?? 1800) / SPEED}))); }
+  if(isShowcase)renderKit.ground.material.color.set(dayBackground);
 
   function visibleBounds() {
     const bounds = new THREE.Box3();
@@ -327,7 +328,7 @@ try {
     const target=preset?.target||(kind==='services'?[-4,.4,-4]:kind==='parking'?[-13.5,.3,3.5]:kind==='stairs'?[9.4,1.3,-4.85]:kind==='courtyard'?[23.5,1,-2.5]:[3.7,.6,6.6]);
     camera.fov=58;camera.position.copy(root.localToWorld(new THREE.Vector3(...eye)));
     controls.target.copy(root.localToWorld(new THREE.Vector3(...target)));controls.minDistance=.4;
-    camera.updateProjectionMatrix();controls.update();simulation?.setView({currentFloor,cutaway,exploded});schedule();
+    camera.updateProjectionMatrix();controls.update();schedule();
     document.querySelector('#view-label').textContent={services:L('ห้องบริการ','Service rooms'),parking:L(`ที่จอดรถ · ${root.userData.parking?.count||6} คัน`,`Parking · ${root.userData.parking?.count||6} spaces`),courtyard:L('บ่อปลา','Fish pond'),office:L('สำนักงาน','Offices'),arrival:L('ลานวนรถ','Drop-off'),reception:L('ต้อนรับ','Reception'),stairs:L('บันได','Stairs')}[kind]+(kind==='parking'?'':` · ${floorLabel(currentFloor)}`);
   }
   courtyardButton.addEventListener('click',()=>interiorCamera('courtyard'));
@@ -355,13 +356,10 @@ try {
   });
 
   let lastAspect = 0;
-  function applyAspect() {
-    camera.aspect = Math.max(viewport.clientWidth, 1) / Math.max(viewport.clientHeight, 1);
-    camera.updateProjectionMatrix();
-  }
   resizeObserver = new ResizeObserver(() => {
     const width = Math.max(viewport.clientWidth, 1), height = Math.max(viewport.clientHeight, 1);
-    applyAspect();
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
     renderer.setSize(width, height, false);
     if (model && !isShowcase && Math.abs(lastAspect - camera.aspect) > 0.25) frameVisible();
     lastAspect = camera.aspect;
@@ -498,7 +496,7 @@ try {
       let skyStep=null;
       const followClock=()=>{
         const minute=world.minute(),step=Math.round(minute/2);
-        if(step!==skyStep){skyStep=step;applySky({minute,scene,renderer,hemisphere,key,fill,dayBackground:isShowcase?'#e6ecee':'#dce5e5'});renderer.shadowMap.needsUpdate=true;schedule();}
+        if(step!==skyStep){skyStep=step;applySky({minute,scene,renderer,hemisphere,key,fill,dayBackground});renderer.shadowMap.needsUpdate=true;schedule();}
         if(simulation.getState().night!==isDark(minute))simulation.setNight(isDark(minute));
         setPageNight(isDark(minute));
       };
@@ -507,7 +505,7 @@ try {
       const offClock=world.subscribe(kind=>{if(kind!=='wrap')followClock();});abort.signal.addEventListener('abort',offClock,{once:true});
       status.dataset.state = 'ready';
       status.textContent = L('โมเดลพร้อมแสดง','Model ready');
-      for (const button of [...floorButtons, explodeButton, cutButton, resetButton, ...extraButtons]) button.disabled = false;
+      for (const button of viewButtons) button.disabled = false;
       updateView();
       if(isShowcase){
        securityPreview=createSecurityPreview({renderer,scene,schedule,fullVisibility:[...floorRoots,...presentationMeshes,...roofs,...ceilings]});
@@ -516,7 +514,7 @@ try {
        sceneTransition=createSceneTransition({model,schedule,onFinish:()=>{renderer.shadowMap.needsUpdate=true;},onProgress:()=>{renderer.shadowMap.needsUpdate=true;}});
        if(debug)window.__transition=sceneTransition;
        const buildingBounds=new THREE.Box3().setFromObject(model),buildingCenter=buildingBounds.getCenter(new THREE.Vector3());
-       let navigation=0,lastDestination='overview',stopPoses=null;
+       let navigation=0,lastDestination='overview',stopPoses=null,docking=false;
        const markerMaterial=new THREE.MeshBasicMaterial({color:'#27a8b3',transparent:true,opacity:.6,depthTest:false,depthWrite:false,side:THREE.DoubleSide,forceSinglePass:true});
        const marker=new THREE.Mesh(new THREE.RingGeometry(1.05,1.2,48),markerMaterial);marker.rotation.x=-Math.PI/2;marker.renderOrder=100;marker.visible=false;scene.add(marker);
        abort.signal.addEventListener('abort',()=>{marker.removeFromParent();marker.geometry.dispose();markerMaterial.dispose();},{once:true});
@@ -534,7 +532,10 @@ try {
        }
        // The parking access demo adds its own lot, cars and UI to this scene (src/parking).
        const parkingModule=await import('osd/parking/index.js');
-       parking=parkingModule.createParking({scene,schedule,camera,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
+       // A flight's floors settled at once on a stop's scene: one cut short (see cancelFlight), or taken over.
+       function settle(id){sceneTransition.finish();applyDestination(id);lastDestination=id;}
+       // The story's camera moves; one that takes over a flight to the car park (Play tapped on the way) settles it there.
+       parking=parkingModule.createParking({scene,schedule,camera,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{if(docking){docking=false;settle('parking');}navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
        parking.lot.root.visible=renderKit.ground.visible;
        if(debug)window.__parking=parking;
        parking.setNight(simulation.getState().night);simulation.subscribe(()=>parking.setNight(simulation.getState().night));
@@ -558,7 +559,10 @@ try {
          return stopPoses;
        }
        showcase=createShowcase({model,simulation,schedule,parking,
-        cancelFlight:()=>{navigation++;flight.stop();marker.visible=false;schedule();},
+        // The floors' change ends with the flight (left mid-cut, the building stayed half cut away where it stopped).
+        // The floors' change ends with the flight (left mid-cut, the building stayed half cut away where it stopped), on the
+        // scene of the stop on show: the new one once its approach has begun, else the one the flight left.
+        cancelFlight:()=>{const flying=flight.running;navigation++;flight.stop();if(flying)settle(lastDestination);marker.visible=false;schedule();},
         onUserOrbit:callback=>{controls.addEventListener('start',callback);
          // Capture: runs before the canvas's own key handler, so R (Reset view) starts its flight after this has cancelled the old one, as the button does.
          canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','r','R','+','=','-'].includes(e.key))callback();},{capture:true,signal:abort.signal});},
@@ -576,14 +580,14 @@ try {
           const local=lastDestination!==id&&floors[id]===floors[lastDestination]&&settings[lastDestination]&&new THREE.Vector3(...settings[lastDestination].target).distanceTo(new THREE.Vector3(...to.target))<15;
           const same=id===lastDestination;
           const distance=new THREE.Vector3(...start.eye).distanceTo(new THREE.Vector3(...to.eye));
-          if(same&&distance<.1)return true;
+          if(same&&distance<.1){sceneTransition.finish();return true;} // there already (a repeat tap mid-approach): its change ends
           const phases=[];
           if(local||same){
            // A nearby spot on the same floor (or this stop again): a short step back, then in.
            const retreat={eye:new THREE.Vector3(...start.target).add(new THREE.Vector3(...start.eye).sub(new THREE.Vector3(...start.target)).multiplyScalar(1.3)).toArray(),target:start.target,fov:start.fov};
            if(!same)phases.push({to:retreat,duration:400,onStart(){onPhase(L('ถอยออกจากจุดเดิม','Pulling back'));}});
            phases.push({to,duration:local?750:550,
-            onStart(){onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));onApproach();},
+            onStart(){onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));lastDestination=id;sceneTransition.begin(()=>applyDestination(id));onApproach();},
             onUpdate(t){sceneTransition.progress(Math.min(1,t/.75));},
             onEnd(){sceneTransition.finish();}
            });
@@ -600,7 +604,8 @@ try {
            marker.position.set(to.target[0],id==='energy'?15.8:id==='meeting'?meetingTarget.y-.6:.2,to.target[2]);marker.visible=id!=='overview';
            const SPLIT=.45;let approached=false;
            // The stop's title and panel arrive as the camera starts its descent onto it, with its floors' fade.
-           const approach=()=>{approached=true;sceneTransition.finish({settled:false});onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));onApproach();};
+           // From here the scene is the new stop's (lastDestination: a cancelled flight settles on it).
+           const approach=()=>{approached=true;lastDestination=id;sceneTransition.finish({settled:false});onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));onApproach();};
            phases.push({to,via,duration:Math.round(THREE.MathUtils.clamp(1100+span*12,1300,1900)),
             onStart(){onPhase(L('กำลังเดินทาง','On the way'));sceneTransition.begin(()=>applyDestination('overview'));},
             onUpdate(t){
@@ -611,7 +616,9 @@ try {
             onEnd(){if(!approached)approach();sceneTransition.finish();}
            });
           }
+          docking=true;
           const arrived=await flight.flyPath(phases);
+          if(ticket===navigation)docking=false;
           if(ticket===navigation){marker.visible=false;markerMaterial.opacity=.6;if(arrived)lastDestination=id;schedule();}
           return arrived;
         }
@@ -632,14 +639,14 @@ try {
         // compile and draw calls (where writes, such as the pond mirror hiding itself for its pass, stay inside too).
         // Everywhere else the app reads and sets their real visibility, which a ?dest= stop may change meanwhile.
         let forcing=0;const forced=fn=>{forcing++;try{return fn();}finally{forcing--;}};
-        scene.traverse(object=>{if(object.visible||object.isLight)return;const state={wanted:false,forced:true};hidden.push([object,state]);
-         Object.defineProperty(object,'visible',{configurable:true,enumerable:true,get:()=>forcing?state.forced:state.wanted,set:value=>{if(forcing)state.forced=value;else state.wanted=value;}});});
+        // The object's `visible` then reads and writes `state.forced` inside forced(), `state.wanted` everywhere else.
+        const split=(object,state)=>{Object.defineProperty(object,'visible',{configurable:true,enumerable:true,get:()=>forcing?state.forced:state.wanted,set:value=>{if(forcing)state.forced=value;else state.wanted=value;}});return [object,state];};
+        scene.traverse(object=>{if(!object.visible&&!object.isLight)hidden.push(split(object,{wanted:false,forced:true}));});
         // The night's lights (the rooms' spot lights) change the number of lights, so the
         // shaders for the other half of the day are compiled here too: the first dusk (or dawn) then does not freeze
         // the view for a second and a half. They keep their current state, and swap only for the last compile.
         const nightLights=[];
-        scene.traverse(object=>{if(!object.isSpotLight||!/^Simulation_spot_/.test(object.name))return;const state={wanted:object.visible,forced:object.visible};nightLights.push([object,state]);
-         Object.defineProperty(object,'visible',{configurable:true,enumerable:true,get:()=>forcing?state.forced:state.wanted,set:value=>{if(forcing)state.forced=value;else state.wanted=value;}});});
+        scene.traverse(object=>{if(object.isSpotLight&&/^Simulation_spot_/.test(object.name))nightLights.push(split(object,{wanted:object.visible,forced:object.visible}));});
         const target=new THREE.WebGLRenderTarget(16,16);
         const drawPixel=()=>forced(()=>{renderer.shadowMap.needsUpdate=true;renderer.setScissorTest(true);renderer.setScissor(0,0,1,1);try{renderer.render(scene,camera);}finally{renderer.setScissorTest(false);}});
         const drawOffscreen=()=>forced(()=>{const previous=renderer.getRenderTarget();renderer.shadowMap.needsUpdate=true;renderer.setRenderTarget(target);renderer.render(scene,camera);renderer.setRenderTarget(previous);});

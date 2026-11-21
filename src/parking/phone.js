@@ -162,7 +162,6 @@ export function createPhone({root, sim, actions}) {
 
   return {
     render: schedule,
-    get state() { return ui; },
     get isOpen() { return ui.open; },
     setOpen(v) { ui.open = v; document.body.classList.toggle('phone-open', v); render(); actions.openChanged?.(v); },
     // A photo still being read belongs to the old form (as with New request): it ends without filling in the new one.
