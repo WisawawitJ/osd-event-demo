@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (150), about 115 s: run before a commit
+npm test                 # all behaviour checks (151), about 115 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -155,8 +155,10 @@ The visitor's phone form can be filled in by hand. The car photo reads a sample 
 Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street, and leaving cars wait in their aisle.
 Cars also come and go by themselves, following the hour (see above). Through-traffic drives both lanes of the
 street whenever it is in view; it keeps to one speed per lane and gives way to cars turning in or pulling out.
-About a third of the cars coming in arrive along the far lane: they wait at the turn, signalling right, until the near
-lane and the gate's mouth are clear, then turn in across it. Cars flash their blinkers before every turn. No car drives
+About a third of the cars coming in arrive along the far lane: the near lane has right of way, so they wait at the
+turn, signalling right, for a gap in it and a clear gate mouth, then turn in across it. Near-lane cars bound for the car
+park signal left from the start, queuing included. Cars flash their blinkers (amber lenses at the four corners) before
+every turn. No car drives
 through another: on the street a car keeps its distance to the one ahead, every car brakes for a car on its path, and an
 aisle takes cars in or out, not both at once (a check watches every pair of cars in a busy car park).
 

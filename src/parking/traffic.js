@@ -82,7 +82,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   let generation = 0, frame = 0, last = 0;
   // Street discipline: through-traffic keeps one speed per lane, yields to cars joining the eastbound lane,
   // and does not spawn into it while a car is driving up to the gate or pulling out.
-  let entryPending = 0, streetArrivals = 0, exitingStreet = 0, eastHold = 0;
+  let entryPending = 0, exitingStreet = 0, eastHold = 0;
   // The far lane: one arrival at a time on it (no through-traffic behind it while it waits to turn), and `crossing`
   // while it turns across the near lane and the gate's mouth (exits wait meanwhile).
   // `westHold`: a far-lane arrival waiting to appear holds back new far-lane through-traffic, so its gap comes.
@@ -188,7 +188,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     for (const a of [...agents.values(), ...ambientCars]) removeAgent(a);
     agents.clear(); ambientCars.clear();
     gateQueue = entryLane = entryShown = exitLane = Promise.resolve();
-    entryPending = streetArrivals = exitingStreet = eastHold = gateHolders = westOnStreet = crossing = westHold = 0;
+    entryPending = exitingStreet = eastHold = gateHolders = westOnStreet = crossing = westHold = 0;
     aisles.clear();
     boomCommand++;
     arriving.clear(); streetCars.clear();
@@ -254,8 +254,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     arriving.add(k);
     // Counters belong to the run that raised them: after a reset they start from zero and must stay there.
     const releaseLane = () => { if (!released) { released = true; if (gen === generation) entryPending--; resolveLane(); } };
-    const offStreet = () => { if (onStreet) { onStreet = false; if (gen === generation) { streetArrivals--; streetCars.delete(agent); } } };
-    const onto = lane => { agent.lane = lane; onStreet = true; streetArrivals++; streetCars.add(agent); agent.car.visible = true; resolveShown(); };
+    const offStreet = () => { if (onStreet) { onStreet = false; if (gen === generation) streetCars.delete(agent); } };
+    const onto = lane => { agent.lane = lane; onStreet = true; streetCars.add(agent); agent.car.visible = true; resolveShown(); };
     // The car keeps its turn at the barrier until it has backed out onto the street: released before, the next car
     // drove up behind it while it still waited for a gap there, and could block its way out.
     const turnAway = async () => {
@@ -279,9 +279,9 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           agent.signal = 'right';
           await drive(agent, westToTurn(95), {speed: 8, startMoving: true}, gen);
           await previous; alive();
-          // The turn crosses the near lane and the gate's mouth: both clear first (new near-lane traffic held back
-          // meanwhile), and exits wait while it turns.
-          await eastGap(TURN_X - 34, TURN_X + 4, gen);
+          // The near lane has right of way: the car waits, signalling, for a gap in it (the stretch near-lane traffic
+          // covers in about 5 s) and for the gate's mouth to be clear, without holding anyone back. Exits wait while
+          // it turns.
           await waitFor(() => eastClear(TURN_X - 34, TURN_X + 4) && mouthClear(agent), gen);
           crossing++; turning = true;
           await drive(agent, westTurnIn(), {speed: 4.5}, gen);
@@ -299,6 +299,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           const holdX = holdBehind(), queue = !ready && holdX > fromX + 2;
           agent.holdX = queue ? holdX : undefined;
           place(agent, {x: fromX, z: STREET.laneEast, h: EAST}); onto(1);
+          agent.signal = 'left'; // into the car park: signalling from the start, queuing included
           if (queue) {
             await drive(agent, streetToHold(fromX, holdX), {startMoving: fromX > -90}, gen);
             await previous; alive();
@@ -309,7 +310,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
             await drive(agent, streetToGate(fromX), {startMoving: fromX > -90}, gen);
           }
         }
-        offStreet();
+        offStreet(); agent.signal = null;
         // The barrier is held only while this car is at it: from the plate read until the car is through.
         const passage = await withGate(async () => {
           alive();
@@ -424,7 +425,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   function passBy(preferDir = Math.random() < .5 ? 1 : -1) {
     const now = demoNow();
     // Spacing is in demo time, so ?speed keeps the same traffic density the visitors see.
-    const ok = dir => now - lastSpawn[dir] > 4200 / SPEED && (dir < 0 ? !westOnStreet && !westHold : !streetArrivals && !exitingStreet && !eastHold && eastClear(-99, -84));
+    const ok = dir => now - lastSpawn[dir] > 4200 / SPEED && (dir < 0 ? !westOnStreet && !westHold : !laneCars(1).length && !exitingStreet && !eastHold && eastClear(-99, -84));
     const dir = ok(preferDir) ? preferDir : ok(-preferDir) ? -preferDir : 0;
     if (!dir) return false;
     lastSpawn[dir] = now;

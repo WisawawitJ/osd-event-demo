@@ -10,7 +10,11 @@ import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferG
 const CAR_COLORS = ['#f2f1ec', '#b9bec2', '#22262b', '#6d747a', '#2f5d9a', '#b8322e', '#33584a', '#cdbb98', '#1f3150'];
 export const CAR = {frontPlateZ: 2.24, plateY: .52};
 
-// Plate texture layout: the plate fills the top 120 px; a lamp strip (head left, tail right) sits below it.
+// Blinker lenses (one side; mirrored for the other): [x, z, width, depth]. Front and rear faces at the outer corners
+// (head lamps run .41–.71, tail lamps .47–.73 from the middle) and a strip down each side next to them. The body is
+// 1.78 m wide and 4.46 m long over its rounded edges.
+const BLINKER_LENSES = [[.8, 2.2, .14, .05], [.885, 2.04, .05, .26], [.8, -2.2, .14, .05], [.885, -2.04, .05, .26]];
+// Plate texture layout: the plate fills the top 120 px; a lamp strip (head, blinker amber, tail, in thirds) sits below.
 const TEX_W = 256, TEX_H = 144, PLATE_W = 248, PLATE_H = 120;
 
 function profileGeometry(points, depth, bevel) {
@@ -53,7 +57,10 @@ function sharedParts() {
   const back = plateGeo.clone().rotateY(Math.PI).translate(0, CAR.plateY, -CAR.frontPlateZ);
   plateGeo.dispose();
   const lamp = (x, z, w, h, u) => lampUv(flat(new THREE.BoxGeometry(w, h, .05)).translate(x, .74, z), u, strip);
-  const decals = mergeGeometries([flat(front), flat(back), lamp(.6, 2.19, .34, .1, .25), lamp(-.6, 2.19, .34, .1, .25), lamp(.62, -2.19, .3, .12, .75), lamp(-.62, -2.19, .3, .12, .75)]
+  // Blinker lenses, part of the body: dull amber at each corner, beside the head and tail lamps and wrapping round the
+  // side (seen from the side and from above too). BLINKER_LENSES places the lit lenses over them (setCarBlinker).
+  const lenses = BLINKER_LENSES.flatMap(([x, z, w, d]) => [1, -1].map(side => lampUv(flat(new THREE.BoxGeometry(w, .1, d)).translate(side * x, .74, z), .5, strip)));
+  const decals = mergeGeometries([flat(front), flat(back), lamp(.56, 2.19, .3, .1, 1 / 6), lamp(-.56, 2.19, .3, .1, 1 / 6), lamp(.6, -2.19, .26, .12, 5 / 6), lamp(-.6, -2.19, .26, .12, 5 / 6), ...lenses]
     .map(g => { for (const k of Object.keys(g.attributes)) if (!['position', 'uv'].includes(k)) g.deleteAttribute(k); return g; }));
   const blobCanvas = document.createElement('canvas');
   blobCanvas.width = blobCanvas.height = 64;
@@ -62,11 +69,10 @@ function sharedParts() {
   c.fillStyle = g; c.fillRect(0, 0, 64, 64);
   const blobTexture = new THREE.CanvasTexture(blobCanvas);
   const blob = new THREE.PlaneGeometry(2.5, 5.1).rotateX(-Math.PI / 2);
-  // Blinkers: local +X is the driver's left (the car faces +Z), so the left set sits at +X. Corner lamps wrapping round
-  // the side (seen from above and the side too, not only head-on), and a soft amber flare at each that always faces
-  // the camera (blinkerGlow): lamps alone, 16 cm wide, were lost from the car park's usual distance, and a flat glow
-  // lying over the lamp read as a smear on the car.
-  const blinker = side => mergeGeometries([2.12, -2.12].map(z => flat(new THREE.BoxGeometry(.3, .15, .2)).translate(side * .78, .76, z)));
+  // Blinkers lit: bright lenses a touch larger than the dull ones in the body, a soft amber flare at each corner that
+  // always faces the camera (blinkerGlow: the lenses alone were lost from the car park's usual distance), and a soft
+  // patch of light on the road beside it (blinkerLight). Local +X is the driver's left (the car faces +Z).
+  const blinker = side => mergeGeometries(BLINKER_LENSES.map(([x, z, w, d]) => flat(new THREE.BoxGeometry(w + .02, .12, d + .02)).translate(side * x, .74, z)));
   shared = {
     body, details, decals, blob, ...headlightPool(), ...headlightBeams(),
     blinkLeft: blinker(1), blinkRight: blinker(-1), blinkMaterial: new THREE.MeshBasicMaterial({color: '#ffa31a', toneMapped: false}),
@@ -93,8 +99,10 @@ function plateTexture(plate, province) {
   c.fillStyle = '#121820'; c.textAlign = 'center'; c.textBaseline = 'middle';
   c.font = '700 54px "OSD Thai", "Noto Sans Thai", sans-serif'; c.fillText(plate, PLATE_W / 2, 48, 220);
   c.font = '500 22px "OSD Thai", "Noto Sans Thai", sans-serif'; c.fillText(province || '', PLATE_W / 2, 94, 220);
-  c.fillStyle = '#fff6dc'; c.fillRect(0, PLATE_H, TEX_W / 2, TEX_H - PLATE_H);
-  c.fillStyle = '#c62a2e'; c.fillRect(TEX_W / 2, PLATE_H, TEX_W / 2, TEX_H - PLATE_H);
+  const third = TEX_W / 3;
+  c.fillStyle = '#fff6dc'; c.fillRect(0, PLATE_H, third, TEX_H - PLATE_H);
+  c.fillStyle = '#b8741c'; c.fillRect(third, PLATE_H, third, TEX_H - PLATE_H);
+  c.fillStyle = '#c62a2e'; c.fillRect(third * 2, PLATE_H, TEX_W - third * 2, TEX_H - PLATE_H);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
@@ -179,8 +187,8 @@ function headlightBeams() {
 // added onto what lies behind it.
 function blinkerGlow(side) {
   const geo = new THREE.BufferGeometry(), pos = [], corner = [], index = [];
-  [2.17, -2.17].forEach((z, q) => {
-    for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { pos.push(side * .82, .78, z); corner.push(u, v); }
+  [2.2, -2.2].forEach((z, q) => {
+    for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { pos.push(side * .84, .74, z); corner.push(u, v); }
     index.push(q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3);
   });
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

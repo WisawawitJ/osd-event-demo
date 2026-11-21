@@ -291,6 +291,20 @@ export const scenarios = [
     await p.until('__parking.sim.state.presence.has(__k)', {timeout: 30000, what: 'the car through the barrier'});
     expect(await p.eval('__left'), 'its left blinker flashed on the street before the turn');
   }},
+  {name: 'a near-lane car queuing for the barrier signals left while it waits', async run(p, expect) {
+    // In the queue it showed no blinker, so it was not clear it was waiting to turn in.
+    // speed 10: an unknown car holds the barrier for its alert (45 s of demo time) while the next car queues.
+    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`void __parking.traffic.arrive({plate:'3ฆง 6047',province:'ชลบุรี',color:6,fromX:-40})`);
+    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='3ฆง 6047')`, {timeout: 30000, what: 'the unknown car holding the barrier'});
+    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
+      window.__plate=v.plate;void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-60});})()`);
+    const car = `__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate)`;
+    await p.until(`(c=>!!c&&c.visible&&Math.abs(c.position.x+33)<.3)(${car})`, {timeout: 20000, what: 'the car at its queue place'});
+    const seen = await p.eval(`new Promise(done=>{let left=false;const t=setInterval(()=>{if(${car}.children[6].visible)left=true;},15);setTimeout(()=>{clearInterval(t);done(left);},600);})`);
+    expect(seen, 'its left blinker flashed while it queued');
+  }},
   {name: 'a busy car park: no car drives through another', async run(p, expect) {
     // Cars queuing at the barrier ran into each other (a new car was given the queue place of one still in it), met
     // head-on in the aisles, and crossed at the aisle mouths; through-traffic drove through a car waiting at the
