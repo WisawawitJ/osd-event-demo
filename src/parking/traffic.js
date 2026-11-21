@@ -102,6 +102,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   const aisleOf = x => { if (!aisles.has(x)) aisles.set(x, {in: 0, out: 0}); return aisles.get(x); };
   async function enterAisle(x, way, gen) { const a = aisleOf(x); await waitFor(() => a[way === 'in' ? 'out' : 'in'] === 0, gen); a[way]++; }
   const leaveAisle = (x, way, gen) => { if (gen === generation) aisleOf(x)[way]--; };
+  const exitLaneClear = x => ![...live].some(a => a.car.visible && Math.abs(a.car.position.z - LANE_OUT) < .7 && Math.sin(a.car.rotation.y) > .7 && a.car.position.x > x - 14 && a.car.position.x < x + 3);
   const mouthClear = self => ![...live].some(a => a !== self && a.car.visible && a.car.position.x > -28 && a.car.position.x < -12 && a.car.position.z > 15.5 && a.car.position.z < 26.2);
 
   function place(agent, p, reverse = false) {
@@ -339,10 +340,17 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           const going = (async () => {
             await drive(agent, gateToAisle(stall), {speed: 5.5}, gen);
             await enterAisle(stall.aisleX, 'in', gen);
+            // Into a P2 aisle the car turns across the exit lane: it goes once no car on that lane is coming up to the
+            // aisle (they met crosswise, each in the other's way, and both stopped for good).
+            if (stall.zone !== 'P1') await waitFor(() => exitLaneClear(stall.aisleX), gen);
             try { await drive(agent, aisleToStall(stall), {speed: 4.5}, gen); agent.inBay = true; } finally { leaveAisle(stall.aisleX, 'in', gen); }
           })();
           going.catch(() => {}); // awaited later; if a reset cancels the drive before that, its rejection is expected
-          await waitFor(() => passed(agent, 6.5), gen);
+          // The barrier is done with once the whole car is past its arm (or 6.5 m on): a car bound for the row by the
+          // building then turns across the exit lane, and held the barrier while it waited for a car leaving there,
+          // which waited for the barrier.
+          const pastArm = () => footprint(agent.car.position.x, agent.car.position.z, agent.car.rotation.y).every(([, z]) => z < GATE.z);
+          await waitFor(() => pastArm() || passed(agent, 6.5), gen);
           hooks.onLeaveGate?.('in');
           releaseLane();
           return {going, result: manual ? 'manual' : 'allowed'};
@@ -555,5 +563,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     appear, vanish,
     get gateHolders() { return gateHolders; },
     isArriving: k => arriving.has(k),
+    // For tests and probes: the flows' shared state.
+    inspect: () => ({aisles: Object.fromEntries(aisles), crossing, westOnStreet, westHold, exitingStreet, eastHold, gateHolders, entryPending}),
   };
 }

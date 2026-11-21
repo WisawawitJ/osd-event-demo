@@ -8,12 +8,15 @@ import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const CAR_COLORS = ['#f2f1ec', '#b9bec2', '#22262b', '#6d747a', '#2f5d9a', '#b8322e', '#33584a', '#cdbb98', '#1f3150'];
-export const CAR = {frontPlateZ: 2.24, plateY: .52};
+export const CAR = {frontPlateZ: 2.29, plateY: .44};
 
-// Blinker lenses (one side; mirrored for the other): [x, z, width, depth]. Front and rear faces at the outer corners
-// (head lamps run .41–.71, tail lamps .47–.73 from the middle) and a strip down each side next to them. The body is
-// 1.78 m wide and 4.46 m long over its rounded edges.
-const BLINKER_LENSES = [[.8, 2.2, .14, .05], [.885, 2.04, .05, .26], [.8, -2.2, .14, .05], [.885, -2.04, .05, .26]];
+// The lamp rows' heights on the nose and the tail, and how far out the lamps sit: the body's rounded edges (bevel)
+// put its nose and tail faces about 2.24 m from the middle at those heights; parts mounted on them stand just proud.
+const HEAD_Y = .6, TAIL_Y = .64, FACE_Z = 2.255;
+// Blinker lenses (one side; mirrored for the other): [x, y, z, width, depth]. Front and rear faces at the outer corners
+// (head lamps run .37–.67, tail lamps .43–.69 from the middle) and a strip down each side next to them. The body is
+// 1.72 m wide and 4.46 m long over its rounded edges.
+const BLINKER_LENSES = [[.76, HEAD_Y, FACE_Z, .14, .05], [.855, HEAD_Y, 2.06, .05, .26], [.76, TAIL_Y, -FACE_Z, .14, .05], [.855, TAIL_Y, -2.06, .05, .26]];
 // Plate texture layout: the plate fills the top 120 px; a lamp strip (head, blinker amber, tail, in thirds) sits below.
 const TEX_W = 256, TEX_H = 144, PLATE_W = 248, PLATE_H = 120;
 
@@ -39,15 +42,22 @@ const flat = g => (g.index ? g.toNonIndexed() : g);
 let shared = null;
 function sharedParts() {
   if (shared) return shared;
+  // A sedan, side profiles in (forward, up): a low nose sloping up the bonnet to the windscreen, the cabin's glass over
+  // the middle (a raked windscreen and rear window), a painted roof, and a short raised boot deck; bumpers, a grille
+  // and mirrors in dark trim. The wheels stand a little proud of the body's sides, so the whole of each shows.
   const body = mergeGeometries([
-    profileGeometry([[-2.15, .3], [2.15, .3], [2.17, .7], [1.95, .84], [.8, .94], [-1.5, .96], [-2.1, .9], [-2.17, .7]], 1.66, .06),
-    profileGeometry([[-1.27, 1.33], [.02, 1.35], [-.04, 1.44], [-1.2, 1.43]], 1.46, .02),
+    profileGeometry([[-2.18, .3], [2.18, .3], [2.22, .48], [2.17, .68], [1.95, .76], [1, .84], [-1.42, .86], [-2, .84], [-2.16, .78], [-2.22, .5]], 1.62, .05),
+    profileGeometry([[.27, 1.355], [-.97, 1.335], [-.94, 1.415], [.23, 1.43]], 1.5, .02),
   ].map(flat));
-  const wheel = new THREE.CylinderGeometry(.34, .34, .26, 14).rotateZ(Math.PI / 2);
+  const wheel = new THREE.CylinderGeometry(.33, .33, .22, 16).rotateZ(Math.PI / 2);
   const wheelFlat = flat(wheel);
+  const trim = (w, h, d, x, y, z) => tint(flat(new THREE.BoxGeometry(w, h, d)).translate(x, y, z), '#22262b');
   const details = mergeGeometries([
-    tint(flat(profileGeometry([[.82, .9], [-1.55, .92], [-1.32, 1.36], [.05, 1.38]], 1.5, .03)), '#1e2a33'),
-    ...[[.82, 1.35], [-.82, 1.35], [.82, -1.38], [-.82, -1.38]].map(([x, z]) => tint(wheelFlat.clone().translate(x, .34, z), '#1b1d20')),
+    tint(flat(profileGeometry([[1.02, .83], [-1.44, .85], [-.97, 1.36], [.26, 1.38]], 1.48, .02)), '#1e2a33'),
+    ...[[.8, 1.38], [-.8, 1.38], [.8, -1.38], [-.8, -1.38]].map(([x, z]) => tint(wheelFlat.clone().translate(x, .33, z), '#1b1d20')),
+    trim(1.78, .1, .12, 0, .34, 2.24), trim(1.78, .1, .12, 0, .34, -2.24), // bumpers
+    trim(.62, .09, .04, 0, .53, FACE_Z), // grille, below the plate's top and between the head lamps
+    trim(.08, .09, .16, .9, .93, .86), trim(.08, .09, .16, -.9, .93, .86), // mirrors
   ]);
   wheel.dispose(); wheelFlat.dispose();
   const plateGeo = new THREE.PlaneGeometry(.62, .3);
@@ -56,11 +66,11 @@ function sharedParts() {
   const front = plateGeo.clone().translate(0, CAR.plateY, CAR.frontPlateZ);
   const back = plateGeo.clone().rotateY(Math.PI).translate(0, CAR.plateY, -CAR.frontPlateZ);
   plateGeo.dispose();
-  const lamp = (x, z, w, h, u) => lampUv(flat(new THREE.BoxGeometry(w, h, .05)).translate(x, .74, z), u, strip);
+  const lamp = (x, y, z, w, h, u) => lampUv(flat(new THREE.BoxGeometry(w, h, .05)).translate(x, y, z), u, strip);
   // Blinker lenses, part of the body: dull amber at each corner, beside the head and tail lamps and wrapping round the
   // side (seen from the side and from above too). BLINKER_LENSES places the lit lenses over them (setCarBlinker).
-  const lenses = BLINKER_LENSES.flatMap(([x, z, w, d]) => [1, -1].map(side => lampUv(flat(new THREE.BoxGeometry(w, .1, d)).translate(side * x, .74, z), .5, strip)));
-  const decals = mergeGeometries([flat(front), flat(back), lamp(.56, 2.19, .3, .1, 1 / 6), lamp(-.56, 2.19, .3, .1, 1 / 6), lamp(.6, -2.19, .26, .12, 5 / 6), lamp(-.6, -2.19, .26, .12, 5 / 6), ...lenses]
+  const lenses = BLINKER_LENSES.flatMap(([x, y, z, w, d]) => [1, -1].map(side => lampUv(flat(new THREE.BoxGeometry(w, .1, d)).translate(side * x, y, z), .5, strip)));
+  const decals = mergeGeometries([flat(front), flat(back), lamp(.52, HEAD_Y, FACE_Z, .3, .1, 1 / 6), lamp(-.52, HEAD_Y, FACE_Z, .3, .1, 1 / 6), lamp(.56, TAIL_Y, -FACE_Z, .26, .12, 5 / 6), lamp(-.56, TAIL_Y, -FACE_Z, .26, .12, 5 / 6), ...lenses]
     .map(g => { for (const k of Object.keys(g.attributes)) if (!['position', 'uv'].includes(k)) g.deleteAttribute(k); return g; }));
   const blobCanvas = document.createElement('canvas');
   blobCanvas.width = blobCanvas.height = 64;
@@ -72,7 +82,7 @@ function sharedParts() {
   // Blinkers lit: bright lenses a touch larger than the dull ones in the body, a soft amber flare at each corner that
   // always faces the camera (blinkerGlow: the lenses alone were lost from the car park's usual distance), and a soft
   // patch of light on the road beside it (blinkerLight). Local +X is the driver's left (the car faces +Z).
-  const blinker = side => mergeGeometries(BLINKER_LENSES.map(([x, z, w, d]) => flat(new THREE.BoxGeometry(w + .02, .12, d + .02)).translate(side * x, .74, z)));
+  const blinker = side => mergeGeometries(BLINKER_LENSES.map(([x, y, z, w, d]) => flat(new THREE.BoxGeometry(w + .02, .12, d + .02)).translate(side * x, y, z)));
   shared = {
     body, details, decals, blob, ...headlightPool(), ...headlightBeams(),
     blinkLeft: blinker(1), blinkRight: blinker(-1), blinkMaterial: new THREE.MeshBasicMaterial({color: '#ffa31a', toneMapped: false}),
@@ -117,7 +127,7 @@ function plateTexture(plate, province) {
 // added onto the road (and seen by the plate cameras). It fades to nothing well inside every edge of its quad, which
 // starts under the car's nose (hidden by the body): a light already bright at the quad's edges showed as straight cuts.
 // Real spot lights cost every lit pixel of the scene, so only three cars had them, and their pools began metres ahead.
-const POOL = {width: 5.4, length: 10, start: 1.6, bumper: 2.2, lampX: .6};
+const POOL = {width: 5.4, length: 10, start: 1.6, bumper: 2.2, lampX: .52};
 function headlightPool() {
   const W = 128, H = 256, canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
@@ -148,7 +158,7 @@ function headlightPool() {
 // One box ahead of the bumper holds both beams; for each pixel the shader adds up the glow of the two cones along the
 // view ray through the box (brightest near the lamps and on each beam's axis, thinning with distance, cut off at
 // the road), so the beams read as light in the air from any side, above included.
-const BEAM = {lampX: .6, lampY: .74, lampZ: 2.24, reach: 8.5, width: 4.6, height: 1.3};
+const BEAM = {lampX: .52, lampY: HEAD_Y, lampZ: 2.28, reach: 8.5, width: 4.6, height: 1.3};
 function headlightBeams() {
   const box = new THREE.BoxGeometry(BEAM.width, BEAM.height, BEAM.reach).translate(0, BEAM.height / 2, BEAM.lampZ + BEAM.reach / 2);
   const material = new THREE.ShaderMaterial({
@@ -187,8 +197,8 @@ function headlightBeams() {
 // added onto what lies behind it.
 function blinkerGlow(side) {
   const geo = new THREE.BufferGeometry(), pos = [], corner = [], index = [];
-  [2.2, -2.2].forEach((z, q) => {
-    for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { pos.push(side * .84, .74, z); corner.push(u, v); }
+  [[HEAD_Y, FACE_Z + .03], [TAIL_Y, -FACE_Z - .03]].forEach(([y, z], q) => {
+    for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { pos.push(side * .8, y, z); corner.push(u, v); }
     index.push(q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3);
   });
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
