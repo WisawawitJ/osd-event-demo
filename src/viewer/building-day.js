@@ -7,7 +7,6 @@ const event=(minute,destination,layer,title,detail)=>({minute,destination,layer,
 // Moments worth a look, in time order: the timeline's buttons and the "Follow the day" camera (and its footer line).
 export const dayEvents = [
  event(450,'parking','none',['รถเข้างานช่วงเช้า','Morning arrivals'],['รถพนักงานทยอยเข้าลานจอด','Staff cars stream into the car park']),
- event(495,'access','none',['อาคารเริ่มวันใหม่','The building starts its day'],['อ่านทะเบียนและเปิดทางเข้า','Plate read and entrance opened']),
  event(540,'meeting','occupancy',['เริ่มประชุม ชั้น 4','Meeting starts, floor 4'],['มีคน 6 คน · เปิดไฟและแอร์','6 people · lights and AC on']),
  event(720,'energy','none',['แดดดีบนดาดฟ้า','Strong sun on the roof'],['โซลาร์ช่วยจ่ายไฟให้อาคาร','Solar helps power the building']),
  event(870,'meeting','temperature',['ห้องว่าง แต่แอร์ยังเปิด','Room empty, AC still on'],['ดูสถานะคนและแอร์ประกอบกัน','Compare occupancy with the AC']),

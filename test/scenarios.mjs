@@ -23,7 +23,7 @@ export const scenarios = [
   {quick: true, name: 'showcase loads with the parking stop', async run(p, expect) {
     await p.goto(`?${FAST}`);
     await p.until(LOADED, {timeout: 40000, what: 'model ready'});
-    expect(await p.eval('document.querySelectorAll(".destination-dock [data-destination]").length') === 6, 'dock has 6 stops');
+    expect(await p.eval('document.querySelectorAll(".destination-dock [data-destination]").length') === 5, 'dock has 5 stops');
   }},
 
   {quick: true, name: 'story plays end to end on auto-advance', async run(p, expect) {
@@ -671,7 +671,7 @@ export const scenarios = [
       await p.goto(`?debug=1&time=${time}`);
       await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
       const before = await p.eval('__renderer.info.programs.length');
-      for (const to of ['parking', 'meeting', 'pond', 'energy', 'access', 'overview']) {
+      for (const to of ['parking', 'meeting', 'pond', 'energy', 'overview']) {
         await p.click(`[data-destination="${to}"]`);
         await p.until(`${IDLE} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
       }
@@ -1289,32 +1289,6 @@ export const scenarios = [
     const r = JSON.parse(await p.eval(`JSON.stringify({running:__parking.story.running,index:__parking.story.index,following:document.querySelector('#day-play').getAttribute('aria-pressed')})`));
     expect(r.running && r.index <= 0 && r.following === 'false', `the story started again, the visitor's (running ${r.running}, step ${r.index + 1}, following ${r.following})`);
   }},
-  {name: 'kiosk: Stop following ends the entrance scenario Follow started', async run(p, expect) {
-    // The entrance's scripted sequence kept going: the main gate's arm rose seconds after Follow was turned off.
-    // Real speed and a real-time clock (?day=0): at ?speed=30 the next moment takes Follow away before the arm's turn.
-    await p.goto('?kiosk=1&debug=1&warm=0&day=0&time=08:20');
-    await p.until(`document.body.dataset.tourDestination==='access' && ${STILL}`, {timeout: 40000, what: 'the kiosk at the entrance'});
-    await p.eval(`(()=>{window.__pulses=0;const t=__parking.traffic,pulse=t.pulse;t.pulse=(...a)=>{__pulses++;return pulse(...a);};})()`);
-    await p.click('#day-play');
-    await p.sleep(4000); // the scenario lifts the arm 3 s in
-    expect(await p.eval('__pulses') === 0, 'the gate was not lifted after Follow stopped');
-  }},
-  {name: 'kiosk: any touch during the entrance sequence ends it, a queued arm lift too', async run(p, expect) {
-    // Only Stop following ended Follow's scenario: a touch elsewhere (the language switch) left it running, and its
-    // arm lift, queued behind another car at the barrier, still came after Follow was off.
-    // Real speed and a real-time clock (?day=0): at ?speed=30 the next moment takes Follow away before the arm's turn.
-    await p.goto('?kiosk=1&debug=1&warm=0&day=0&time=08:20');
-    await p.until(`document.body.dataset.tourDestination==='access' && ${STILL}`, {timeout: 40000, what: 'the kiosk at the entrance'});
-    // The barrier busy for a while (a manual open held 6 s), so the scenario's lift (3 s in) queues behind it.
-    // The scenario's own arm lift is timed: skipped, it ends as its turn comes (once the 6 s open ahead of it is over);
-    // carried out, it holds the arm 4 s more. (The morning's cars keep the barrier busy, so lifts alone tell nothing.)
-    await p.eval(`(()=>{const tr=__parking.traffic,pulse=tr.pulse;void pulse(6000);tr.pulse=(...a)=>{const t0=performance.now();tr.pulse=pulse;return pulse(...a).then(()=>{window.__lift=(performance.now()-t0)/1000;});};})()`);
-    await p.sleep(3600);
-    await p.click('#lang-toggle');
-    await p.until('window.__lift!==undefined', {timeout: 15000, what: "the scenario's arm lift over"});
-    const r = JSON.parse(await p.eval(`JSON.stringify({lift:__lift,following:document.querySelector('#day-play').getAttribute('aria-pressed')})`));
-    expect(r.following === 'false' && r.lift < 7, `Follow off and its queued arm lift dropped (following ${r.following}, the lift took ${r.lift.toFixed(1)} s)`);
-  }},
   {name: 'a flight stopped before its approach leaves the stop it left on show', async run(p, expect) {
     // Stopped early, the flight settled the floors on the whole building while the dock and panel stayed on the
     // meeting room (and Reset view, already at its pose, left it so).
@@ -1644,11 +1618,11 @@ export const scenarios = [
     expect(on === 2 && off === 0, `light pool and beam follow the switch (on ${on}, off ${off})`);
   }},
 
-  {name: 'pond, energy and entrance cameras aim at the real objects', async run(p, expect) {
+  {name: 'pond and energy cameras aim at the real objects', async run(p, expect) {
     await p.goto(`?${FAST}`);
     await p.until(UP, {timeout: 40000, what: 'model ready'});
     const centre = expr => (p.eval(`JSON.stringify((()=>{const V=__camera.position.constructor,objs=${expr};const min=new V(1e9,1e9,1e9),max=new V(-1e9,-1e9,-1e9);for(const o of objs)o.traverse(m=>{if(!m.geometry)return;m.geometry.computeBoundingBox();const g=m.geometry.boundingBox;for(const x of [g.min.x,g.max.x])for(const y of [g.min.y,g.max.y])for(const z of [g.min.z,g.max.z]){const v=new V(x,y,z).applyMatrix4(m.matrixWorld);min.min(v);max.max(v)}});return min.add(max).multiplyScalar(.5).toArray()})())`)).then(JSON.parse);
-    const stops = {pond: `(()=>{const a=[];__scene.traverse(o=>{if(o.isMesh&&o.name.includes('_koi_pond_'))a.push(o)});return a})()`, energy: `[__scene.getObjectByName('Floor_5_solar_modules')]`, access: `[__scene.getObjectByName('Demo_main_barrier')]`};
+    const stops = {pond: `(()=>{const a=[];__scene.traverse(o=>{if(o.isMesh&&o.name.includes('_koi_pond_'))a.push(o)});return a})()`, energy: `[__scene.getObjectByName('Floor_5_solar_modules')]`};
     for (const [stop, objects] of Object.entries(stops)) {
       await p.click(`[data-destination="${stop}"]`);
       await p.until(`document.body.dataset.tourDestination === '${stop}' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 20000});
@@ -1657,15 +1631,11 @@ export const scenarios = [
       expect(off < 1, `${stop}: camera aims within 1 m of the object (off by ${off.toFixed(1)} m)`);
     }
   }},
-  {name: 'one gate on site: the Entrance stop uses the main gate', async run(p, expect) {
+  {name: 'one gate on site: the car park\'s main gate', async run(p, expect) {
     await p.goto(`?${FAST}`);
     await p.until(UP, {timeout: 40000, what: 'model ready'});
     expect(!(await p.eval(`!!__scene.getObjectByName('Demo_barrier_arm')`)), 'no second (original) barrier arm');
-    await p.click('[data-destination="access"]');
-    await p.until(`document.body.dataset.tourDestination === 'access' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 20000});
-    await p.click('[data-action="access"]');
-    await p.until(`__parking.sim.state.gate !== 'closed'`, {timeout: 10000, what: 'the main gate opens for the entrance scenario'});
-    expect(true, 'main gate opened');
+    expect(await p.eval(`!!__scene.getObjectByName('Demo_main_barrier')`), 'the main gate');
   }},
   {name: 'a leaving car does not wait long at the barrier', async run(p, expect) {
     // speed 10 and 3 s for street traffic to build up, as in normal use.
@@ -1886,7 +1856,7 @@ export const scenarios = [
     await p.eval(`void __parking.traffic.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:5,fromX:-40})`);
     await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='1กก 1111')`, {timeout: 30000, what: 'car at the gate'});
     // Each flight starts and ends with a resolution switch that redraws the view at once.
-    await p.click('[data-destination="access"]'); await p.sleep(400);
+    await p.click('[data-destination="overview"]'); await p.sleep(400);
     await p.click('[data-destination="parking"]'); await p.sleep(600);
     expect(await p.eval('__bare') === 0, `frames with the main view in the pop-up: ${await p.eval('__bare')}`);
   }},

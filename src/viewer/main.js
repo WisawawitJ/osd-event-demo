@@ -553,8 +553,6 @@ try {
          stopPoses={
            pond:aim(ponds,[33,14,13],[22.7,1,-2.5],48),
            energy:aim([model.getObjectByName('Floor_5_solar_modules')],[12,29,23],[-1.6,15.6,.8],43),
-           // The main gate when the car park is present (one gate on site), else the original demo's barrier.
-           access:aim([scene.getObjectByName('Demo_main_barrier')||scene.getObjectByName('Demo_access')],[-24,14,29],[-10.9,.8,10.5],46),
          };
          return stopPoses;
        }
@@ -566,7 +564,6 @@ try {
         onUserOrbit:callback=>{controls.addEventListener('start',callback);
          // Capture: runs before the canvas's own key handler, so R (Reset view) starts its flight after this has cancelled the old one, as the button does.
          canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','r','R','+','=','-'].includes(e.key))callback();},{capture:true,signal:abort.signal});},
-        snapshot:securityCamera=>securityPreview.capture(securityCamera),
         async navigate(id,{instant=false,onPhase=()=>{},onApproach=()=>{}}={}){
           flight.stop();const ticket=++navigation,start=readPose();marker.visible=false;markerMaterial.opacity=.6;
           const settings={
@@ -576,7 +573,7 @@ try {
           };
           const to=settings[id]||contextPose(),quick=instant||matchMedia('(prefers-reduced-motion: reduce)').matches;
           if(quick){sceneTransition.finish();applyDestination(id);writePose(to);lastDestination=id;return true;}
-          const floors={overview:null,meeting:meetingRoom.floor,pond:1,energy:5,access:1,parking:'site'};
+          const floors={overview:null,meeting:meetingRoom.floor,pond:1,energy:5,parking:'site'};
           const local=lastDestination!==id&&floors[id]===floors[lastDestination]&&settings[lastDestination]&&new THREE.Vector3(...settings[lastDestination].target).distanceTo(new THREE.Vector3(...to.target))<15;
           const same=id===lastDestination;
           const distance=new THREE.Vector3(...start.eye).distanceTo(new THREE.Vector3(...to.eye));

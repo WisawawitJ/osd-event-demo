@@ -401,8 +401,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   return {
     syncParked, arrive, leave, passBy, refreshBays, setNight,
     // A manual open with no car read: one pulse, held briefly, then closed.
-    // `cancelled`: asked when its turn at the barrier comes (it may queue behind cars); true skips it.
-    pulse(holdMs = 5000, cancelled = () => false) { const gen = generation; return withGate(async () => { if (cancelled()) return; await openBoom(gen); await wait(holdMs, gen); await closeBoom(gen); }).catch(() => {}); },
+    pulse(holdMs = 5000) { const gen = generation; return withGate(async () => { await openBoom(gen); await wait(holdMs, gen); await closeBoom(gen); }).catch(() => {}); },
     // Parked: in its bay (one still driving in from the barrier is not, and cannot be sent out yet).
     parkedKeys: () => [...agents.entries()].filter(([k, a]) => !a.leaving && a.stall && !arriving.has(k)).map(([k]) => k),
     get busy() { return movers.size > ambientCars.size; },
