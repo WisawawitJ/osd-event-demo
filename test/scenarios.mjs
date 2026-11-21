@@ -384,6 +384,19 @@ export const scenarios = [
     expect(c === d, 'paused: the fish stand still');
     await p.eval('__world.setPaused(false)');
   }},
+  {name: 'flying to the pond: plain water during the flight (never a stale, dark mirror), the reflection once landed', async run(p, expect) {
+    await p.goto('?debug=1');
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    const mix = `__scene.getObjectByName('Courtyard_water_reflection').material.uniforms.reflectionMix.value`;
+    // Read each time the pond is actually drawn in flight (the mirror sets the value just before; when the pond is off
+    // screen it is not drawn and the value is not used).
+    await p.eval(`(()=>{window.__mixes=new Set();const w=__scene.getObjectByName('Courtyard_water_reflection'),before=w.onBeforeRender;w.onBeforeRender=function(...a){before.apply(this,a);if(document.querySelector('#viewport').classList.contains('flying'))__mixes.add(${mix});};})()`);
+    await p.click('[data-destination="pond"]');
+    await p.until(`document.body.dataset.tourDestination==='pond' && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 20000, what: 'landed at the pond'});
+    await p.sleep(300);
+    expect(JSON.stringify(await p.eval('[...__mixes]')) === '[0]', `during the flight the pond shows plain water (mix ${JSON.stringify(await p.eval('[...__mixes]'))})`);
+    expect(await p.eval(mix) === 1, 'landed: the live reflection is back');
+  }},
   {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
     await p.goto(`?dest=pond&${FAST}`);
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});

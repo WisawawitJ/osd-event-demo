@@ -47,16 +47,22 @@ export function createRenderKit(renderer, scene) {
   for(const pond of ponds){
    const shader={...Reflector.ReflectorShader};
    shader.vertexShader=shader.vertexShader.replace('varying vec4 vUv;','varying vec4 vUv; varying vec2 pondPoint;').replace('vUv = textureMatrix','pondPoint = position.xy; vUv = textureMatrix');
-   shader.fragmentShader=shader.fragmentShader.replace('varying vec4 vUv;','varying vec4 vUv; varying vec2 pondPoint;').replace('vec4 base = texture2DProj( tDiffuse, vUv );',`vec4 rippleUv=vUv; rippleUv.xy += vec2(sin(pondPoint.y*18.0+sin(pondPoint.x*11.0)),cos(pondPoint.x*17.0+pondPoint.y*6.0))*.0018*vUv.w; vec4 base=texture2DProj(tDiffuse,rippleUv);`).replace('base.rgb, color ), 1.0','base.rgb, color ), .46');
+   // reflectionMix 0 shows the plain water colour (overlay on mid grey is the colour itself): see onBeforeRender.
+   shader.fragmentShader=shader.fragmentShader.replace('varying vec4 vUv;','varying vec4 vUv; varying vec2 pondPoint; uniform float reflectionMix;').replace('vec4 base = texture2DProj( tDiffuse, vUv );',`vec4 rippleUv=vUv; rippleUv.xy += vec2(sin(pondPoint.y*18.0+sin(pondPoint.x*11.0)),cos(pondPoint.x*17.0+pondPoint.y*6.0))*.0018*vUv.w; vec4 base=mix(vec4(.5),texture2DProj(tDiffuse,rippleUv),reflectionMix);`).replace('base.rgb, color ), 1.0','base.rgb, color ), .46');
    const geometry=pond.geometry.clone().translate(0,.09,0).rotateX(Math.PI/2);
    const reflection=new Reflector(geometry,{color:'#9bb6ae',textureWidth:512,textureHeight:512,multisample:0,clipBias:.003,shader});
    reflection.name='Courtyard_water_reflection';reflection.rotation.x=-Math.PI/2;reflection.position.y=-.078;
-   reflection.material.transparent=true;reflection.material.depthWrite=false;reflection.userData={type:'water',interiorFeature:true};
-   // The mirror re-renders the scene every frame; during camera flights it keeps its last image instead.
+   reflection.material.transparent=true;reflection.material.depthWrite=false;reflection.material.uniforms.reflectionMix={value:1};reflection.userData={type:'water',interiorFeature:true};
+   // The mirror re-renders the scene every frame, but not during camera flights (it would cost ~45% more per flight
+   // frame). Its last image only fits the camera it was drawn from (and may be from long ago, or empty, when the pond
+   // was off screen: the water went dark flying in), so meanwhile the pond shows its plain water colour, and the
+   // reflection returns on the first still frame.
    // Its camera is cropped to the pond's patch of the screen, so culling skips everything else (see pondCrop).
    geometry.computeBoundingBox();
    const update=reflection.onBeforeRender;reflection.onBeforeRender=function(renderer,scene,camera,...rest){
-    if(reflectionsPaused)return;
+    const mix=this.material.uniforms.reflectionMix;
+    if(reflectionsPaused){mix.value=0;return;}
+    mix.value=1;
     const crop=camera.isPerspectiveCamera?pondCrop(reflection,camera):null;
     if(!crop)return update.call(this,renderer,scene,camera,...rest);
     savedProjection.copy(camera.projectionMatrix);camera.projectionMatrix.premultiply(crop);
