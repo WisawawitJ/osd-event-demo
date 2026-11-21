@@ -94,30 +94,34 @@ function plateTexture(plate, province) {
   return material;
 }
 
-// Headlights: the light they throw on the road ahead, painted rather than lit. Two lobes, one from each lamp, start at
-// the bumper (brightest there, so the light visibly comes from the lamps), widen, lean inwards and overlap ahead, then
-// fade out about 8 m on. One soft texture on a flat quad under every car with its engine running, added onto the road
-// (and seen by the plate cameras). Real spot lights cost every lit pixel of the scene, so only three cars had them,
-// and their pools began metres ahead of the bumper.
-const POOL = {width: 3.6, length: 8.5, start: 2.05, lampX: .6};
+// Headlights: the light they throw on the road ahead, painted rather than lit. Two lobes, one from each lamp, grow out
+// from under the bumper (brightest just ahead of it, so the light visibly comes from the lamps), widen, lean inwards and
+// overlap ahead, then fade out about 8 m on. One soft texture on a flat quad under every car with its engine running,
+// added onto the road (and seen by the plate cameras). It fades to nothing well inside every edge of its quad, which
+// starts under the car's nose (hidden by the body): a light already bright at the quad's edges showed as straight cuts.
+// Real spot lights cost every lit pixel of the scene, so only three cars had them, and their pools began metres ahead.
+const POOL = {width: 5.4, length: 10, start: 1.6, bumper: 2.2, lampX: .6};
 function headlightPool() {
-  const W = 96, H = 224, canvas = document.createElement('canvas');
+  const W = 128, H = 256, canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const c = canvas.getContext('2d'), image = c.createImageData(W, H), smooth = t => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
   for (let row = 0; row < H; row++) {
-    const d = (row + .5) / H * POOL.length; // metres ahead of the bumper (the canvas's top row is the bumper)
-    const spread = .16 + d * .17, reach = (.7 + .3 * smooth(d / .8)) / (1 + (d / 3.6) ** 2) * (1 - smooth((d - (POOL.length - 2.2)) / 2.2));
+    const z = (row + .5) / H * POOL.length, d = Math.max(0, z - (POOL.bumper - POOL.start)); // d: metres ahead of the bumper
+    const spread = .2 + d * .14;
+    // Rises from nothing under the nose to full just past the bumper, then thins out with distance and is gone by the far edge.
+    const reach = smooth(z / (POOL.bumper - POOL.start + .45)) / (1 + (d / 3.4) ** 2) * (1 - smooth((z - (POOL.length - 3)) / 3));
     for (let col = 0; col < W; col++) {
-      const x = ((col + .5) / W - .5) * POOL.width;
+      const u = (col + .5) / W, x = (u - .5) * POOL.width;
       let v = 0;
-      for (const side of [-1, 1]) { const axis = side * POOL.lampX * (1 - .4 * Math.min(1, d / POOL.length)); v += Math.exp(-(((x - axis) / spread) ** 2)); }
-      const a = Math.min(1, v * reach), i = (row * W + col) * 4;
+      for (const side of [-1, 1]) { const axis = side * POOL.lampX * (1 - .45 * Math.min(1, d / 8)); v += Math.exp(-(((x - axis) / spread) ** 2)); }
+      const sides = smooth(Math.min(u, 1 - u) / .2); // and gone before the side edges
+      const a = Math.min(1, v * reach * sides), i = (row * W + col) * 4;
       image.data[i] = image.data[i + 1] = image.data[i + 2] = 255; image.data[i + 3] = Math.round(a * 255);
     }
   }
   c.putImageData(image, 0, 0);
   const poolTexture = new THREE.CanvasTexture(canvas);
-  // Flat on the road; the texture's top edge at the bumper.
+  // Flat on the road; the texture's top edge under the car's nose.
   const pool = new THREE.PlaneGeometry(POOL.width, POOL.length).rotateX(-Math.PI / 2).translate(0, .035, POOL.start + POOL.length / 2);
   const poolMaterial = new THREE.MeshBasicMaterial({map: poolTexture, color: 0xffe2ad, transparent: true, opacity: .62, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -16});
   return {pool, poolMaterial, poolTexture};

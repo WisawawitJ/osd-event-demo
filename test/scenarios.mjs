@@ -647,9 +647,14 @@ export const scenarios = [
     await p.until(`${pool('__out')}.visible`, {timeout: 10000, what: 'the leaving car lights the road'});
     expect(await p.eval(lamps('__out')) === 1, 'the leaving car has its lamps on');
     expect(await p.eval(`!${pool('__still')}.visible`) && await p.eval(lamps('__still')) < .5, 'a parked car is dark, with no light on the road');
-    // The light starts at the bumper (the lamps), not metres ahead of it, and is part of the car (it moves with it).
+    // The light grows out from under the bumper (the lamps), not metres ahead of it, and is part of the car (it moves
+    // with it). Its patch starts under the car's nose, hidden by the body, and the light fades to nothing before every
+    // edge of the patch (a light still bright at an edge showed as a straight cut).
     const start = await p.eval(`(()=>{const g=${pool('__out')}.geometry;g.computeBoundingBox();return g.boundingBox.min.z})()`);
-    expect(start > 1.9 && start < 2.4, `the light starts at the front bumper (${start.toFixed(2)} m from the car's centre; the car is 4.4 m long)`);
+    expect(start > 1.2 && start < 2.2, `the light's patch starts under the car's nose (${start.toFixed(2)} m from the car's centre; the bumper is at 2.2 m)`);
+    const edges = await p.eval(`(()=>{const c=${pool('__out')}.material.map.image,x=c.getContext('2d'),W=c.width,H=c.height,a=(X,Y,w,h)=>Math.max(...x.getImageData(X,Y,w,h).data.filter((_,i)=>i%4===3));
+      return {near:a(0,0,W,1),far:a(0,H-1,W,1),left:a(0,0,1,H),right:a(W-1,0,1,H),peak:a(0,0,W,H)};})()`);
+    expect(edges.peak > 200 && Math.max(edges.near, edges.far, edges.left, edges.right) < 4, `soft on every edge (edge alpha near ${edges.near}, far ${edges.far}, sides ${edges.left}/${edges.right}; brightest ${edges.peak})`);
     // Every car on the move has its light: none of them waits for a free light, as the three spot lights made them do.
     await p.until(`(()=>{const moving=__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car_')&&c.visible&&c.children[2].material.color.r===1);return moving.length>=2&&moving.every(c=>c.getObjectByName('Demo_car_headlights').visible)})()`, {timeout: 20000, what: 'two or more cars on the move, all with their light'});
     expect(!(await p.eval(`__scene.getObjectsByProperty('isSpotLight',true).some(s=>s.name.startsWith('Demo_headlight'))`)), 'no spot lights for headlights (the light is painted, so it costs the scene nothing)');
