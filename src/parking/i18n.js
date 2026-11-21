@@ -19,8 +19,6 @@ document.documentElement.lang = lang;
 const S = {
   // destination + general
   'parking.dock': ['ที่จอดรถ', 'Parking'],
-  'parking.title': ['ที่จอดรถ\nที่รู้จักทุกคัน', 'A car park that\nknows every car'],
-  'parking.description': ['ขอสิทธิ์จอด อนุมัติ อ่านทะเบียน และเปิดไม้กั้น ในระบบเดียว', 'Request, approve, read the plate and open the barrier in one flow'],
   'parking.panel': ['ระบบที่จอดรถ', 'Parking access'],
   'parking.chip': ['ลานจอด 50 คัน · ไม้กั้นและกล้องอ่านทะเบียนจำลอง', '50-space car park · simulated barrier and plate cameras'],
   'parking.floor': ['ลานจอดรถ', 'Car park'],

@@ -26,7 +26,7 @@ export function createPanel({root, sim, actions}) {
   // Overview -------------------------------------------------------------
   function donut(used, total) {
     const r = 46, c = 2 * Math.PI * r, f = total ? Math.min(1, used / total) : 0;
-    const tone = f > .9 ? '#d9534a' : f > .75 ? '#e0a33a' : '#315ee7';
+    const tone = f > .9 ? '#d9534a' : f > .75 ? '#e0a33a' : '#0055b8';
     return `<svg class="pk-donut" viewBox="0 0 120 120" role="img" aria-label="${used} / ${total}"><circle cx="60" cy="60" r="${r}" fill="none" stroke="#e8edf5" stroke-width="13"/><circle cx="60" cy="60" r="${r}" fill="none" stroke="${tone}" stroke-width="13" stroke-linecap="round" stroke-dasharray="${c * f} ${c}" transform="rotate(-90 60 60)"/><text x="60" y="58" text-anchor="middle" class="pk-donut-main">${used}</text><text x="60" y="78" text-anchor="middle" class="pk-donut-sub">/ ${total}</text></svg>`;
   }
   function hourlyChart(hourly) {

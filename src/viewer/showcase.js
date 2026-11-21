@@ -10,13 +10,13 @@ const L=(th,en)=>getLang()==='en'?en:th;
 // Each field is a getter, so a destination's texts follow the TH/EN switch.
 const texts=fields=>Object.defineProperties({},Object.fromEntries(Object.entries(fields).map(([key,[th,en]])=>[key,{get:()=>L(th,en),enumerable:true}])));
 const destinations={
- overview:texts({title:['ทุกระบบ\nในมุมมองเดียว','Every system\nin one view'],description:['สำรวจอาคาร OSD ผ่านข้อมูลที่เชื่อมถึงกัน','Explore the OSD building through connected data'],panel:['ภาพรวมอาคาร','Building overview'],floor:['ทั้งอาคาร','Whole building'],chip:['โมเดลอาคาร OSD · 5 ระดับ','OSD building model · 5 levels']}),
- meeting:texts({title:['พื้นที่ที่พร้อม\nสำหรับทุกไอเดีย','A space ready\nfor every idea'],description:['แสง อากาศ และการใช้ห้อง เชื่อมกันอย่างพอดี','Light, air and room use, working together'],panel:['ห้องประชุม','Meeting room'],floor:['ชั้น 4','Floor 4'],chip:['ห้องประชุมย่อย 2 ชั้น 4 · แตะไฟ แอร์ หรือประตูเพื่อทดลอง','Meeting room 2, floor 4 · tap a light, the AC or a door to try it']}),
- pond:texts({title:['รายละเอียดเล็ก ๆ\nที่ดูแลได้ตลอด','Small details,\nalways cared for'],description:['มองเห็นความเปลี่ยนแปลงของน้ำ ก่อนเป็นปัญหา','Spot changes in the water before they become a problem'],panel:['บ่อปลาและสวน','Fish pond and garden'],floor:['ชั้น 1','Floor 1'],chip:['บ่อปลาริมห้องประชุม · เซ็นเซอร์จำลอง','Fish pond by the meeting room · simulated sensors']}),
- energy:texts({title:['พลังงานจากหลังคา\nสู่ทั้งอาคาร','Power from the roof\nfor the whole building'],description:['เห็นการผลิตและการใช้ไฟในภาพเดียว','See power production and use in one picture'],panel:['พลังงานอาคาร','Building energy'],floor:['ดาดฟ้า','Rooftop'],chip:['24 แผง · กำลังผลิตเป็นค่าจำลอง','24 panels · simulated output']}),
- access:texts({title:['ทุกการเข้าออก\nมีเรื่องราว','Every entry\ntells a story'],description:['เชื่อมภาพ เหตุการณ์ และสถานะทางเข้า','Camera images, events and gate status, linked'],panel:['ทางเข้าที่จอดรถ','Car park entrance'],floor:['ชั้น 1','Floor 1'],chip:['ไม้กั้นริมขอบพื้นที่ · ช่องทางเข้าออกตามลูกศร','Barrier at the site edge · lanes follow the arrows']}),
+ overview:texts({panel:['ภาพรวมอาคาร','Building overview'],floor:['ทั้งอาคาร','Whole building'],chip:['โมเดลอาคาร OSD · 5 ระดับ','OSD building model · 5 levels']}),
+ meeting:texts({panel:['ห้องประชุม','Meeting room'],floor:['ชั้น 4','Floor 4'],chip:['ห้องประชุมย่อย 2 ชั้น 4 · แตะไฟ แอร์ หรือประตูเพื่อทดลอง','Meeting room 2, floor 4 · tap a light, the AC or a door to try it']}),
+ pond:texts({panel:['บ่อปลาและสวน','Fish pond and garden'],floor:['ชั้น 1','Floor 1'],chip:['บ่อปลาริมห้องประชุม · เซ็นเซอร์จำลอง','Fish pond by the meeting room · simulated sensors']}),
+ energy:texts({panel:['พลังงานอาคาร','Building energy'],floor:['ดาดฟ้า','Rooftop'],chip:['24 แผง · กำลังผลิตเป็นค่าจำลอง','24 panels · simulated output']}),
+ access:texts({panel:['ทางเข้าที่จอดรถ','Car park entrance'],floor:['ชั้น 1','Floor 1'],chip:['ไม้กั้นริมขอบพื้นที่ · ช่องทางเข้าออกตามลูกศร','Barrier at the site edge · lanes follow the arrows']}),
  // Parking access demo (src/parking): its texts follow the TH/EN switch.
- parking:{get title(){return pt('parking.title')},get description(){return pt('parking.description')},get panel(){return pt('parking.panel')},get floor(){return pt('parking.floor')},get chip(){return pt('parking.chip')}}
+ parking:{get panel(){return pt('parking.panel')},get floor(){return pt('parking.floor')},get chip(){return pt('parking.chip')}}
 };
 // Text in the static markup (src/pages/showcase.html), as [th,en] or a parking i18n lookup.
 // data-i18n fills the text, data-i18n-label the aria-label, data-i18n-title the title.
@@ -28,9 +28,9 @@ const pageText={
  'layer.none':['ปกติ','Plain'],'layer.temperature':['อุณหภูมิ','Temperature'],'layer.occupancy':['การใช้ห้อง','Occupancy'],'layer.lights':['ไฟ','Lights'],
  viewport:['โมเดลอาคาร OSD แบบโต้ตอบ','Interactive OSD building model'],
  canvas:['โมเดลอาคาร OSD ลากเพื่อหมุน ใช้ปุ่มลูกศรเพื่อเลื่อน ปุ่มบวกหรือลบเพื่อซูม และ R เพื่อคืนมุมมอง','OSD building model. Drag to rotate, use the arrow keys to pan, plus or minus to zoom, and R to reset the view'],
- 'scene.heading':['ทุกระบบ\nในมุมมองเดียว','Every system\nin one view'],'scene.description':['สำรวจอาคาร OSD ผ่านข้อมูลที่เชื่อมถึงกัน','Explore the OSD building through connected data'],
+ 'scene.heading':['ภาพรวมอาคาร','Building overview'],
  'scene.floor':['ทั้งอาคาร','Whole building'],'scene.chip':['โมเดลอาคาร OSD · 5 ระดับ','OSD building model · 5 levels'],
- orbit:['ลากเพื่อหมุน · เลื่อนเพื่อซูม','Drag to rotate · scroll to zoom'],loading:['กำลังเตรียมอาคาร…','Preparing the building…'],retry:['ลองโหลดใหม่','Reload'],
+ loading:['กำลังเตรียมอาคาร…','Preparing the building…'],retry:['ลองโหลดใหม่','Reload'],
  dock:['เลือกจุดพาชม','Choose a tour stop'],'dock.overview':['ภาพรวม','Overview'],'dock.meeting':['ห้องประชุม','Meeting room'],'dock.pond':['บ่อปลา','Fish pond'],'dock.energy':['พลังงาน','Energy'],'dock.access':['ทางเข้า','Entrance'],
  timeline:['หนึ่งวันในอาคาร · เวลาจำลองเดินตลอด','A day in the building · simulated time always running'],'day.mode':['เวลาจำลอง · เดินตลอด','Simulated time · always running'],
  'day.play':['ตามวันในอาคาร','Follow the day'],'day.pause':['หยุดชั่วคราว','Pause'],'day.speed':['ความยาวหนึ่งวันจำลอง (เวลาจริง)','How long a simulated day takes (real time)'],'day.time':['เวลาในโลกจำลอง · เลื่อนเพื่อข้ามไปเวลาอื่น','Simulated time · slide to move on to another time'],'day.events':['ช่วงเวลาที่น่าสนใจ','Moments worth a look'],
@@ -75,7 +75,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  function row(label,value){return `<div class="data-row"><span>${label}</span><strong>${value}</strong></div>`;}
  function metric(label,value,unit,note=''){return `<div><span class="metric-label">${label}</span><div class="metric-value">${value}<small>${unit}</small></div>${note?`<span class="metric-note">${note}</span>`:''}</div>`;}
  function system(name,title,desc,value){return `<div class="system-row"><div class="system-icon">${icon(name)}</div><div class="system-copy"><strong>${title}</strong><span>${desc}</span></div><span class="system-value">${value}</span></div>`;}
- function chart(values,labels=['08:00','10:00','12:00','14:00'],unit='',historyKey=null){const history=historyKey&&insights?.history(historyKey);if(history){values=history.values;labels=history.labels;}const min=Math.min(...values)-1,max=Math.max(...values)+1;const points=values.map((v,i)=>[i*280/(values.length-1),74-(v-min)/(max-min)*60]);return `<svg class="chart" viewBox="0 0 280 100" role="img" aria-label="${L('กราฟตัวอย่าง','Sample chart:')} ${unit}"><path class="chart-grid" d="M0 18h280M0 46h280M0 74h280"/><path d="M${points.map(p=>p.join(',')).join(' L')} L280,82 L0,82Z" fill="#e9effd" stroke="none"/><path class="chart-line" d="M${points.map(p=>p.join(',')).join(' L')}"/>${labels.map((l,i)=>`<text x="${i*280/(labels.length-1)}" y="98" text-anchor="${i===0?'start':i===labels.length-1?'end':'middle'}">${l}</text>`).join('')}</svg>`;}
+ function chart(values,labels=['08:00','10:00','12:00','14:00'],unit='',historyKey=null){const history=historyKey&&insights?.history(historyKey);if(history){values=history.values;labels=history.labels;}const min=Math.min(...values)-1,max=Math.max(...values)+1;const points=values.map((v,i)=>[i*280/(values.length-1),74-(v-min)/(max-min)*60]);return `<svg class="chart" viewBox="0 0 280 100" role="img" aria-label="${L('กราฟตัวอย่าง','Sample chart:')} ${unit}"><path class="chart-grid" d="M0 18h280M0 46h280M0 74h280"/><path d="M${points.map(p=>p.join(',')).join(' L')} L280,82 L0,82Z" fill="#eaf1fb" stroke="none"/><path class="chart-line" d="M${points.map(p=>p.join(',')).join(' L')}"/>${labels.map((l,i)=>`<text x="${i*280/(labels.length-1)}" y="98" text-anchor="${i===0?'start':i===labels.length-1?'end':'middle'}">${l}</text>`).join('')}</svg>`;}
  function events(items){return items.map(([time,text])=>`<div class="event-row"><time>${time}</time><p>${text}</p></div>`).join('');}
  function controls(){const s=actual(),door=Object.values(s.doors).some(Boolean);return `<div class="local-controls"><button data-control="light" aria-pressed="${s.light}">${icon('light')}${L(`ไฟ ${s.light?'เปิด':'ปิด'}`,`Light ${s.light?'on':'off'}`)}</button><button data-control="climate" aria-pressed="${s.climate}">${icon('air')}${L(`แอร์ ${s.climate?'เปิด':'ปิด'}`,`AC ${s.climate?'on':'off'}`)}</button><button data-control="door" aria-pressed="${door}">${icon('door')}${L(`ประตู ${door?'เปิด':'ปิด'}`,`Door ${door?'open':'closed'}`)}</button></div>`;}
  function render(){
@@ -120,7 +120,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   let committed=false;
   const commit=()=>{
    if(committed||disposed||ticket!==sequence)return;committed=true;
-   destination=id;document.body.dataset.tourDestination=id;$('#scene-heading').textContent=d.title;$('#scene-description').textContent=d.description;$('#scene-floor').textContent=d.floor;$('#scene-chip').textContent=d.chip;
+   destination=id;document.body.dataset.tourDestination=id;$('#scene-heading').textContent=d.panel;$('#scene-floor').textContent=d.floor;$('#scene-chip').textContent=d.chip;
    effects.select(id);if(id==='access')cameraImage='';
    // The meeting stop's controls act on its room: select it on arrival, so night lighting is laid out around it
    // from the start and its switch only changes that room.
@@ -222,7 +222,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  parking?.setInteractHandler(()=>{if(kiosk)return;stopFollowing();if(touring)stopTour(['กำลังทดลองด้วยตัวเอง','Trying it yourself']);});
  // Runs on every TH/EN switch: static markup, then everything the showcase draws itself.
  function applyLanguage(){const en=getLang()==='en';$('#lang-toggle span').textContent=en?'TH':'EN';translatePage();$('#kiosk-label').textContent=pt('story.kiosk');const dock=$('[data-destination="parking"] span');if(dock)dock.textContent=pt('parking.dock');
-  const d=destinations[destination];$('#scene-heading').textContent=d.title;$('#scene-description').textContent=d.description;$('#scene-floor').textContent=d.floor;
+  const d=destinations[destination];$('#scene-heading').textContent=d.panel;$('#scene-floor').textContent=d.floor;
   const playText=play.querySelector('span');if(playText)playText.textContent=playLabel();setProgress(progress);insights?.relabel();render();}
  listen($('#lang-toggle'),'click',()=>parking?.toggleLang());
  const offLang=onLang(applyLanguage);signal.addEventListener('abort',offLang,{once:true});applyLanguage();

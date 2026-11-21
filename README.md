@@ -54,6 +54,15 @@ check sets `day` itself, as the day-cycle checks do. Screenshots of failed check
 `test/bench.mjs` reports the median of 3 windows of 3 s per scene (`BENCH_ROUNDS`, `BENCH_SECONDS`); single windows vary by up to
 ~25%, so compare medians from back-to-back runs on the same machine.
 
+## Brand
+
+The page follows the OSD design system: OSD blue `#0055b8` for accents and the active stop, navy `#000334` text, grey
+`#55565a` secondary text, the pale tint `#f3f6fc` behind the panels, yellow `#fdaf17` as the one warm accent, the
+brand gradient as a bar under the header, 14px card corners with OSD's card shadow, round pills, and Noto Sans Thai
+(already the page font). The header carries the **OSD × ATOM** lockup: the OSD wordmark (the vector logo without its
+tagline) and the ATOM logo as supplied, white versions at night (`src/brand/`). The 3D view's title card is an
+overline (the floor) and the stop's name, uppercase in English as OSD titles are.
+
 ## One day, always running
 
 Everything runs on one world clock (`src/parking/clock.js`) on the event date, 24 Nov 2026: a whole day takes about
