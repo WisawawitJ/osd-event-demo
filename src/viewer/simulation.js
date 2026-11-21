@@ -95,7 +95,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   }
 
   // A fixed pool bounds lighting/shadow cost even when the map grows.
-  const SPOT_INTENSITY = 105;
+  const SPOT_INTENSITY = 135;
   // Every room's light fades on and off (~0.35 s, as the meeting room's light cone does) instead of switching in one
   // frame: its fittings' glow and its spot light follow `lightLevel` (0 off … 1 on), which runs toward the switch.
   const lightLevel = new Map(rooms.map(room => [room.id, states.get(room.id).light ? 1 : 0]));
@@ -106,7 +106,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       const level = lightLevel.get(room.id);
       for (const object of fixtures.get(room.id)) {
         if (object.userData.deviceKind !== 'light') continue;
-        for (const material of [].concat(object.material)) if (material.emissive) { material.emissive.set(0xffdc9b); material.emissiveIntensity = (night ? 2.1 : .6) * level; }
+        for (const material of [].concat(object.material)) if (material.emissive) { material.emissive.set(0xffdc9b); material.emissiveIntensity = (night ? 2.7 : .6) * level; }
       }
     }
     lights.forEach((light, i) => { const d = dealt[i]; light.intensity = d.at ? SPOT_INTENSITY * lightLevel.get(d.at.room.id) * d.presence : 0; });

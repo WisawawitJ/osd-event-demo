@@ -123,7 +123,7 @@ function headlightPool() {
   const poolTexture = new THREE.CanvasTexture(canvas);
   // Flat on the road; the texture's top edge under the car's nose.
   const pool = new THREE.PlaneGeometry(POOL.width, POOL.length).rotateX(-Math.PI / 2).translate(0, .035, POOL.start + POOL.length / 2);
-  const poolMaterial = new THREE.MeshBasicMaterial({map: poolTexture, color: 0xffe2ad, transparent: true, opacity: .62, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -16});
+  const poolMaterial = new THREE.MeshBasicMaterial({map: poolTexture, color: 0xffe2ad, transparent: true, opacity: .78, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -16});
   return {pool, poolMaterial, poolTexture};
 }
 
@@ -156,7 +156,7 @@ function headlightBeams() {
         vec3 inv=1./d,far=max((lo-eye)*inv,(hi-eye)*inv);float t1=min(min(far.x,far.y),far.z);
         float dt=max(0.,t1-t0)/32.,jitter=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(.06711056,.00583715)))),sum=0.;
         for(int i=0;i<32;i++)sum+=glow(eye+d*(t0+(float(i)+jitter)*dt));
-        gl_FragColor=vec4(color,1.-exp(-.55*sum*dt));
+        gl_FragColor=vec4(color,1.-exp(-.7*sum*dt));
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,

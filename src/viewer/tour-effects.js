@@ -39,11 +39,11 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
   const c=glow.getContext('2d'),g=c.createRadialGradient(64,64,4,64,64,64);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.55,'rgba(255,255,255,.45)');g.addColorStop(1,'rgba(255,255,255,0)');c.fillStyle=g;c.fillRect(0,0,128,128);
   const glowMap=new T.CanvasTexture(glow);
   const [lx,ly,lz]=meetingRoom.lightPosition||[room[0],2.65,room[1]];
-  const poolMaterial=new T.MeshBasicMaterial({color:'#ffcf73',map:glowMap,transparent:true,opacity:.75,depthWrite:false,blending:T.AdditiveBlending});materials.push(poolMaterial);
+  const poolMaterial=new T.MeshBasicMaterial({color:'#ffcf73',map:glowMap,transparent:true,opacity:.85,depthWrite:false,blending:T.AdditiveBlending});materials.push(poolMaterial);
   poolMaterial.userData.glowMap=glowMap;
   const pool=mesh(meeting,new T.CircleGeometry(1.9,40),poolMaterial,[lx,.06,lz]);pool.rotation.x=-Math.PI/2;lamp.push(pool);
   // The cone of lit air under the lamp (light-cone.js).
-  const cone={height:ly-.1,top:.45,bottom:1.7},beamMaterial=createLightConeMaterial({color:'#ffd88a',...cone});materials.push(beamMaterial);
+  const cone={height:ly-.1,top:.45,bottom:1.7},beamMaterial=createLightConeMaterial({color:'#ffd88a',...cone,strength:1.3});materials.push(beamMaterial);
   const beam=mesh(meeting,createLightConeGeometry(cone),beamMaterial,[lx,cone.height/2+.05,lz]);lamp.push(beam);
  }
  const pond=group('pond',1),pondMaterial=mat('#1b9caa',.8),pondRing=mesh(pond,new T.TorusGeometry(.23,.028,8,36),pondMaterial,[23.2,.32,0]);pondRing.rotation.x=-Math.PI/2;

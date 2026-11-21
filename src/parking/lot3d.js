@@ -184,11 +184,11 @@ export function createLot({scene, stalls, schedule}) {
   gc.fillStyle = gg; gc.fillRect(0, 0, 128, 128);
   const glowTexture = new THREE.CanvasTexture(glowCanvas); textures.push(glowTexture);
   const cone = {height: LAMP_HEIGHT, top: .3, bottom: 5.5};
-  const coneMaterial = createLightConeMaterial({color: '#ffe2ad', ...cone, strength: .4}); materials.push(coneMaterial);
+  const coneMaterial = createLightConeMaterial({color: '#ffe2ad', ...cone, strength: .55}); materials.push(coneMaterial);
   const coneGeometry = createLightConeGeometry(cone); owned.push(coneGeometry);
   const lampLight = lit.map(([x, y, z]) => { const m = new THREE.Mesh(coneGeometry, coneMaterial); m.position.set(x, y + cone.height / 2, z); root.add(m); return m; });
   lampLight.push(put(mergeGeometries(lit.map(([x, y, z]) => new THREE.CircleGeometry(6.8, 48).rotateX(-Math.PI / 2).translate(x, y + .02, z))),
-    basic({color: '#ffd9a0', map: glowTexture, transparent: true, opacity: .5, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12})));
+    basic({color: '#ffd9a0', map: glowTexture, transparent: true, opacity: .65, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12})));
   for (const o of lampLight) { o.receiveShadow = false; o.visible = false; o.name = 'Demo_lamp_light'; }
 
   // Barrier: cabinet, boom, status lamp
@@ -289,7 +289,7 @@ export function createLot({scene, stalls, schedule}) {
   }
 
   function setNight(night) {
-    lampMat.emissiveIntensity = night ? 2.2 : 0;
+    lampMat.emissiveIntensity = night ? 2.8 : 0;
     for (const o of lampLight) o.visible = night;
     schedule();
   }

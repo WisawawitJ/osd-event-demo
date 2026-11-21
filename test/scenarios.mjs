@@ -626,12 +626,12 @@ export const scenarios = [
     await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
     await p.sleep(600);
     // Each frame: each room spot's brightness as drawn (0 while it or its floor is hidden); a change of more than half
-    // of full (105) in one frame is a light switching at once. The fades run on time (0.22 s each way): a slow frame
+    // of full (the brightest seen) in one frame is a light switching at once. The fades run on time (0.22 s each way): a slow frame
     // under load covers more of one, but never half of it.
-    await p.eval(`(()=>{const spots=__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.name.startsWith('Simulation_spot'));window.__jumps=[];window.__moves=0;let last=null;
+    await p.eval(`(()=>{const spots=__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.name.startsWith('Simulation_spot'));window.__jumps=[];window.__moves=0;window.__full=0;let last=null;
       const shown=o=>{for(let x=o;x;x=x.parent)if(!x.visible)return false;return true;};
       const f=()=>{const now=spots.map(l=>({v:shown(l)?l.intensity:0,room:l.userData.roomId}));
-        if(last)now.forEach((n,i)=>{if(n.room!==last[i].room)__moves++;const d=Math.abs(n.v-last[i].v);if(d>52)__jumps.push(Math.round(d)+' '+last[i].room+'→'+n.room);});
+        if(last)now.forEach((n,i)=>{if(n.room!==last[i].room)__moves++;__full=Math.max(__full,n.v);const d=Math.abs(n.v-last[i].v);if(d>30)__jumps.push({d,text:Math.round(d)+' '+last[i].room+'→'+n.room});});
         last=now;requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
     for (const to of ['meeting', 'pond', 'energy', 'overview']) {
       await p.click(`[data-destination="${to}"]`);
@@ -639,7 +639,7 @@ export const scenarios = [
       await p.sleep(500);
     }
     expect(await p.eval('__moves') >= 3, `the lights moved between rooms as the floors changed (${await p.eval('__moves')} moves)`);
-    const jumps = await p.eval('__jumps');
+    const full = await p.eval('__full'), jumps = (await p.eval('__jumps')).filter(j => j.d > full / 2).map(j => j.text);
     expect(!jumps.length, `no light switched at once (${jumps.slice(0, 4).join(', ') || 'none'})`);
   }},
   {name: 'a door\'s shadow follows it as it swings, not only once it is open', async run(p, expect) {
