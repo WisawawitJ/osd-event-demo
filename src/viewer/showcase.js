@@ -22,7 +22,7 @@ const destinations={
 // data-i18n fills the text, data-i18n-label the aria-label, data-i18n-title the title.
 // data-i18n-init marks text the showcase redraws itself; it is only filled in before the showcase starts.
 const pageText={
- brand:['อาคารที่เชื่อมถึงกัน','Connected building'],demo:()=>pt('sim.data'),explore:['สำรวจอาคาร','Explore'],
+ brand:['ระบบอาคารอัจฉริยะ','Smart building system'],demo:()=>pt('sim.data'),explore:['สำรวจอาคาร','Explore'],
  'night.title':['สลับกลางวันและกลางคืน','Switch between day and night'],night:['กลางคืน','Night'],
  toolbar:['ข้อมูลบนโมเดล','Data on the model'],'layer.heading':['สีพื้นห้อง','Room colours'],'layer.group':['เลือกข้อมูลแสดงด้วยสี','Choose the data shown as colour'],
  'layer.none':['ปกติ','Plain'],'layer.temperature':['อุณหภูมิ','Temperature'],'layer.occupancy':['การใช้ห้อง','Occupancy'],'layer.lights':['ไฟ','Lights'],
