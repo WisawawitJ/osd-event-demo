@@ -41,12 +41,33 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
   const poolMaterial=new T.MeshBasicMaterial({color:'#ffcf73',map:glowMap,transparent:true,opacity:.75,depthWrite:false,blending:T.AdditiveBlending});materials.push(poolMaterial);
   poolMaterial.userData.glowMap=glowMap;
   const pool=mesh(meeting,new T.CircleGeometry(1.9,40),poolMaterial,[lx,.06,lz]);pool.rotation.x=-Math.PI/2;lamp.push(pool);
-  const fade=document.createElement('canvas');fade.width=4;fade.height=64;
-  const f=fade.getContext('2d'),v=f.createLinearGradient(0,0,0,64);v.addColorStop(0,'#fff');v.addColorStop(1,'#000');f.fillStyle=v;f.fillRect(0,0,4,64);
-  const fadeMap=new T.CanvasTexture(fade);
-  const beamMaterial=new T.MeshBasicMaterial({color:'#ffd88a',alphaMap:fadeMap,transparent:true,opacity:.22,depthWrite:false,side:T.DoubleSide,forceSinglePass:true,blending:T.AdditiveBlending});materials.push(beamMaterial);
-  beamMaterial.userData.glowMap=fadeMap;
-  const beam=mesh(meeting,new T.CylinderGeometry(.45,1.7,ly-.1,32,1,true),beamMaterial,[lx,(ly-.1)/2+.05,lz]);lamp.push(beam);
+  // The cone is lit air, not a surface: each pixel adds up the glow along its view ray through the cone (brightest
+  // under the lamp and on the axis, fading out towards the floor and the edge). Drawn as the cone's hollow shell, it
+  // looked right only from the side: from above, the view passed through its narrow top to the floor and saw no
+  // glow at all there, a dark disc under the lamp.
+  const height=ly-.1,beamMaterial=new T.ShaderMaterial({
+   uniforms:{color:{value:new T.Color('#ffd88a')},opacity:{value:1},eye:{value:new T.Vector3()},shape:{value:new T.Vector3(height/2,.45,1.7)}},
+   vertexShader:'varying vec3 local; void main(){local=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+   fragmentShader:`uniform vec3 color,eye,shape; uniform float opacity; varying vec3 local;
+    float glow(vec3 p){float h=(p.y+shape.x)/(2.*shape.x);if(h<0.||h>1.)return 0.;float q=length(p.xz)/mix(shape.z,shape.y,h);return q<1.?(1.-q*q)*h*h:0.;}
+    void main(){
+     // Entered here (a front face), or from the eye when it is inside the cone (then only the back faces draw).
+     float hEye=(eye.y+shape.x)/(2.*shape.x);bool inside=hEye>0.&&hEye<1.&&length(eye.xz)<mix(shape.z,shape.y,hEye);
+     if(gl_FrontFacing==inside)discard;
+     vec3 d=normalize(local-eye);float t0=inside?0.:distance(local,eye);
+     // Leaves the cone's bounding cylinder (the wide bottom's radius) or its top or bottom.
+     float a=dot(d.xz,d.xz),b=dot(eye.xz,d.xz),c=dot(eye.xz,eye.xz)-shape.z*shape.z;
+     float t1=a>1e-6?(-b+sqrt(max(0.,b*b-a*c)))/a:1e4;
+     if(abs(d.y)>1e-6)t1=min(t1,((d.y>0.?shape.x:-shape.x)-eye.y)/d.y);
+     float dt=max(0.,t1-t0)/24.,jitter=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(.06711056,.00583715)))),sum=0.;
+     for(int i=0;i<24;i++)sum+=glow(eye+d*(t0+(float(i)+jitter)*dt));
+     gl_FragColor=vec4(color,(1.-exp(-1.1*sum*dt))*opacity);
+     #include <tonemapping_fragment>
+     #include <colorspace_fragment>
+    }`,
+   transparent:true,depthWrite:false,side:T.DoubleSide,forceSinglePass:true,blending:T.AdditiveBlending});materials.push(beamMaterial);
+  const beam=mesh(meeting,new T.CylinderGeometry(.45,1.7,height,32,1,false),beamMaterial,[lx,height/2+.05,lz]);lamp.push(beam);
+  beam.onBeforeRender=(renderer,scene,camera)=>{beamMaterial.uniforms.eye.value.setFromMatrixPosition(camera.matrixWorld);beam.worldToLocal(beamMaterial.uniforms.eye.value);beamMaterial.uniforms.opacity.value=beamMaterial.opacity;};
  }
  const pond=group('pond',1),pondMaterial=mat('#1b9caa',.8),pondRing=mesh(pond,new T.TorusGeometry(.23,.028,8,36),pondMaterial,[23.2,.32,0]);pondRing.rotation.x=-Math.PI/2;
  mesh(pond,new T.CylinderGeometry(.045,.045,.45,12),mat('#3f6975'),[23.2,.3,0]);
@@ -78,9 +99,12 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
  // material's opacity is what its effect wants (the lamp's and the air's own fades, the solar flow's strength) times
  // its stop's level.
  // Every effect material is drawn as transparent from the start (an opaque one turned transparent for a fade would
- // need another shader, built on the spot).
+ // need another shader, built on the spot). They are drawn after the building's own see-through surfaces: sorted
+ // with them by distance, the meeting room's glazing (one mesh around the room, its centre near the light's) was
+ // drawn after the light cone from some sides and over it from others, so the cone's top turned bright or faint as
+ // the camera turned.
  const level={},goal={},own=new Map(),stopOf=new Map();
- for(const [id,g] of Object.entries(groups)){level[id]=goal[id]=0;g.traverse(o=>{for(const m of [].concat(o.material||[])){stopOf.set(m,id);own.set(m,m.opacity);m.transparent=true;}});}
+ for(const [id,g] of Object.entries(groups)){level[id]=goal[id]=0;g.traverse(o=>{o.renderOrder=1;for(const m of [].concat(o.material||[])){stopOf.set(m,id);own.set(m,m.opacity);m.transparent=true;}});}
  function paint(){
   for(const [m,opacity] of own)m.opacity=opacity*level[stopOf.get(m)];
   for(const [id,g] of Object.entries(groups))g.visible=level[id]>.001;

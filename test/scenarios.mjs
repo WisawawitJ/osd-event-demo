@@ -563,6 +563,29 @@ export const scenarios = [
     expect(top > .15 && c.at(-1) === 0, `the cone showed at the meeting room (${top.toFixed(2)}) and is gone at the pond`);
     expect(step < top * .25, `it faded in and out (largest change in one frame ${(step / top * 100).toFixed(0)}% of full)`);
   }},
+  {name: 'meeting room: its light cone looks the same from every side and from above', async run(p, expect) {
+    await p.goto('?debug=1&dest=meeting&time=10:00');
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the meeting room'});
+    await p.sleep(600);
+    const r = await p.eval(`(()=>{
+      const g=__scene.getObjectByName('Demo_meeting');let beam=null;g.traverse(o=>{if(o.geometry?.type==='CylinderGeometry')beam=o;});
+      const glazing=__scene.getObjectByName('Floor_4_glazing'),V=__camera.position.constructor,axis=beam.getWorldPosition(new V()),cam=__camera.clone();
+      // Draw order against the room's glazing, the camera circling the cone.
+      let order=[];const hooks=[beam,glazing].map(o=>{const f=o.onBeforeRender;o.onBeforeRender=function(...a){order.push(o);return f.apply(this,a);};return [o,f];});
+      const before=[],off=__camera.position.clone().sub(axis);
+      for(let a=-90;a<=90;a+=15){cam.position.copy(axis).add(off.clone().applyAxisAngle(new V(0,1,0),a*Math.PI/180));cam.lookAt(axis);cam.updateMatrixWorld();order=[];__renderer.render(__scene,cam);if(order.includes(glazing)&&order.indexOf(beam)<order.indexOf(glazing))before.push(a);}
+      for(const [o,f] of hooks)o.onBeforeRender=f;
+      // The cone's own light at its axis on screen, alone in a scene: from the side and from straight above.
+      const solo=new __scene.constructor(),copy=beam.clone();copy.matrixAutoUpdate=false;copy.matrix.copy(beam.matrixWorld);copy.onBeforeRender=beam.onBeforeRender;
+      const gl=__renderer.getContext(),px=new Uint8Array(4);
+      const light=(eye)=>{cam.position.copy(axis).add(eye);cam.lookAt(axis);cam.updateMatrixWorld();cam.updateProjectionMatrix();
+        const read=()=>{const w=gl.drawingBufferWidth,h=gl.drawingBufferHeight;gl.readPixels(w>>1,h>>1,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);return px[0]+px[1]+px[2];};
+        solo.remove(copy);__renderer.render(solo,cam);const dark=read();solo.add(copy);__renderer.render(solo,cam);return read()-dark;};
+      const side=light(new V(5,0,2)),above=light(new V(.01,6,0));solo.remove(copy);
+      return {before,side,above};})()`);
+    expect(r.before.length === 0, `the cone is drawn after the room's glazing from every side (drawn before it at ${r.before.join(', ') || 'none'}°)`);
+    expect(r.side > 30 && r.above > r.side * .5, `seen from straight above, the cone still glows (side ${r.side}, above ${r.above})`);
+  }},
   {name: 'room lights fade on and off, every room alike (not only the meeting room)', async run(p, expect) {
     await p.goto('?debug=1&dest=meeting&time=20:30');
     await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the meeting room at night'});
