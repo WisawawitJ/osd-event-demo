@@ -587,21 +587,25 @@ try {
           }else{
            // Another stop: one continuous flight that swings out far enough to show where the next stop sits on the
            // building, without first returning to the overview. The curve bends towards the whole-building view from
-           // between the two stops' viewing directions; the floors change while the camera travels.
+           // between the two stops' viewing directions. The floors change in two fades, as the camera swings out and as
+           // it comes in: the whole building first, then the new stop's cut. One fade straight from one cut to the other
+           // showed both half-faded at once (floor 4's furniture over floor 1, a see-through ghost of the building).
            const facing=pose=>new THREE.Vector3(...pose.eye).sub(new THREE.Vector3(...pose.target)).normalize();
            const direction=facing(start).add(facing(to));if(direction.lengthSq()<.01)direction.copy(facing(start));
            direction.normalize();direction.y=Math.max(.35,direction.y);
            const via=contextPose(direction),span=new THREE.Vector3(...start.eye).distanceTo(new THREE.Vector3(...to.eye));
            marker.position.set(to.target[0],id==='energy'?15.8:id==='meeting'?meetingTarget.y-.6:.2,to.target[2]);marker.visible=id!=='overview';
-           let approached=false;
+           const SPLIT=.45;let approached=false;
+           // The stop's title and panel arrive as the camera starts its descent onto it, with its floors' fade.
+           const approach=()=>{approached=true;sceneTransition.finish();onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));onApproach();};
            phases.push({to,via,duration:Math.round(THREE.MathUtils.clamp(1100+span*12,1300,1900)),
-            onStart(){onPhase(L('กำลังเดินทาง','On the way'));sceneTransition.begin(()=>applyDestination(id));},
+            onStart(){onPhase(L('กำลังเดินทาง','On the way'));sceneTransition.begin(()=>applyDestination('overview'));},
             onUpdate(t){
-             sceneTransition.progress(THREE.MathUtils.clamp((t-.15)/.6,0,1));markerMaterial.opacity=.6*Math.min(1,t*4)*(1-t);
-             // The stop's title and panel arrive as the camera starts its descent onto it.
-             if(!approached&&t>=.45){approached=true;onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));onApproach();}
+             if(!approached&&t>=SPLIT)approach();
+             sceneTransition.progress(approached?THREE.MathUtils.clamp((t-SPLIT)/.4,0,1):Math.min(1,t/.35));
+             markerMaterial.opacity=.6*Math.min(1,t*4)*(1-t);
             },
-            onEnd(){sceneTransition.finish();if(!approached)onApproach();}
+            onEnd(){if(!approached)approach();sceneTransition.finish();}
            });
           }
           const arrived=await flight.flyPath(phases);
