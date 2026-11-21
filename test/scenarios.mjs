@@ -482,10 +482,13 @@ export const scenarios = [
     const lamps = c => `(c=>c.children[2].material.color.r)(${c})`;
     const beams = `__scene.getObjectsByProperty('isSpotLight',true).filter(s=>s.name.startsWith('Demo_headlight'))`;
     await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');window.__out=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__parking.sim.state.presence.get(k).plate);window.__still=__parking.lot.root.children.find(c=>c.name.startsWith('Demo_car_')&&c!==__out&&c.visible&&__parking.traffic.parkedKeys().some(k=>'Demo_car_'+__parking.sim.state.presence.get(k).plate===c.name));void __parking.traffic.leave(k)})()`);
-    await p.until(`(()=>{const b=${beams}.find(s=>s.intensity>0&&s.position.distanceTo(__out.position)<3);return !!b})()`, {timeout: 10000, what: 'a headlight beam on the car pulling out'});
+    // Two beams, one from each lamp at the car's front corners, aimed to meet ahead of it.
+    await p.until(`${beams}.filter(s=>s.intensity>0&&s.position.distanceTo(__out.position)<3).length===2`, {timeout: 10000, what: 'two headlight beams on the car pulling out'});
+    const pair = JSON.parse(await p.eval(`JSON.stringify((()=>{const [l,r]=${beams}.filter(s=>s.intensity>0&&s.position.distanceTo(__out.position)<3);return {apart:l.position.distanceTo(r.position),aimsApart:l.target.position.distanceTo(r.target.position)}})())`));
+    expect(pair.apart > 1 && pair.aimsApart < pair.apart, `beams start at the two lamps (${pair.apart.toFixed(2)} m apart) and converge ahead (${pair.aimsApart.toFixed(2)} m apart)`);
     expect(await p.eval(lamps('__out')) === 1, 'the leaving car has its lamps on');
     expect(await p.eval(lamps('__still')) < .5, 'a parked car is dark');
-    expect(await p.eval(`${beams}.length === 4 && ${beams}.every(s=>s.visible&&!s.castShadow)`), 'four shadowless beams in the scene at night');
+    expect(await p.eval(`${beams}.length === 6 && ${beams}.every(s=>s.visible&&!s.castShadow)`), 'six shadowless beams (three cars, two lamps each) in the scene at night');
     // Daytime: no beams in the scene, every car drawn as is.
     await p.eval('__world.jumpTo(9*60)');
     await p.until(`document.documentElement.dataset.night === 'false'`, {timeout: 5000, what: 'day'});

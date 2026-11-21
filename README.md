@@ -74,7 +74,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 - **Koi** swim slow loops in the pond, each sized to keep the fish in the water, waving their tails. The motion is in
   the vertex shader (no per-fish CPU work); the pond redraws at 15 fps only while it is in view, and not when paused.
 - **Headlights:** at night cars with the engine on (driving, queuing, at the barrier) have their lamps lit, and the
-  four nearest the gate light the road ahead with real spot lights (a fixed pool without shadows, only at night);
+  three nearest the gate light the road with real spot lights, one from each lamp, starting at the bumper and meeting
+  ahead of the car (also in the plate camera's picture; a fixed pool of six without shadows, only at night);
   parked cars and their plates are dark. The start-up warm-up prepares the night's shaders too, so the first dusk
   does not freeze the view.
 - **Sky:** the sun crosses the building, low and warm in the early morning and late afternoon; at night a dim moonlight
