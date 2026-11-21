@@ -24,6 +24,9 @@ export const scenarios = [
     await p.goto(`?${FAST}`);
     await p.until(LOADED, {timeout: 40000, what: 'model ready'});
     expect(await p.eval('document.querySelectorAll(".destination-dock [data-destination]").length') === 5, 'dock has 5 stops');
+    // One column per stop: a grid with a column to spare left an empty slot after the last stop.
+    const gap = await p.eval(`(()=>{const d=document.querySelector('.destination-dock'),b=[...d.querySelectorAll('[data-destination]')].at(-1);return Math.round(d.getBoundingClientRect().right-b.getBoundingClientRect().right);})()`);
+    expect(gap < 16, `the stops fill the dock (${gap} px after the last)`);
   }},
 
   {quick: true, name: 'story plays end to end on auto-advance', async run(p, expect) {
