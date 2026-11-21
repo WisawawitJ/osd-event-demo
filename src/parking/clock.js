@@ -3,12 +3,31 @@
 const params = new URLSearchParams(location.search);
 const requested = Number(params.get('speed'));
 export const SPEED = Number.isFinite(requested) && requested > 0 ? Math.min(requested, 30) : 1;
-export const later = (fn, ms) => setTimeout(fn, ms / SPEED);
-export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms / SPEED));
+
+// Pause: the timeline's pause button stops everything that runs by itself (the world clock, cars and the barrier,
+// the story, scenarios, the tour and the idle orbit); the visitor can still move the camera. Demo time is real
+// time minus the paused spans: whatever waits or moves reads it (demoNow), or waits with later/sleep.
+let pausedAt = null, pausedFor = 0;
+export const demoNow = () => (pausedAt ?? performance.now()) - pausedFor;
+export const isPaused = () => pausedAt !== null;
+// Runs `fn` after `ms` of demo time (scaled by ?speed, stopped while paused). Cancel with cancelLater.
+export function later(fn, ms) {
+  const handle = {id: 0, due: demoNow() + ms / SPEED};
+  const check = () => {
+    const left = handle.due - demoNow();
+    if (isPaused() || left > 1) { handle.id = setTimeout(check, isPaused() ? 100 : left); return; }
+    handle.id = 0; fn();
+  };
+  handle.id = setTimeout(check, ms / SPEED);
+  return handle;
+}
+export const cancelLater = handle => { if (handle) clearTimeout(handle.id); };
+export const sleep = ms => new Promise(resolve => later(resolve, ms));
 
 // World clock: one simulated day on the event date (24 Nov 2026, Bangkok time) that runs by itself and loops.
 // Everything reads it: the sky, the building's rooms and solar, and the car park's traffic and logs.
-// - A day takes `?day=N` real minutes (default 10); the night (21:00–05:00) goes 1.5× faster than the daytime.
+// - A day takes `?day=N` real minutes (default 20; the timeline's button picks 10, 20, 40 or 60); the night
+//   (21:00–05:00) goes 1.5× faster than the daytime. Pausing (above) stops it with everything else.
 // - `?day=0` turns the time-lapse off: the clock then runs at real speed, as one scene would (tests use this).
 // - `?time=HH:MM` sets the start (default 09:00).
 // Cars, flights and the story keep real speed: only the clock is sped up. While the parking story plays, it holds
@@ -17,9 +36,9 @@ const DAY_MS = 864e5, DAY0 = Date.UTC(2026, 10, 24, -7); // 24 Nov 2026 00:00 in
 export const minuteOf = ms => (((ms - DAY0) % DAY_MS) + DAY_MS) % DAY_MS / 60000;
 export const isNightMinute = m => m >= 21 * 60 || m < 5 * 60;
 const dayParam = params.get('day');
-const DAY_REAL = dayParam === null || !Number.isFinite(Number(dayParam)) ? 10 : Math.max(0, Number(dayParam));
-// Minutes of world time per real minute in the daytime; the night's 8 hours take 1/1.5 of their share.
-const LAPSE = DAY_REAL > 0 ? (16 * 60 + 8 * 60 / 1.5) / DAY_REAL : 0;
+const DAY_REAL = dayParam === null || !Number.isFinite(Number(dayParam)) ? 20 : Math.max(0, Number(dayParam));
+// Minutes of world time per real minute in the daytime for a day of `minutes`; the night's 8 hours take 1/1.5 of their share.
+const lapseFor = minutes => (minutes > 0 ? (16 * 60 + 8 * 60 / 1.5) / minutes : 0);
 const startParam = /^(\d{1,2}):(\d{2})$/.exec(params.get('time') || '');
 const START = DAY0 + (startParam ? (Number(startParam[1]) % 24) * 60 + Math.min(59, Number(startParam[2])) : 9 * 60) * 60000;
 // The day wraps at 03:00, when the car park is at its emptiest: 03:00 on the 25th becomes 03:00 on the 24th.
@@ -27,9 +46,9 @@ const WRAP = DAY0 + DAY_MS + 3 * 3600e3;
 
 function createWorldClock() {
   const listeners = new Set();
-  let time = START, last = performance.now(), holds = 0;
+  let time = START, last = performance.now(), holds = 0, dayLength = DAY_REAL, paused = false;
   const emit = (kind, payload) => { for (const fn of [...listeners]) fn(kind, payload); };
-  const rate = () => SPEED * (!LAPSE || holds ? 1 : LAPSE * (isNightMinute(minuteOf(time)) ? 1.5 : 1));
+  const rate = () => { const lapse = lapseFor(dayLength); return paused ? 0 : holds ? SPEED : SPEED * (!lapse ? 1 : lapse * (isNightMinute(minuteOf(time)) ? 1.5 : 1)); };
   function advance() {
     const t = performance.now(), dt = t - last;
     last = t;
@@ -38,8 +57,17 @@ function createWorldClock() {
   }
   setInterval(() => { advance(); emit('tick'); }, 250);
   return {
-    // True when the day runs as a time-lapse (the default); false with `?day=0`.
-    lapse: LAPSE > 0,
+    // Real minutes a day takes (0: real speed, as with `?day=0`), and whether the clock is paused.
+    get dayLength() { return dayLength; },
+    setDayLength(minutes) { advance(); dayLength = minutes; emit('rate'); },
+    get paused() { return paused; },
+    // Pauses (or resumes) everything, not only the clock: see isPaused.
+    setPaused(value) {
+      advance(); paused = Boolean(value);
+      if (paused && pausedAt === null) pausedAt = performance.now();
+      if (!paused && pausedAt !== null) { pausedFor += performance.now() - pausedAt; pausedAt = null; }
+      emit('rate');
+    },
     now() { advance(); return Math.round(time); },
     minute() { advance(); return minuteOf(time); },
     get night() { return isNightMinute(this.minute()); },

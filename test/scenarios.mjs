@@ -789,6 +789,28 @@ export const scenarios = [
     expect(r.worst < 1, `the light turns at most ${r.worst.toFixed(2)}° in a minute (worst at ${Math.floor(r.at / 60)}:${String(r.at % 60).padStart(2, '0')})`);
     expect(r.lowest > 15, `never lower than ${r.lowest.toFixed(1)}° (shadows of a sensible length)`);
   }},
+  {name: 'pause: everything stands still (clock, cars, traffic) until resumed; the day can be made longer or shorter', async run(p, expect) {
+    await p.goto(`?${FAST}&day=10&time=09:00`);
+    await p.until(UP, {timeout: 40000});
+    await p.until('__parking.traffic.busy || __parking.lot.root.children.some(c=>c.name==="Demo_car_"&&c.visible)', {timeout: 20000, what: 'a car on the move'});
+    const cars = `JSON.stringify(__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car_')&&c.visible).map(c=>c.position.toArray().map(v=>v.toFixed(3))))`;
+    await p.click('#day-pause');
+    await p.sleep(100);
+    const a = await p.eval('__world.now()'), carsA = await p.eval(cars); await p.sleep(1000); const b = await p.eval('__world.now()'), carsB = await p.eval(cars);
+    expect(a === b, `paused: the clock stands still (${((b - a) / 60000).toFixed(1)} min in 1 s)`);
+    expect(carsA === carsB, 'paused: no car moves, appears or leaves');
+    expect(await p.eval(`document.querySelector('#day-pause').getAttribute('aria-pressed')`) === 'true', 'pause button pressed');
+    await p.click('#day-pause');
+    const c = await p.eval('__world.now()'); await p.sleep(800); const d = await p.eval('__world.now()');
+    expect(d > c, 'resumed: the clock runs again');
+    // The day-length button: 10 → 20 min a day halves the pace.
+    await p.click('#day-speed');
+    expect(await p.eval('__world.dayLength') === 20, `day length now ${await p.eval('__world.dayLength')} min`);
+    // Following the day starts a paused clock again.
+    await p.click('#day-pause');
+    await p.click('#day-play');
+    expect(!(await p.eval('__world.paused')), 'Follow the day resumes the clock');
+  }},
   {name: 'day cycle: the explore page follows the clock too (night at 20:00)', async run(p, expect) {
     await p.goto('?debug=1&day=10&time=20:00#explore');
     await p.until(`document.querySelector('#status')?.dataset.state === 'ready'`, {timeout: 40000});

@@ -2,7 +2,7 @@
 // alerts, audit and outbox. Nothing here talks to ATOM, Keycloak, mail or cameras.
 import {buildStalls} from './layout.js';
 import {bkk, parts} from './i18n.js';
-import {later, world} from './clock.js';
+import {later, world, demoNow} from './clock.js';
 
 const DAY_START = bkk(2026, 11, 24, 0, 0);
 
@@ -218,8 +218,8 @@ export function createParkingSim() {
   }
 
   function raiseAlert({plate, province, snapshot, color, ambient = false}) {
-    // `raised` is real time (performance.now): how long a car has waited is not world-clock time, which may run fast.
-    const alert = {id: uid('a'), at: now(), raised: performance.now(), plate, province, snapshot, color, status: 'open', ambient};
+    // `raised` is demo time (demoNow): how long a car has waited is not world-clock time, which may run fast.
+    const alert = {id: uid('a'), at: now(), raised: demoNow(), plate, province, snapshot, color, status: 'open', ambient};
     state.alerts.unshift(alert);
     state.events.unshift({id: uid('e'), at: now(), kind: 'unknown', plate, province, type: 'unknown', camera: 'LPR-IN', confidence: .91, alertId: alert.id});
     emit('alert', alert);

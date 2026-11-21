@@ -2,7 +2,7 @@
 import {t, fmtDate, fmtTime, bkk} from './i18n.js';
 import {esc, icon, patch, fakeQr, saveFile, visitInvite} from './dom.js';
 import {PROVINCES} from './sim.js';
-import {later, sleep} from './clock.js';
+import {later, cancelLater, sleep} from './clock.js';
 
 const blankForm = () => ({name: '', phone: '', email: '', company: '', contact: '', plate: '', province: '', arrival: '2026-11-24', departure: '2026-11-24', notes: '', consent: false, faceConsent: false, face: false, photo: 'idle'});
 const dateValue = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d, -7); };
@@ -135,7 +135,7 @@ export function createPhone({root, sim, actions}) {
     ui.form.photo = 'reading'; render();
     if (photoRead) return photoRead;
     photoRead = new Promise(resolve => {
-      settleRead = () => { clearTimeout(photoTimer); photoRead = settleRead = null; resolve(); };
+      settleRead = () => { cancelLater(photoTimer); photoRead = settleRead = null; resolve(); };
       photoTimer = later(() => {
         if (sample.own || !ui.form.plate) ui.form.plate = sample.plate;
         if (sample.own || !ui.form.province) ui.form.province = sample.province;

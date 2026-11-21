@@ -3,7 +3,7 @@ import {createSecurityPreview} from 'osd/viewer/security-preview.js';
 import {createSceneTransition} from 'osd/viewer/scene-transition.js';
 import {createShowcase,translatePage,pageString} from 'osd/viewer/showcase.js';
 import {getLang} from 'osd/parking/i18n.js';
-import {SPEED, world} from 'osd/parking/clock.js';
+import {SPEED, world, isPaused} from 'osd/parking/clock.js';
 import {applySky, isDark} from 'osd/viewer/daylight.js';
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import { OrbitControls } from 'osd/node_modules/three/examples/jsm/controls/OrbitControls.js';
@@ -644,7 +644,7 @@ try {
        const ORBIT_DEG_PER_S=3.5,IDLE_FREE_MS=20000,IDLE_TOUR_MS=2500;
        function stopOrbit(){if(orbitFrame)cancelAnimationFrame(orbitFrame);orbitFrame=0;}
        for(const type of ['pointerdown','wheel','keydown'])document.addEventListener(type,event=>{if(event.target.closest?.('#view-orbit'))return;lastInput=performance.now();stopOrbit();},{capture:true,signal:abort.signal});
-       const orbitAllowed=()=>{const st=showcase.getState();if(!orbitEnabled||disposed||document.hidden||flight.running||st.traveling||parking?.story.running)return false;return performance.now()-lastInput>(st.touring?IDLE_TOUR_MS:IDLE_FREE_MS);};
+       const orbitAllowed=()=>{const st=showcase.getState();if(!orbitEnabled||disposed||document.hidden||isPaused()||flight.running||st.traveling||parking?.story.running)return false;return performance.now()-lastInput>(st.touring?IDLE_TOUR_MS:IDLE_FREE_MS);};
        let flightWasRunning=false;
        const orbitWatch=setInterval(()=>{
         // A tour stop counts as idle only from the moment its flight lands.

@@ -1,4 +1,5 @@
 import * as T from 'osd/node_modules/three/build/three.module.js';
+import {demoNow} from 'osd/parking/clock.js';
 // Presentation-only objects. No bindings to hardware or Home Assistant.
 export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
  const groups={},owned=[],materials=[];let current='overview';
@@ -79,7 +80,7 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
  function airStep(time){
   airFrame=0;const dt=Math.min(.1,(time-(airLast||time))/1000);airLast=time;
   airLevel=airTarget>airLevel?Math.min(airTarget,airLevel+dt/.35):Math.max(airTarget,airLevel-dt/.35);
-  const shift=(time/1000*.35)%.26;
+  const shift=(demoNow()/1000*.35)%.26; // demo time: the air stands still while paused
   air.forEach((o,i)=>{o.visible=airLevel>.001;o.material.opacity=airBase[i]*airLevel;const d=o.geometry.attributes.lineDistance,base=o.userData.distances;for(let j=0;j<base.length;j++)d.array[j]=base[j]-shift;d.needsUpdate=true;});
   schedule();
   if(current==='meeting'&&(airLevel>0||airTarget>0)&&!document.hidden)airFrame=requestAnimationFrame(airStep);else airLast=0;

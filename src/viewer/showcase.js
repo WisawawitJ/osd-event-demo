@@ -1,7 +1,7 @@
 import {createBuildingInsights} from 'osd/viewer/building-insights.js';
 import {createTourEffects} from 'osd/viewer/tour-effects.js';
 import {t as pt, onLang, getLang} from 'osd/parking/i18n.js';
-import {SPEED, world} from 'osd/parking/clock.js';
+import {SPEED, world, later, cancelLater, demoNow, isPaused} from 'osd/parking/clock.js';
 import {dayEvents,formatTime} from 'osd/viewer/building-day.js';
 const icons={building:'M3 21V5h12v16M15 11h6v10M7 9h4M7 13h4M7 17h4',light:'M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0l-1 2H9Z',air:'M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h5',people:'M4 21v-3a5 5 0 0 1 10 0v3m3-9a4 4 0 0 1 4 4v5M12 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',water:'M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z',solar:'m5 9-2 10h18L19 9ZM8 9l-1 10m9-10 1 10M4 14h16M12 19v3M12 2v3M5 3l2 2m12-2-2 2',door:'M5 21V3h14v18M9 21V5l8 2v14M13 13h.01',arrow:'M4 12h16m-5-5 5 5-5 5',play:'m8 5 11 7-11 7Z',pause:'M8 5v14M16 5v14',check:'m5 12 4 4L19 6'};
 const icon=name=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[name]||icons.building}"/></svg>`;
@@ -33,7 +33,7 @@ const pageText={
  orbit:['ลากเพื่อหมุน · เลื่อนเพื่อซูม','Drag to rotate · scroll to zoom'],loading:['กำลังเตรียมอาคาร…','Preparing the building…'],retry:['ลองโหลดใหม่','Reload'],
  dock:['เลือกจุดพาชม','Choose a tour stop'],'dock.overview':['ภาพรวม','Overview'],'dock.meeting':['ห้องประชุม','Meeting room'],'dock.pond':['บ่อปลา','Fish pond'],'dock.energy':['พลังงาน','Energy'],'dock.access':['ทางเข้า','Entrance'],
  timeline:['หนึ่งวันในอาคาร · เวลาจำลองเดินตลอด','A day in the building · simulated time always running'],'day.mode':['เวลาจำลอง · เดินตลอด','Simulated time · always running'],
- 'day.play':['ตามวันในอาคาร','Follow the day'],'day.time':['เวลาในโลกจำลอง · เลื่อนเพื่อข้ามไปเวลาอื่น','Simulated time · slide to move on to another time'],'day.events':['ช่วงเวลาที่น่าสนใจ','Moments worth a look'],
+ 'day.play':['ตามวันในอาคาร','Follow the day'],'day.pause':['หยุดชั่วคราว','Pause'],'day.speed':['ความยาวหนึ่งวันจำลอง (เวลาจริง)','How long a simulated day takes (real time)'],'day.time':['เวลาในโลกจำลอง · เลื่อนเพื่อข้ามไปเวลาอื่น','Simulated time · slide to move on to another time'],'day.events':['ช่วงเวลาที่น่าสนใจ','Moments worth a look'],
  panel:['ข้อมูลประกอบจุดที่เลือก','Details for the selected spot'],'panel.title':['ภาพรวมอาคาร','Building overview'],'panel.status':['พร้อมพาชม','Ready to tour'],
  incidents:['จุดที่ควรดู','Worth a look'],'incidents.loading':['กำลังเตรียมเหตุการณ์…','Preparing events…'],
 'panel.loading':['กำลังเตรียมข้อมูลจำลอง…','Preparing simulated data…'],
@@ -107,7 +107,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  let progress=['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around'];
  function setProgress(message){progress=message;$('#tour-progress').textContent=typeof message==='function'?message():L(...message);}
  const playLabel=()=>touring?L('หยุดพาชม','Stop tour'):L('เริ่มพาชม','Start tour');
- function stopTour(message=['หยุดพาชมแล้ว · เลือกจุดต่อไปได้เอง','Tour stopped · pick the next spot yourself']){if(touring)parking?.stopStory();tourGeneration++;clearTimeout(tourTimer);tourTimer=0;touring=false;play.innerHTML=icon('play')+`<span>${playLabel()}</span>`;setProgress(message);}
+ function stopTour(message=['หยุดพาชมแล้ว · เลือกจุดต่อไปได้เอง','Tour stopped · pick the next spot yourself']){if(touring)parking?.stopStory();tourGeneration++;cancelLater(tourTimer);tourTimer=null;touring=false;play.innerHTML=icon('play')+`<span>${playLabel()}</span>`;setProgress(message);}
  async function select(id,{guided=false,instant=false}={}){
   if(!destinations[id]||disposed)return false;if(!guided){stopFollowing();stopTour(['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around']);}stopScenario();const ticket=++sequence,d=destinations[id];
   if(destination==='parking'&&id!=='parking')parking?.exit();
@@ -143,7 +143,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
 
  function scenario(kind){
   if(traveling)return;
-  stopScenario();state.scenario=kind;scenarioStart=performance.now();lastTick=-1;let lastVisual=0;
+  stopScenario();state.scenario=kind;scenarioStart=demoNow();lastTick=-1;let lastVisual=0;
   if(kind==='meeting'){state.occupied=true;state.temp=27.4;simulation.selectRoom(meetingId);simulation.setRoom(meetingId,{light:true,climate:true});}
   if(kind==='pond'){state.pondAlert=!state.pondAlert;state.water=state.pondAlert?58:82;state.scenario=null;render();return;}
   if(kind==='energy')state.solar=state.solar<5?8.4:3.1;
@@ -151,7 +151,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   insights?.hold({meeting:['temp','occupied'],pond:['pondAlert','water'],energy:['solar']}[kind]||[]);
   if(kind==='access'){state.accessStep=1;state.barrierAngle=0;gatePulsed=false;accessAt=formatTime(world.minute());}
   render();
-  function tick(time){if(disposed||document.hidden)return;const elapsed=(time-scenarioStart)/1000,limit=kind==='meeting'?12:kind==='access'?10:5;
+  function tick(time){if(disposed||document.hidden)return;const elapsed=(demoNow()-scenarioStart)/1000,limit=kind==='meeting'?12:kind==='access'?10:5;
    if(kind==='meeting')state.temp=27.4-Math.min(1,elapsed/12)*2.6;
    if(kind==='access'){state.accessStep=elapsed<1.5?1:elapsed<3?2:elapsed<8?3:4;state.barrierAngle=elapsed<3?0:elapsed<5?(elapsed-3)/2*Math.PI/2:elapsed<7?Math.PI/2:elapsed<9?(9-elapsed)/2*Math.PI/2:0;}
    if(kind==='access'&&reduced.matches)state.barrierAngle=elapsed>=3&&elapsed<8?Math.PI/2:0;
@@ -165,19 +165,20 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  async function startTour(){
   stopFollowing();
   if(touring){stopTour();cancelFlight();stopScenario();render();return;}
+  world.setPaused(false); // the tour needs time to pass
   const generation=++tourGeneration;touring=true;play.innerHTML=icon('pause')+`<span>${playLabel()}</span>`;
   let step=0;async function next(){if(!touring||disposed||generation!==tourGeneration)return;const id=order[step];const at=step+1;setProgress(()=>L(`กำลังพาชม ${at} / ${order.length} · ${destinations[id].panel}`,`Touring ${at} / ${order.length} · ${destinations[id].panel}`));const arrived=await select(id,{guided:true});if(!arrived||!touring||generation!==tourGeneration)return;
-   const advance=()=>{if(generation!==tourGeneration)return;if(step<order.length)void next();else{stopTour(['พาชมครบแล้ว · เลือกสำรวจต่อได้ทุกจุด','Tour complete · explore any spot you like']);stopScenario();render();if(kiosk)tourTimer=setTimeout(()=>{if(kiosk&&!touring)startFollowing();},2500);}};
+   const advance=()=>{if(generation!==tourGeneration)return;if(step<order.length)void next();else{stopTour(['พาชมครบแล้ว · เลือกสำรวจต่อได้ทุกจุด','Tour complete · explore any spot you like']);stopScenario();render();if(kiosk)tourTimer=later(()=>{if(kiosk&&!touring)startFollowing();},2500);}};
    // The car park stop plays the whole parking story, then the tour carries on.
-   if(id==='parking'&&parking){await parking.playStory({auto:true});if(!touring||generation!==tourGeneration)return;step++;tourTimer=setTimeout(advance,1200);return;}
-   if(id!=='overview')scenario(id);step++;tourTimer=setTimeout(advance,(id==='meeting'?14000:11000)/SPEED);}void next();
+   if(id==='parking'&&parking){await parking.playStory({auto:true});if(!touring||generation!==tourGeneration)return;step++;tourTimer=later(advance,1200);return;}
+   if(id!=='overview')scenario(id);step++;tourTimer=later(advance,id==='meeting'?14000:11000);}void next();
  }
  // "Follow the day": the camera goes to what the day is doing (its moments, dayEvents) and stays at the stop that fits
  // the hour until the next one. The kiosk does this when left alone. The car park's morning moment plays the guided
  // story, once a day: it holds the clock at real speed and sets its own times (09:02 … 11:30).
  let following=false,followed=null,day=0,storyDay=-1;
  const PLAN=[[0,'overview'],...dayEvents.map(e=>[e.minute,e.destination])];
- function startFollowing(){if(disposed)return;stopTour(['กำลังตามวันในอาคาร','Following the day in the building']);following=true;followed=null;insights?.paint();follow();}
+ function startFollowing(){if(disposed)return;stopTour(['กำลังตามวันในอาคาร','Following the day in the building']);world.setPaused(false);following=true;followed=null;insights?.paint();follow();}
  function stopFollowing(message=null){if(!following)return;following=false;followed=null;if(parking?.story.running)parking.stopStory();if(message)setProgress(message);insights?.paint();}
  function follow(){
   if(!following||disposed||traveling||parking?.story.running)return;
@@ -209,9 +210,9 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  // Showcase loop for an unattended screen: it follows the day; any touch hands control to the visitor,
  // and it comes back after a quiet minute.
  const kioskToggle=$('#kiosk-toggle');let kiosk=false,idleTimer=0;const IDLE_MS=60000/SPEED;
- // Left alone, the kiosk follows the day. A parking story playing on auto-advance is left to finish; one waiting for
+ // Left alone, the kiosk follows the day (a paused screen stays paused). A parking story playing on auto-advance is left to finish; one waiting for
  // Next or paused is abandoned like any idle screen.
- function armIdle(){clearTimeout(idleTimer);if(kiosk)idleTimer=setTimeout(()=>{const s=parking?.story,playing=s?.running&&s.auto&&!s.paused;if(kiosk&&!touring&&!following&&!playing){s?.stop();startFollowing();}else armIdle();},IDLE_MS);}
+ function armIdle(){clearTimeout(idleTimer);if(kiosk)idleTimer=setTimeout(()=>{const s=parking?.story,playing=s?.running&&s.auto&&!s.paused;if(kiosk&&!touring&&!following&&!playing&&!isPaused()){s?.stop();startFollowing();}else armIdle();},IDLE_MS);}
  function setKiosk(on){kiosk=on;kioskToggle.checked=on;document.body.classList.toggle('kiosk-on',on);if(on){if(!touring&&!following)startFollowing();}else{clearTimeout(idleTimer);if(touring)stopTour();stopFollowing();}}
  listen(kioskToggle,'change',()=>setKiosk(kioskToggle.checked));
  for(const type of ['pointerdown','keydown','wheel'])listen(document,type,event=>{if(!kiosk||event.target.closest?.('.kiosk-toggle'))return;if(touring||following){stopFollowing();stopTour(['หยุดโหมดจัดแสดงชั่วคราว · ทดลองได้เลย','Paused the showcase loop · explore freely']);cancelFlight();}armIdle();},{capture:true});

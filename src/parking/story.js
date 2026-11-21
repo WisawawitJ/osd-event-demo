@@ -2,7 +2,7 @@
 // Auto mode advances by itself; guided mode waits for Next or for the presenter to click the cued button.
 import {t, bkk} from './i18n.js';
 import {STORY} from './sim.js';
-import {SPEED} from './clock.js';
+import {SPEED, demoNow, isPaused} from './clock.js';
 
 const ABORT = Symbol('story-abort');
 const at = (h, m) => bkk(2026, 11, 24, h, m);
@@ -15,10 +15,10 @@ export function createStory(ctx) {
   function api(my) {
     const alive = () => { if (my !== token) throw ABORT; };
     const wait = ms => new Promise((resolve, reject) => {
-      let left = ms, last = performance.now();
+      let left = ms, last = demoNow();
       const tick = () => {
         if (my !== token) return reject(ABORT);
-        const now = performance.now();
+        const now = demoNow();
         if (!paused) left -= (now - last) * SPEED;
         last = now;
         if (left <= 0) resolve(); else setTimeout(tick, 50);
@@ -26,8 +26,8 @@ export function createStory(ctx) {
       tick();
     });
     const until = (cond, timeout = 60000) => new Promise((resolve, reject) => {
-      const start = performance.now();
-      const tick = () => { if (my !== token) return reject(ABORT); if (cond() || performance.now() - start > timeout) resolve(); else setTimeout(tick, 80); };
+      const start = demoNow();
+      const tick = () => { if (my !== token) return reject(ABORT); if (cond() || (!isPaused() && demoNow() - start > timeout)) resolve(); else setTimeout(tick, 80); };
       tick();
     });
     // A step the presenter can do by hand. In auto mode it is done for them after a pause.

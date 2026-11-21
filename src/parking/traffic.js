@@ -2,7 +2,7 @@
 // so turns look like real cornering. Heading h means forward = (sin h, cos h) in (x, z).
 import {createCar} from './cars.js';
 import {DRIVE, GATE, STREET, groundY} from './layout.js';
-import {SPEED} from './clock.js';
+import {SPEED, demoNow, isPaused} from './clock.js';
 
 const EAST = Math.PI / 2, WEST = -Math.PI / 2, NORTH = Math.PI, SOUTH = 0;
 const LANE_IN = 17.6, LANE_OUT = 14.8; // driveway halves: westbound (in) / eastbound (out)
@@ -113,7 +113,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
       check();
     });
   }
-  const wait = (ms, gen) => { const end = performance.now() + ms / SPEED; return waitFor(() => performance.now() >= end, gen); };
+  const wait = (ms, gen) => { const end = demoNow() + ms / SPEED; return waitFor(() => demoNow() >= end, gen); };
 
   function makeAgent({plate, province, type, color}) {
     const car = createCar({plate, province, color});
@@ -320,7 +320,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
 
   // Cosmetic through-traffic on the street.
   function passBy(preferDir = Math.random() < .5 ? 1 : -1) {
-    const now = performance.now();
+    const now = demoNow();
     // Spacing is in demo time, so ?speed keeps the same traffic density the visitors see.
     const ok = dir => now - lastSpawn[dir] > 4200 / SPEED && (dir < 0 || (!streetArrivals && !exitingStreet && !eastHold && eastClear(-99, -84)));
     const dir = ok(preferDir) ? preferDir : ok(-preferDir) ? -preferDir : 0;
@@ -338,6 +338,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   function kick() { if (!frame) { last = performance.now(); frame = requestAnimationFrame(tick); } }
   function tick(time) {
     frame = 0;
+    // Paused: nothing moves; the loop keeps watching so cars carry on from where they stood.
+    if (isPaused()) { last = time; frame = requestAnimationFrame(tick); return; }
     // Cars move in real time whatever the frame rate: a slow frame (a heavy zoomed-out view) is
     // stepped in 50 ms slices. Only a stall longer than half a second (tab switch, debugger) is dropped.
     const elapsed = Math.min(.5, Math.max(0, (time - last) / 1000)) * SPEED; last = time;

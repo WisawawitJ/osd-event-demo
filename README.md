@@ -25,7 +25,7 @@ Useful URLs:
 | `/?dest=parking` | Opens straight on the car park, for free play |
 | `/?dest=parking&story=1` | Opens on the car park and plays the parking story with auto-advance |
 | `/?dest=parking&story=1&auto=0` | Same, but the presenter advances each step with **Next** |
-| `/?day=10` | Real minutes one simulated day takes (default 10); `?day=0` runs the clock at real speed (tests use this) |
+| `/?day=10` | Real minutes one simulated day takes (default 20); `?day=0` runs the clock at real speed (tests use this) |
 | `/?time=17:00` | Where the world clock starts (default 09:00), e.g. to rehearse the evening rush or the night |
 | `/?speed=3` | Runs the demo's timing 3× faster (max 30), for rehearsals and tests |
 | `/?fps=1` | Adds a frames-per-second counter, to check the event laptop (any page; combine with the others) |
@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (57), about 55 s
+npm test                 # all behaviour checks (58), about 55 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -53,8 +53,10 @@ check sets `day` itself, as the day-cycle checks do. Screenshots of failed check
 ## One day, always running
 
 Everything runs on one world clock (`src/parking/clock.js`) on the event date, 24 Nov 2026: a whole day takes about
-10 real minutes (the night, 21:00–05:00, a little faster) and then starts again, so visitors see the building through
-morning, noon, dusk and night.
+20 real minutes (the night, 21:00–05:00, a little faster) and then starts again, so visitors see the building through
+morning, noon, dusk and night. On the timeline, **Pause** freezes everything (clock, cars and barrier, the story, the tour,
+scenarios and the idle orbit; the camera can still be moved) until **Resume**, Follow the day, Start tour or the story's
+Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 
 - **Sky:** the sun crosses the building, low and warm in the early morning and late afternoon; at night a dim moonlight
   carries on along the same path, so shadows turn smoothly all day and never jump (not at dusk, dawn or midnight). Room lights, car-park lamps

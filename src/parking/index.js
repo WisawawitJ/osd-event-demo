@@ -3,7 +3,7 @@ import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {t, onLang, getLang, setLang, bkk} from './i18n.js';
 import {icon, esc} from './dom.js';
 import {createParkingSim} from './sim.js';
-import {SPEED, later, sleep, world} from './clock.js';
+import {SPEED, later, cancelLater, sleep, world, demoNow} from './clock.js';
 import {createLot} from './lot3d.js';
 import {createTraffic} from './traffic.js';
 import {createPanel} from './panel.js';
@@ -97,7 +97,7 @@ function startLotLife({sim, traffic, lot, staffOnly = false, paused = () => fals
   // A jump in time: the car park is as it would be by then (the log spread over the skipped hours).
   const off = world.subscribe((kind, p) => { if (kind === 'jump' && !paused()) { catchUp(onScreen() && watched() ? 3 : 0, p.from, p.to); last = world.now(); } });
   timer = later(tick, 1500);
-  return () => { clearTimeout(timer); off(); };
+  return () => { cancelLater(timer); off(); };
 }
 
 export function createParking({scene, schedule, renderer, afterRender, capture, fly}) {
@@ -282,6 +282,8 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
     const b = e.target.closest('[data-bar]');
     if (!b || b.dataset.bar === 'auto') return;
     const what = b.dataset.bar;
+    // Playing or moving the story on needs time to pass: it resumes a paused demo.
+    if (['play', 'restart', 'resume', 'next'].includes(what)) world.setPaused(false);
     if (what === 'play') { onInteract(); story.play({auto: story.auto}); }
     if (what === 'pause') story.pause();
     if (what === 'resume') story.resume();
@@ -320,7 +322,7 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
     arrive: () => actions.simulate('registered', {quiet: true}), leave: () => actions.simulate('exit', {quiet: true}),
     unknown: () => { if (active) actions.simulate('unknown', {quiet: true}); }});
   function schedulePass() {
-    clearTimeout(passTimer);
+    cancelLater(passTimer);
     // Through-traffic runs whenever the street is on screen (overview and car park), not only in the parking stop.
     passTimer = later(() => { if (lot.root.visible && document.visibilityState === 'visible') traffic.passBy(); schedulePass(); }, 1800 + Math.random() * 3200);
   }
@@ -329,7 +331,7 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
   // are turned away after 8 s (demo time); ones a presenter sends wait 45 s for an answer.
   const autoDeny = setInterval(() => {
     if (story.running) return;
-    for (const a of sim.state.alerts) if (a.status === 'open' && (performance.now() - a.raised) * SPEED > (a.ambient ? 8000 : 45000)) sim.resolveAlert(a.id, 'deny', undefined, 'staff.guard');
+    for (const a of sim.state.alerts) if (a.status === 'open' && (demoNow() - a.raised) * SPEED > (a.ambient ? 8000 : 45000)) sim.resolveAlert(a.id, 'deny', undefined, 'staff.guard');
   }, 250);
 
   onLang(() => { panel.render(); phone.render(); overlays.refresh(); story.refreshCaption(); renderBar(); });
@@ -355,12 +357,12 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
     },
     get active() { return active; },
     // Runs the story once (the showcase loop calls this) and resolves when it ends or stops.
-    playStory({auto = true} = {}) { story.setAuto(auto); return story.play({auto}); },
+    playStory({auto = true} = {}) { world.setPaused(false); story.setAuto(auto); return story.play({auto}); },
     stopStory() { story.stop(); },
     setNight(night) { lot.setNight(night); },
     toggleLang() { setLang(getLang() === 'en' ? 'th' : 'en'); },
     setInteractHandler(fn) { interactHandler = fn; },
-    dispose() { afterRender?.delete(drawLiveFeed); story.stop(); stopLife(); clearTimeout(passTimer); clearInterval(autoDeny); lot.dispose(); disposeCars(); },
+    dispose() { afterRender?.delete(drawLiveFeed); story.stop(); stopLife(); cancelLater(passTimer); clearInterval(autoDeny); lot.dispose(); disposeCars(); },
   };
 }
 
@@ -381,6 +383,6 @@ export function createParkingScene({scene, schedule}) {
   return {
     lot, sim, traffic,
     setNight(night) { lot.setNight(night); },
-    dispose() { stopLife(); for (const id of Object.values(timers)) clearTimeout(id); lot.dispose(); disposeCars(); },
+    dispose() { stopLife(); for (const handle of Object.values(timers)) cancelLater(handle); lot.dispose(); disposeCars(); },
   };
 }

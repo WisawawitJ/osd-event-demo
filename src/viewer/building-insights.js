@@ -7,6 +7,8 @@ const legends={none:()=>'',temperature:()=>L('<i class="legend-cool"></i>ต่�
 // A reading changed by hand (a scenario, or the pond switch) keeps its value for this long in world time, then the
 // building's schedule takes it back.
 const HOLD_MINUTES=60;
+// Real minutes a simulated day can take; the timeline's button steps through them.
+const DAY_LENGTHS=[10,20,40,60];
 // The building follows the world clock (src/parking/clock.js) through its daily schedule (building-day.js):
 // - readings (temperature, solar, water …) follow it continuously, except ones changed by hand for a while;
 // - rooms' lights, AC and doors change when the schedule changes them, so a switch flipped by hand stays until then.
@@ -25,7 +27,9 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
   $('#replay-time').textContent=formatTime(minute);
   if(!dragging)range.value=String(Math.floor(minute));
   range.setAttribute('aria-valuetext',L(`${formatTime(minute)} นาฬิกา · เวลาจำลอง`,`${formatTime(minute)} · simulated time`));
-  $('#replay-mode').textContent=following()?L('ตามวันในอาคาร · จำลอง','Following the day · simulated'):world.held?L('เวลาจริง · เรื่องราวกำลังเล่น','Real time · story playing'):L('เวลาจำลอง · เดินตลอด','Simulated time · always running');
+  $('#replay-mode').textContent=world.held?L('เวลาจริง · เรื่องราวกำลังเล่น','Real time · story playing'):world.paused?L('หยุดชั่วคราว · ทุกอย่างหยุดนิ่ง','Paused · everything stands still'):following()?L('ตามวันในอาคาร · จำลอง','Following the day · simulated'):L('เวลาจำลอง · เดินตลอด','Simulated time · always running');
+  $('#day-pause').textContent=world.paused?L('เล่นต่อ','Resume'):L('หยุดชั่วคราว','Pause');$('#day-pause').setAttribute('aria-pressed',String(world.paused));
+  $('#day-speed').textContent=world.dayLength?L(`${world.dayLength} นาที/วัน`,`${world.dayLength} min/day`):L('เวลาจริง','Real time');
   $('#day-play').textContent=following()?L('หยุดตามวัน','Stop following'):L('ตามวันในอาคาร','Follow the day');$('#day-play').setAttribute('aria-pressed',String(following()));
   document.querySelectorAll('[data-layer]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.layer===layer)));
   $('#layer-legend').innerHTML=legends[layer]();$('#layer-legend').hidden=layer==='none';
@@ -84,11 +88,13 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
  listen(range,'input',()=>{dragging=true;paint();});
  listen(range,'change',()=>{dragging=false;stopActivity();jumpTo(Number(range.value));});
  listen($('#day-play'),'click',()=>onFollow(!following()));
+ listen($('#day-pause'),'click',()=>{world.setPaused(!world.paused);paint();});
+ listen($('#day-speed'),'click',()=>{const next=DAY_LENGTHS.find(n=>n>world.dayLength)??DAY_LENGTHS[0];world.setDayLength(next);paint();});
  listen(events,'click',e=>{const button=e.target.closest('[data-day-event]');if(button)void visit(dayEvents[Number(button.dataset.dayEvent)]);});
  listen(incidentList,'click',e=>{const b=e.target.closest('[data-incident]');if(!b)return;stopActivity();setLayer(b.dataset.insightLayer);void navigate(b.dataset.target);});
  document.querySelectorAll('[data-layer]').forEach(b=>{b.disabled=false;listen(b,'click',()=>{stopActivity();setLayer(b.dataset.layer);});});
- for(const selector of ['#day-play','#day-time'])$(selector).disabled=false;
- const offClock=world.subscribe(kind=>{if(kind==='tick')sync();else if(kind==='jump'||kind==='set')sync({all:true});});
+ for(const selector of ['#day-play','#day-pause','#day-speed','#day-time'])$(selector).disabled=false;
+ const offClock=world.subscribe(kind=>{if(kind==='tick')sync();else if(kind==='jump'||kind==='set')sync({all:true});else if(kind==='rate')paint();});
  sync({all:true});
  return {update,sync,hold,jumpTo,relabel,paint,
   history:key=>dayHistory(world.minute(),simulation.rooms,key),
