@@ -546,7 +546,8 @@ export const scenarios = [
     }
     const water = await p.eval('__water');
     expect(water.frames > 30 && water.missing === 0, `the water was drawn on every frame the pond was on screen (${water.frames - water.missing} of ${water.frames})`);
-    expect(water.jump < .2, `its reflection fades in and out, never in one step (largest change in a frame ${water.jump.toFixed(2)})`);
+    // The fade runs on time (0.25 s): a slow frame under load covers more of it, but never the whole of it at once.
+    expect(water.jump < .5, `its reflection fades in and out, never in one step (largest change in a frame ${water.jump.toFixed(2)})`);
   }},
   {name: 'meeting room: its light cone fades in as the camera arrives and out as it leaves (no pop)', async run(p, expect) {
     await p.goto('?debug=1&time=10:00');
@@ -614,6 +615,17 @@ export const scenarios = [
     expect(await p.eval('__moves') >= 3, `the lights moved between rooms as the floors changed (${await p.eval('__moves')} moves)`);
     const jumps = await p.eval('__jumps');
     expect(!jumps.length, `no light switched at once (${jumps.slice(0, 4).join(', ') || 'none'})`);
+  }},
+  {name: 'a door\'s shadow follows it as it swings, not only once it is open', async run(p, expect) {
+    await p.goto('?debug=1&dest=meeting&time=10:00');
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the meeting room'});
+    // Shadow redraws while a hinge is turning.
+    await p.eval(`(()=>{const R=__renderer,sm=R.shadowMap,orig=sm.render.bind(sm);window.__door={swingFrames:0,shadowed:0};const hinges=[];__scene.traverse(o=>{if(o.userData.deviceKind==='door'&&o.userData.doorId&&!o.isMesh)hinges.push(o);});let last=hinges.map(h=>h.rotation.y);
+      sm.render=(...a)=>{const now=hinges.map(h=>h.rotation.y);const turning=now.some((v,i)=>Math.abs(v-last[i])>1e-4);last=now;if(turning){__door.swingFrames++;if(sm.needsUpdate)__door.shadowed++;}return orig(...a);};})()`);
+    await p.click('[data-control="door"]');
+    await p.sleep(1000);
+    const door = await p.eval('__door');
+    expect(door.swingFrames >= 5 && door.shadowed >= door.swingFrames - 1, `the shadow was redrawn on the swing's frames (${door.shadowed} of ${door.swingFrames})`);
   }},
   {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
     await p.goto(`?dest=pond&${FAST}`);

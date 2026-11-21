@@ -220,7 +220,8 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     light.target.position.set(position[0], .05, position[2]);
     light.userData.roomId = room.id;
   }
-  // Doors swing to their new angle over ~0.6 s (eased) instead of snapping; shadows follow when they settle.
+  // Doors swing to their new angle over ~0.6 s (eased) instead of snapping, their shadows redrawn on every frame of the
+  // swing (redrawn only once settled, the closed door's shadow stayed until the door was fully open, then jumped).
   const swinging = new Map();
   let swingFrame = 0;
   function swingDoor(hinge, angle) {
@@ -237,7 +238,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       if (t === 1) swinging.delete(hinge);
     }
     if (swinging.size) swingFrame = requestAnimationFrame(swingStep);
-    else renderer.shadowMap.needsUpdate = true;
+    renderer.shadowMap.needsUpdate = true;
     schedule();
   }
   function updateModel() {
