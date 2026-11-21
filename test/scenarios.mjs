@@ -448,7 +448,7 @@ export const scenarios = [
   }},
   {name: 'no shader is built mid-flight, by day or night: the loading screen prepared them all', async run(p, expect) {
     // A shader built on the spot froze the view mid-flight: 30 ms for the first cut copies of the building's materials,
-    // 0.1–0.2 s at night when hiding the car park (its headlight beams) or a floor (its room lights) changed the
+    // 0.1–0.2 s at night when hiding a floor (its room lights) changed the
     // number of lights.
     for (const time of ['10:00', '20:30']) {
       await p.goto(`?debug=1&time=${time}`);
@@ -639,28 +639,28 @@ export const scenarios = [
     await p.sleep(1100);
     expect(await p.eval('__fades') === 0, `no element fades its own colours during the switch (${await p.eval('__fades')} at most)`);
   }},
-  {name: 'night: cars on the move light the road ahead; parked cars are dark', async run(p, expect) {
+  {name: 'night: every car on the move lights the road from its bumper; parked cars are dark', async run(p, expect) {
     await p.goto(parking('&time=20:00'));
     await p.until(`${ready} && document.documentElement.dataset.night === 'true'`, {timeout: 40000});
-    const lamps = c => `(c=>c.children[2].material.color.r)(${c})`;
-    const beams = `__scene.getObjectsByProperty('isSpotLight',true).filter(s=>s.name.startsWith('Demo_headlight'))`;
+    const lamps = c => `(c=>c.children[2].material.color.r)(${c})`, pool = c => `${c}.getObjectByName('Demo_car_headlights')`;
     await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');window.__out=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__parking.sim.state.presence.get(k).plate);window.__still=__parking.lot.root.children.find(c=>c.name.startsWith('Demo_car_')&&c!==__out&&c.visible&&__parking.traffic.parkedKeys().some(k=>'Demo_car_'+__parking.sim.state.presence.get(k).plate===c.name));void __parking.traffic.leave(k)})()`);
-    // Two beams, one from each lamp at the car's front corners, aimed to meet ahead of it.
-    // Measured in the same moment the pair is found (the beams move on to cars nearer the gate as this one drives off).
-    await p.until(`(()=>{const b=${beams}.filter(s=>s.intensity>0&&s.position.distanceTo(__out.position)<3);if(b.length!==2)return false;window.__pair={apart:b[0].position.distanceTo(b[1].position),aimsApart:b[0].target.position.distanceTo(b[1].target.position)};return true})()`, {timeout: 10000, what: 'two headlight beams on the car pulling out'});
-    const pair = await p.eval('__pair');
-    expect(pair.apart > 1 && pair.aimsApart < pair.apart, `beams start at the two lamps (${pair.apart.toFixed(2)} m apart) and converge ahead (${pair.aimsApart.toFixed(2)} m apart)`);
+    await p.until(`${pool('__out')}.visible`, {timeout: 10000, what: 'the leaving car lights the road'});
     expect(await p.eval(lamps('__out')) === 1, 'the leaving car has its lamps on');
-    expect(await p.eval(lamps('__still')) < .5, 'a parked car is dark');
-    expect(await p.eval(`${beams}.length === 6 && ${beams}.every(s=>s.visible&&!s.castShadow)`), 'six shadowless beams (three cars, two lamps each) in the scene at night');
-    // Daytime: no beams in the scene, every car drawn as is.
+    expect(await p.eval(`!${pool('__still')}.visible`) && await p.eval(lamps('__still')) < .5, 'a parked car is dark, with no light on the road');
+    // The light starts at the bumper (the lamps), not metres ahead of it, and is part of the car (it moves with it).
+    const start = await p.eval(`(()=>{const g=${pool('__out')}.geometry;g.computeBoundingBox();return g.boundingBox.min.z})()`);
+    expect(start > 1.9 && start < 2.4, `the light starts at the front bumper (${start.toFixed(2)} m from the car's centre; the car is 4.4 m long)`);
+    // Every car on the move has its light: none of them waits for a free light, as the three spot lights made them do.
+    await p.until(`(()=>{const moving=__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car_')&&c.visible&&c.children[2].material.color.r===1);return moving.length>=2&&moving.every(c=>c.getObjectByName('Demo_car_headlights').visible)})()`, {timeout: 20000, what: 'two or more cars on the move, all with their light'});
+    expect(!(await p.eval(`__scene.getObjectsByProperty('isSpotLight',true).some(s=>s.name.startsWith('Demo_headlight'))`)), 'no spot lights for headlights (the light is painted, so it costs the scene nothing)');
+    // Daytime: no light on the road, every car drawn as is.
     await p.eval('__world.jumpTo(9*60)');
     await p.until(`document.documentElement.dataset.night === 'false'`, {timeout: 5000, what: 'day'});
-    expect(await p.eval(`${beams}.every(s=>!s.visible)`), 'no beams in the daytime');
+    expect(await p.eval(`__parking.lot.root.children.every(c=>!c.getObjectByName('Demo_car_headlights')?.visible)`), 'no headlight light in the daytime');
     expect(await p.eval(lamps('__still')) === 1, 'parked car drawn as is in the daytime');
   }},
   {name: 'night: the first dusk does not freeze the view (night shaders ready from the start)', async run(p, expect) {
-    // Real speed. The night's lights (rooms, headlight beams) change the shaders; the warm-up prepares them, so the
+    // Real speed. The night's lights (the rooms') change the shaders; the warm-up prepares them, so the
     // first switch draws like any frame. Before, it stalled ~1.8 s compiling and linking.
     await p.goto('?debug=1&time=17:00&dest=parking');
     await p.until(`${ready} && document.documentElement.dataset.warm==='done' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 40000});

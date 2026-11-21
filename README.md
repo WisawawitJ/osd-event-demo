@@ -74,9 +74,9 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 - **Koi** swim slow loops in the pond, each sized to keep the fish in the water, waving their tails. The motion is in
   the vertex shader (no per-fish CPU work); the pond redraws at 15 fps only while it is in view, and not when paused.
 - **Headlights:** at night cars with the engine on (driving, queuing, at the barrier) have their lamps lit, and the
-  three nearest the gate light the road with real spot lights, one from each lamp, starting at the bumper and meeting
-  ahead of the car (also in the plate camera's picture; a fixed pool of six without shadows, only at night);
-  parked cars and their plates are dark. The start-up warm-up prepares the night's shaders too, so the first dusk
+  light on the road ahead: two soft lobes, one from each lamp, starting at the bumper and meeting ahead of the car
+  (also in the plate camera's picture). The light is painted on the road, not a real light, so every car on the move
+  has it at no cost to the rest of the scene; parked cars and their plates are dark. The start-up warm-up prepares the night's shaders too, so the first dusk
   does not freeze the view.
 - **Sky:** the sun crosses the building, low and warm in the early morning and late afternoon; at night a dim moonlight
   carries on along the same path, so shadows turn smoothly all day and never jump (not at dusk, dawn or midnight). Room lights, car-park lamps
@@ -167,8 +167,8 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
   out and back in around a flight.
 - The loading screen (about 2 s) prepares every shader a visit can need: each material as it is, its cut copies, by
   day and by night, and the plate snapshot's colour pass. Textures are uploaded and one tiny frame is drawn. At night
-  the number of lights never changes with the view (all 6 room lights and 6 headlight beams stay in the scene, unused
-  ones dark), since a new light count rebuilt every shader. The meeting-room cutaway moves a permanent clipping plane
+  the number of lights never changes with the view (all 6 room lights stay in the scene, unused ones dark), since a
+  new light count rebuilt every shader. The meeting-room cutaway moves a permanent clipping plane
   instead of swapping shaders.
 - The live plate-camera pop-up is one extra render into a scissored corner of the same canvas, only while it shows.
 - The view redraws only when something on screen changes: moving cars redraw it only while the car park is shown.

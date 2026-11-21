@@ -632,11 +632,11 @@ try {
         let forcing=0;const forced=fn=>{forcing++;try{return fn();}finally{forcing--;}};
         scene.traverse(object=>{if(object.visible||object.isLight)return;const state={wanted:false,forced:true};hidden.push([object,state]);
          Object.defineProperty(object,'visible',{configurable:true,enumerable:true,get:()=>forcing?state.forced:state.wanted,set:value=>{if(forcing)state.forced=value;else state.wanted=value;}});});
-        // The night's lights (the rooms' spot lights and the headlight beams) change the number of lights, so the
+        // The night's lights (the rooms' spot lights) change the number of lights, so the
         // shaders for the other half of the day are compiled here too: the first dusk (or dawn) then does not freeze
         // the view for a second and a half. They keep their current state, and swap only for the last compile.
         const nightLights=[];
-        scene.traverse(object=>{if(!object.isSpotLight||!/^(Simulation_spot_|Demo_headlight_beam_)/.test(object.name))return;const state={wanted:object.visible,forced:object.visible};nightLights.push([object,state]);
+        scene.traverse(object=>{if(!object.isSpotLight||!/^Simulation_spot_/.test(object.name))return;const state={wanted:object.visible,forced:object.visible};nightLights.push([object,state]);
          Object.defineProperty(object,'visible',{configurable:true,enumerable:true,get:()=>forcing?state.forced:state.wanted,set:value=>{if(forcing)state.forced=value;else state.wanted=value;}});});
         const target=new THREE.WebGLRenderTarget(16,16);
         const drawPixel=()=>forced(()=>{renderer.shadowMap.needsUpdate=true;renderer.setScissorTest(true);renderer.setScissor(0,0,1,1);try{renderer.render(scene,camera);}finally{renderer.setScissorTest(false);}});

@@ -1,6 +1,7 @@
-// Low-poly cars, four draw calls each and no per-car geometry:
+// Low-poly cars, four draw calls each (five with headlights on) and no per-car geometry:
 //   body (body + roof, one material per paint colour), details (glass + wheels, vertex colours),
-//   decals (both plates and the four lamps, unlit, one small texture per plate) and a soft blob shadow.
+//   decals (both plates and the four lamps, unlit, one small texture per plate), a soft blob shadow, and at night the
+//   headlights' light on the road (see headlightPool).
 // A car faces local +Z and sits on y = 0.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -61,7 +62,7 @@ function sharedParts() {
   const blobTexture = new THREE.CanvasTexture(blobCanvas);
   const blob = new THREE.PlaneGeometry(2.5, 5.1).rotateX(-Math.PI / 2);
   shared = {
-    body, details, decals, blob,
+    body, details, decals, blob, ...headlightPool(),
     bodyMaterials: CAR_COLORS.map(color => new THREE.MeshStandardMaterial({color, roughness: .32, metalness: .45})),
     detailMaterial: new THREE.MeshStandardMaterial({vertexColors: true, roughness: .3, metalness: .5}),
     // The soft shadow sits on the road; the depth offset stops it flickering against the asphalt and paint.
@@ -93,6 +94,35 @@ function plateTexture(plate, province) {
   return material;
 }
 
+// Headlights: the light they throw on the road ahead, painted rather than lit. Two lobes, one from each lamp, start at
+// the bumper (brightest there, so the light visibly comes from the lamps), widen, lean inwards and overlap ahead, then
+// fade out about 8 m on. One soft texture on a flat quad under every car with its engine running, added onto the road
+// (and seen by the plate cameras). Real spot lights cost every lit pixel of the scene, so only three cars had them,
+// and their pools began metres ahead of the bumper.
+const POOL = {width: 3.6, length: 8.5, start: 2.05, lampX: .6};
+function headlightPool() {
+  const W = 96, H = 224, canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const c = canvas.getContext('2d'), image = c.createImageData(W, H), smooth = t => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
+  for (let row = 0; row < H; row++) {
+    const d = (row + .5) / H * POOL.length; // metres ahead of the bumper (the canvas's top row is the bumper)
+    const spread = .16 + d * .17, reach = (.7 + .3 * smooth(d / .8)) / (1 + (d / 3.6) ** 2) * (1 - smooth((d - (POOL.length - 2.2)) / 2.2));
+    for (let col = 0; col < W; col++) {
+      const x = ((col + .5) / W - .5) * POOL.width;
+      let v = 0;
+      for (const side of [-1, 1]) { const axis = side * POOL.lampX * (1 - .4 * Math.min(1, d / POOL.length)); v += Math.exp(-(((x - axis) / spread) ** 2)); }
+      const a = Math.min(1, v * reach), i = (row * W + col) * 4;
+      image.data[i] = image.data[i + 1] = image.data[i + 2] = 255; image.data[i + 3] = Math.round(a * 255);
+    }
+  }
+  c.putImageData(image, 0, 0);
+  const poolTexture = new THREE.CanvasTexture(canvas);
+  // Flat on the road; the texture's top edge at the bumper.
+  const pool = new THREE.PlaneGeometry(POOL.width, POOL.length).rotateX(-Math.PI / 2).translate(0, .035, POOL.start + POOL.length / 2);
+  const poolMaterial = new THREE.MeshBasicMaterial({map: poolTexture, color: 0xffe2ad, transparent: true, opacity: .62, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -16});
+  return {pool, poolMaterial, poolTexture};
+}
+
 export function createCar({plate, province, color = 0}) {
   const p = sharedParts();
   const car = new THREE.Group();
@@ -105,6 +135,8 @@ export function createCar({plate, province, color = 0}) {
   add(p.decals, plateTexture(plate, province)).receiveShadow = false;
   const blob = add(p.blob, p.blobMaterial);
   blob.position.y = .025; blob.updateMatrix(); blob.renderOrder = -1; blob.receiveShadow = false;
+  const pool = add(p.pool, p.poolMaterial);
+  pool.receiveShadow = false; pool.visible = false; pool.name = 'Demo_car_headlights';
   car.userData = {plate, province};
   return car;
 }
@@ -113,15 +145,16 @@ export function createCar({plate, province, color = 0}) {
 // dim, as unlit paint would be. In daytime both look as drawn. Each car's plate material is its own (one per plate;
 // through-traffic shares one, and it is always on the move).
 export function setCarLamps(car, on, night) {
-  const decals = car.children[2];
+  const decals = car.children[2], pool = car.children[4];
   if (decals) decals.material.color.setScalar(!night || on ? 1 : .3);
+  if (pool) pool.visible = night && on;
 }
 
 export function disposeCars() {
   if (!shared) return;
-  for (const k of ['body', 'details', 'decals', 'blob']) shared[k].dispose();
+  for (const k of ['body', 'details', 'decals', 'blob', 'pool']) shared[k].dispose();
   for (const m of shared.bodyMaterials) m.dispose();
-  for (const k of ['detailMaterial', 'blobMaterial', 'blobTexture']) shared[k].dispose();
+  for (const k of ['detailMaterial', 'blobMaterial', 'blobTexture', 'poolMaterial', 'poolTexture']) shared[k].dispose();
   for (const m of plateCache.values()) { m.map.dispose(); m.dispose(); }
   plateCache.clear();
   shared = null;

@@ -1,6 +1,5 @@
 // Car movement and the gate sequence. Routes are built from straight lines and arcs ("turtle" style),
 // so turns look like real cornering. Heading h means forward = (sin h, cos h) in (x, z).
-import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {createCar, setCarLamps} from './cars.js';
 import {DRIVE, GATE, STREET, groundY} from './layout.js';
 import {SPEED, demoNow, isPaused} from './clock.js';
@@ -126,40 +125,15 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   const removeAgent = agent => { agent.car.removeFromParent(); live.delete(agent); };
 
   // Headlights. At night every car with its engine running (on the move, queuing or waiting at the barrier) has its
-  // lamps on, and the LIT_CARS of them nearest the gate also light the road: one spot light from each of the two
-  // lamps, aimed low and a little inwards so the pools start at the bumper (inside the plate camera's view) and
-  // overlap in front of the car. Parked cars are dark. The spot lights are a fixed pool without shadows, in the scene
-  // only at night (like the rooms' lights), so the number of lights, and with it the shaders, changes only at dusk and
-  // dawn. They hang from the scene, not the car park (whose root sits at the origin): hiding the car park (a view of an
-  // upper floor) would take them out of the count and rebuild every shader, a 0.1 s freeze mid-flight.
-  const LIT_CARS = 3, BEAM = {intensity: 34, distance: 16, angle: .42, penumbra: .45, decay: 1.3};
+  // lamps on and their light on the road ahead (painted, see cars.js); parked cars are dark.
   const live = new Set();
   let night = false;
-  const beams = Array.from({length: LIT_CARS * 2}, (_, i) => {
-    const s = new THREE.SpotLight(0xffefc8, 0, BEAM.distance, BEAM.angle, BEAM.penumbra, BEAM.decay);
-    s.name = `Demo_headlight_beam_${i + 1}`; s.visible = false;
-    lot.root.parent.add(s, s.target);
-    return s;
-  });
-  // Each lamp (left, right; the car faces +z) and where its beam is aimed on the road.
-  const LAMPS = [-1, 1].map(side => ({from: new THREE.Vector3(.6 * side, .72, 2.25), to: new THREE.Vector3(.3 * side, 0, 7.5)}));
   const parked = a => Boolean(a.stall) && !a.leaving && !movers.has(a.mover);
-  const fromGate = a => Math.hypot(a.car.position.x - GATE.entryX, a.car.position.z - GATE.z);
   function updateLamps() {
-    const lit = [];
     for (const a of live) {
       const on = night && a.car.visible && !parked(a);
       if (on !== a.lit) { a.lit = on; setCarLamps(a.car, on, night); }
-      if (on) lit.push(a);
     }
-    lit.sort((p, q) => fromGate(p) - fromGate(q));
-    beams.forEach((s, i) => {
-      const a = lit[i >> 1], lamp = LAMPS[i & 1];
-      s.visible = night; s.intensity = a ? BEAM.intensity : 0;
-      if (!a) return;
-      s.position.copy(lamp.from).applyMatrix4(a.car.matrix);
-      s.target.position.copy(lamp.to).applyMatrix4(a.car.matrix);
-    });
   }
   function setNight(value) {
     night = Boolean(value);
