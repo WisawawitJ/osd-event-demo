@@ -1,4 +1,6 @@
 // Runs the behaviour checks in headless Chromium: `npm test`, or `npm test -- kiosk night` to run matching ones.
+// `npm run test:quick` (or `quick` among the words) runs only the quick set: one or two short checks per area, about
+// 10 s, for while you work; the full run is the check before a commit.
 // WebGL renders on the NVIDIA GPU when present, else in software; never on the Intel iGPU (see browser.mjs for why).
 // JOBS=n runs n browsers side by side (default 8 on NVIDIA, 3 in software, which is CPU work); SPEED=n sets the demo
 // time scale (default 30).
@@ -6,8 +8,8 @@ import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {open, DEFAULT_GPU} from './browser.mjs';
 import {scenarios} from './scenarios.mjs';
 
-const filters = process.argv.slice(2).map(f => f.toLowerCase());
-const chosen = scenarios.filter(s => !filters.length || filters.some(f => s.name.toLowerCase().includes(f)));
+const words = process.argv.slice(2).map(f => f.toLowerCase()), quick = words.includes('quick'), filters = words.filter(f => f !== 'quick');
+const chosen = scenarios.filter(s => (!quick || s.quick) && (!filters.length || filters.some(f => s.name.toLowerCase().includes(f))));
 // The slowest checks start first (times from earlier runs, kept in test/out): the run then ends on short ones instead
 // of one long check left running alone. A check without a time yet counts as an average one.
 const TIMES = new URL('out/times.json', import.meta.url);

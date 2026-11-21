@@ -10,13 +10,13 @@ const UP = "document.querySelector('#status')?.dataset.state === 'ready' && !!wi
 const VISITOR = 'ชูใจ ใฝ่รู้', STORY_PLATE = '7กข 4821';
 
 export const scenarios = [
-  {name: 'showcase loads with the parking stop', async run(p, expect) {
+  {quick: true, name: 'showcase loads with the parking stop', async run(p, expect) {
     await p.goto(`?${FAST}`);
     await p.until("document.querySelector('#status')?.dataset.state === 'ready'", {timeout: 40000, what: 'model ready'});
     expect(await p.eval('document.querySelectorAll(".destination-dock [data-destination]").length') === 6, 'dock has 6 stops');
   }},
 
-  {name: 'story plays end to end on auto-advance', async run(p, expect) {
+  {quick: true, name: 'story plays end to end on auto-advance', async run(p, expect) {
     await p.goto(parking('&story=1'));
     await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
     await p.until('!__parking.story.running', {timeout: 90000, what: 'story end'});
@@ -37,7 +37,7 @@ export const scenarios = [
     expect(status === 'pending', `request stays pending (got ${status})`);
   }},
 
-  {name: 'staff car drives in and parks', async run(p, expect) {
+  {quick: true, name: 'staff car drives in and parks', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
     // A specific car, so background traffic in the same lot cannot be mistaken for it.
@@ -49,7 +49,7 @@ export const scenarios = [
     expect(r.stall, 'its bay is marked occupied');
   }},
 
-  {name: 'unknown car: Open once disabled while waiting; Open with a reason is audited', async run(p, expect) {
+  {quick: true, name: 'unknown car: Open once disabled while waiting; Open with a reason is audited', async run(p, expect) {
     // speed 10: the guard turns unanswered cars away after 45 s of demo time, 1.5 s of real time at speed 30.
     await p.goto('?dest=parking&debug=1&speed=10');
     await p.until(ready, {timeout: 40000});
@@ -96,7 +96,7 @@ export const scenarios = [
     expect(await p.eval('window.__queuedCars.every(c=>!c.parent)'), 'cars queued before the reset are gone and never drive in');
   }},
 
-  {name: 'full car park turns a car away', async run(p, expect) {
+  {quick: true, name: 'full car park turns a car away', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
     // Keep every bay taken: a background car leaving during the check would otherwise free one for our car.
@@ -127,7 +127,7 @@ export const scenarios = [
     expect(ics.startsWith('BEGIN:VCALENDAR') && ics.includes('END:VEVENT'), 'calendar structure');
   }},
 
-  {name: 'English switch leaves only names, plates and provinces in Thai', async run(p, expect) {
+  {quick: true, name: 'English switch leaves only names, plates and provinces in Thai', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
     await p.click('#lang-toggle');
@@ -137,7 +137,7 @@ export const scenarios = [
     expect(thai.length === 0, `no stray Thai UI text (found: ${thai.join(' | ')})`);
   }},
 
-  {name: 'night: page goes dark, phone text stays dark on white', async run(p, expect) {
+  {quick: true, name: 'night: page goes dark, phone text stays dark on white', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
     await p.until(`!document.querySelector('#tour-night').disabled`, {what: 'night switch enabled'}); // off during the opening flight
@@ -493,7 +493,7 @@ export const scenarios = [
       await p.until(`${idle} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
     }
   }},
-  {name: 'flying between stops: floors are sliced away and built up solid, never faded see-through', async run(p, expect) {
+  {quick: true, name: 'flying between stops: floors are sliced away and built up solid, never faded see-through', async run(p, expect) {
     await p.goto('?debug=1');
     const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
     await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
@@ -565,7 +565,7 @@ export const scenarios = [
     expect(top > .15 && c.at(-1) === 0, `the cone showed at the meeting room (${top.toFixed(2)}) and is gone at the pond`);
     expect(step < top * .25, `it faded in and out (largest change in one frame ${(step / top * 100).toFixed(0)}% of full)`);
   }},
-  {name: 'meeting room: its light cone looks the same from every side and from above', async run(p, expect) {
+  {quick: true, name: 'meeting room: its light cone looks the same from every side and from above', async run(p, expect) {
     await p.goto('?debug=1&dest=meeting&time=10:00');
     await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the meeting room'});
     await p.sleep(600);
@@ -660,7 +660,7 @@ export const scenarios = [
     expect(await p.eval(`__scene.getObjectByName('Courtyard_water_reflection').visible`), 'pond mirror visible after the start-up warm-up');
   }},
 
-  {name: 'pond mirror: redrawn when the camera moves, at most ~10 times a second while it is still', async run(p, expect) {
+  {quick: true, name: 'pond mirror: redrawn when the camera moves, at most ~10 times a second while it is still', async run(p, expect) {
     await p.goto(`?dest=pond&${FASTW}`);
     await p.until(`document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='pond' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the pond'});
     await p.until(`__scene.getObjectByName('Courtyard_water_reflection').visible`, {what: 'pond mirror on'});
@@ -819,7 +819,7 @@ export const scenarios = [
     await p.sleep(1100);
     expect(await p.eval('__fades') === 0, `no element fades its own colours during the switch (${await p.eval('__fades')} at most)`);
   }},
-  {name: 'night: every car on the move lights the road from its bumper; parked cars are dark', async run(p, expect) {
+  {quick: true, name: 'night: every car on the move lights the road from its bumper; parked cars are dark', async run(p, expect) {
     await p.goto(parking('&time=20:00'));
     await p.until(`${ready} && document.documentElement.dataset.night === 'true'`, {timeout: 40000});
     const lamps = c => `(c=>c.children[2].material.color.r)(${c})`, pool = c => `${c}.getObjectByName('Demo_car_headlights')`;
@@ -854,7 +854,7 @@ export const scenarios = [
     expect(await p.eval(`document.documentElement.dataset.night`) === 'true', 'night');
     expect(worst < 700, `longest frame around the first dusk: ${worst} ms`);
   }},
-  {name: 'night: switching the meeting-room light changes only that room', async run(p, expect) {
+  {quick: true, name: 'night: switching the meeting-room light changes only that room', async run(p, expect) {
     await p.goto(`?${FAST}`);
     await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
     await p.click('[data-destination="meeting"]');
@@ -899,7 +899,7 @@ export const scenarios = [
     // Alone this measures ~130 ms; four browsers sharing the GPU push it to ~300 ms. The stall it guards against was 700–1,100 ms.
     expect(worst < 450, `no frame longer than 450 ms (worst ${worst} ms)`);
   }},
-  {name: 'meeting room: effects show after arriving by the dock, and the light switch is visible', async run(p, expect) {
+  {quick: true, name: 'meeting room: effects show after arriving by the dock, and the light switch is visible', async run(p, expect) {
     await p.goto(`?${FAST}`);
     await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
     await p.click('[data-destination="meeting"]');
@@ -1086,7 +1086,7 @@ export const scenarios = [
     expect(!r.story, 'the story stopped');
     expect(r.dest === 'parking' && !r.pause, `the tour stopped at the car park (at ${r.dest}, tour ${r.pause ? 'still running' : 'stopped'})`);
   }},
-  {name: 'visitor flow as in the real app: a confirmation, then the decision by email only', async run(p, expect) {
+  {quick: true, name: 'visitor flow as in the real app: a confirmation, then the decision by email only', async run(p, expect) {
     await p.goto(parking('&story=1&auto=0'));
     await p.until('window.__parking && __parking.story.running', {timeout: 40000});
     await p.until('__parking.story.waitingForNext', {timeout: 30000}); await p.click('[data-bar="next"]');
@@ -1159,7 +1159,7 @@ export const scenarios = [
     expect(noon.newest <= noon.at, 'no logged event is in the future after the wrap');
     await p.until(`document.documentElement.dataset.night === 'false'`, {timeout: 5000, what: 'day after the jump'});
   }},
-  {name: 'day cycle: Night/Day button, the timeline slider and moments move the world clock', async run(p, expect) {
+  {quick: true, name: 'day cycle: Night/Day button, the timeline slider and moments move the world clock', async run(p, expect) {
     // Real speed (a time-lapse of 2 world minutes a second), so the clock is read close to where the jump left it.
     await p.goto('?debug=1&day=10&time=09:00');
     await p.until(`${UP} && document.documentElement.dataset.warm==='done' && !document.querySelector('#tour-night').disabled`, {timeout: 40000});

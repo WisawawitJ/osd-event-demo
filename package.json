@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node scripts/serve.mjs 8080",
     "test": "node test/run.mjs",
+    "test:quick": "node test/run.mjs quick",
     "bench": "node test/bench.mjs"
   }
 }

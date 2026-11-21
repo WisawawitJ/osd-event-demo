@@ -35,10 +35,14 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (88), about 60 s
-npm test -- kiosk night  # only checks whose names match
+npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
+npm test                 # all behaviour checks (88), about 60 s: run before a commit
+npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
+
+A check joins the quick set with `quick: true` in `test/scenarios.mjs`: keep it to short checks that each guard a
+different area (load, language, night, flights, lights, pond, clock, car park, story).
 
 `test/run.mjs` starts its own server on a free port and drives headless Chromium over the DevTools protocol.
 There are no npm dependencies. **It never uses the Intel iGPU by itself**: on this laptop headless Chromium on the iGPU
