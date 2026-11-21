@@ -22,8 +22,7 @@ html[data-night=true] .showcase-page #status[data-state=loading], html[data-nigh
   background: #151f29; color: var(--ink); border-color: var(--line);
 }
 html[data-night=true] #scene-chip { color: #c9d6e3; }
-html[data-night=true] .showcase-page:not([data-tour-destination="overview"]) .scene-title { background: #151f29ed; color: var(--ink); }
-html[data-night=true] .showcase-page:not([data-tour-destination="overview"]) .scene-title p { color: var(--muted); }
+html[data-night=true] .scene-title { background: #151f29f0; color: var(--ink); }
 html[data-night=true] .destination-dock button, html[data-night=true] .layer-controls button, html[data-night=true] .parking-bar button:not(.primary-button) { color: #b9c7d5; }
 html[data-night=true] .destination-dock button[aria-pressed=true] { color: #fff; }
 html[data-night=true] .layer-controls button[aria-pressed=true] { background: #22314a; color: #b8cbff; }

@@ -337,7 +337,7 @@ export const scenarios = [
     await p.until(`!!document.querySelector('.ph-photo-state.done')`, {timeout: 5000, what: 'new photo read done'});
     expect(await p.eval(`document.querySelector('#pk-phone [name="plate"]').value === '6กม 3195'`), 'the new read fills the new form');
   }},
-  {name: 'room-colour bar waits for a real landing (also after R); narrow views keep the title during Reset view', async run(p, expect) {
+  {name: 'room-colour bar waits for a real landing (also after R); narrow views keep the title beside it', async run(p, expect) {
     await p.cdp('Emulation.setDeviceMetricsOverride', {width: 760, height: 900, deviceScaleFactor: 1, mobile: false});
     try {
       // Real speed: the final approach then lasts ~1.5 s, so the drag below reliably lands inside it.
@@ -354,6 +354,9 @@ export const scenarios = [
         new MutationObserver(()=>{if(v.classList.contains('flying'))window.__titleInReset=getComputedStyle(t).display;}).observe(v,{attributes:true,attributeFilter:['class']})})()`);
       await p.click('#view-reset');
       await p.until(`!document.querySelector('.insight-toolbar').hidden`, {timeout: 10000, what: 'bar after Reset view lands'});
+      // Landed with the bar showing: the title stays too, beside the bar's column rather than hidden or under it.
+      const side = JSON.parse(await p.eval(`JSON.stringify((()=>{const t=document.querySelector('.scene-title'),a=t.getBoundingClientRect(),b=document.querySelector('.scene-top-right').getBoundingClientRect();return {shown:getComputedStyle(t).display!=='none'&&a.width>0,overlap:!(a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top)}})())`));
+      expect(side.shown && !side.overlap, `title shown beside the room-colour bar (${JSON.stringify(side)})`);
       expect(await p.eval('window.__titleInReset') !== 'none', `title shown during the Reset view flight (${await p.eval('window.__titleInReset')})`);
       // A Reset view cut short by a drag leaves the camera short of the stop: the bar stays hidden.
       await p.click('#view-zoom-out'); await p.sleep(400);
