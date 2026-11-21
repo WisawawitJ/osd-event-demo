@@ -2,6 +2,7 @@ import {daySnapshot,dayEvents,dayHistory,formatTime,incidentsFor,createRoomSched
 import {createRoomLayers} from 'osd/viewer/room-layers.js';
 import {L} from 'osd/parking/i18n.js';
 import {world} from 'osd/parking/clock.js';
+import {morph} from 'osd/parking/dom.js';
 const legends={none:()=>'',temperature:()=>L('<i class="legend-cool"></i>ต่ำกว่า 25° <i class="legend-teal"></i>25–27° <i class="legend-warm"></i>27° ขึ้นไป','<i class="legend-cool"></i>Below 25° <i class="legend-teal"></i>25–27° <i class="legend-warm"></i>27° and up'),occupancy:()=>L('<i class="legend-teal"></i>มีคน <i class="legend-muted"></i>ห้องว่าง','<i class="legend-teal"></i>Occupied <i class="legend-muted"></i>Empty'),lights:()=>L('<i class="legend-warm"></i>ไฟเปิด <i class="legend-muted"></i>ไฟปิด','<i class="legend-warm"></i>Lights on <i class="legend-muted"></i>Lights off')};
 // A reading changed by hand (a scenario, or the pond switch) keeps its value until the building's schedule changes
 // that reading itself (the pond's level, a room becoming occupied), as a switch flipped by hand does. Readings the
@@ -72,7 +73,7 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
   const incidents=incidentsFor(state,sim.rooms);
   $('#incident-count').textContent=String(incidents.length);
   const html=incidents.length?incidents.map(i=>`<button class="incident-item" data-incident="${i.id}" data-target="${i.destination}" data-insight-layer="${i.layer}"><span class="incident-mark" aria-hidden="true">!</span><span><strong>${i.title}</strong><small>${i.detail}</small><small>${i.hint}</small></span><span aria-hidden="true">↗</span></button>`).join(''):`<p class="incident-clear"><span aria-hidden="true">✓</span> ${L('สถานะตัวอย่างอยู่ในช่วงปกติ','Sample readings are within normal range')}</p>`;
-  if(incidentList.innerHTML!==html)incidentList.innerHTML=html;
+  morph(incidentList,html);
   $('#insight-room').hidden=layer==='none'||destination!=='meeting';
   $('#insight-room').textContent=`${L('ห้องประชุมย่อย 2 ชั้น 4','Meeting room 2, floor 4')} · ${layer==='temperature'?state.temp.toFixed(1)+' °C':layer==='occupancy'?(state.occupied?L('มีคน 6 คน','6 people'):L('ไม่มีคน','Empty')):sim.rooms['f4_meeting_2'].light?L('ไฟเปิด','Lights on'):L('ไฟปิด','Lights off')}`;
  }

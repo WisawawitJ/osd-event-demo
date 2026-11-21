@@ -565,6 +565,22 @@ export const scenarios = [
     expect(!pops.length, `no car appeared or vanished in view (${pops.slice(0, 4).join(', ') || 'none'})`);
   }},
 
+  {name: 'panels update in place: a hovered button stays the same element, still hovered, through a refresh', async run(p, expect) {
+    await p.goto('?debug=1&dest=overview&time=10:00&day=4'); // a fast day: the readings change between refreshes
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='overview' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the overview'});
+    await p.eval(`document.querySelector('#dashboard-content .panel-action').scrollIntoView({block:'center'})`); await p.sleep(100);
+    const b = JSON.parse(await p.eval(`JSON.stringify(document.querySelector('#dashboard-content .panel-action').getBoundingClientRect())`));
+    await p.cdp('Input.dispatchMouseEvent', {type: 'mouseMoved', x: b.x + b.width / 2, y: b.y + b.height / 2});
+    await p.sleep(100);
+    expect(await p.eval(`document.querySelector('#dashboard-content .panel-action').matches(':hover')`), 'hovered before the refresh');
+    await p.eval(`(()=>{const el=document.querySelector('#dashboard-content .panel-action');el.__marked=true;window.__html=document.querySelector('#dashboard-content').innerHTML;})()`);
+    // The panel redraws at least every 2 s (its readings follow the clock); wait for one that changed something.
+    await p.until(`document.querySelector('#dashboard-content').innerHTML!==__html`, {timeout: 8000, what: 'a panel refresh'});
+    expect(await p.eval(`document.querySelector('#dashboard-content .panel-action').__marked===true`), 'the button is the same element after the refresh');
+    await p.sleep(100);
+    expect(await p.eval(`document.querySelector('#dashboard-content .panel-action').matches(':hover')`), 'and still hovered (no flicker)');
+  }},
+
   {name: 'kiosk follows the day: the morning car park plays the story; a touch pauses it', async run(p, expect) {
     await p.goto(`?kiosk=1&${FAST}&time=07:35`);
     await p.until('window.__parking && __parking.story.running', {timeout: 60000, what: 'the morning car park plays the parking story'});

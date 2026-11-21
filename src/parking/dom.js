@@ -33,18 +33,55 @@ const paths = {
 };
 export const icon = (name, cls = '') => `<svg viewBox="0 0 24 24" aria-hidden="true"${cls ? ` class="${cls}"` : ''}><path d="${paths[name] || paths.car}"/></svg>`;
 
-// Re-render a container without losing the focused field, its caret or the scroll position.
+// Brings a container in line with new markup (a string, or a fragment), changing only what differs: text,
+// attributes and form values. Elements that stay are kept, so a button under the pointer keeps its hover (rebuilt on
+// every refresh, it lost it and flickered), a focused field its focus and caret, a list its scroll position.
+// Form values follow the markup, as a rebuilt field's did.
+export function morph(el, markup) {
+  let source = markup;
+  if (typeof markup === 'string') { const template = document.createElement('template'); template.innerHTML = markup; source = template.content; }
+  morphChildren(el, source);
+}
+function morphChildren(target, source) {
+  const want = [...source.childNodes];
+  want.forEach((node, i) => {
+    const current = target.childNodes[i];
+    if (!current) target.appendChild(node);
+    else if (current.nodeType === node.nodeType && current.nodeName === node.nodeName) morphNode(current, node);
+    else target.replaceChild(node, current);
+  });
+  while (target.childNodes.length > want.length) target.lastChild.remove();
+}
+function morphNode(current, node) {
+  if (node.nodeType !== 1) { if (current.nodeValue !== node.nodeValue) current.nodeValue = node.nodeValue; return; }
+  for (const {name} of [...current.attributes]) if (!node.hasAttribute(name)) current.removeAttribute(name);
+  for (const {name, value} of [...node.attributes]) if (current.getAttribute(name) !== value) current.setAttribute(name, value);
+  morphChildren(current, node);
+  const tag = current.tagName;
+  if (tag === 'INPUT' && (current.type === 'checkbox' || current.type === 'radio')) current.checked = node.hasAttribute('checked');
+  else if (tag === 'INPUT' || tag === 'TEXTAREA') {
+    const value = tag === 'INPUT' ? node.getAttribute('value') ?? '' : node.textContent;
+    if (current.value !== value) current.value = value;
+  } else if (tag === 'SELECT') {
+    const chosen = [...node.options].find(o => o.hasAttribute('selected')) || node.options[0];
+    if (chosen && current.value !== (chosen.getAttribute('value') ?? chosen.textContent)) current.value = chosen.getAttribute('value') ?? chosen.textContent;
+  }
+}
+
+// Re-render a container without losing the focused field, its caret or the scroll position (see morph).
 export function patch(el, html) {
   const active = document.activeElement;
   const focusId = active && el.contains(active) ? active.dataset.focus || active.id : null;
   const sel = focusId && 'selectionStart' in active ? [active.selectionStart, active.selectionEnd] : null;
   const scroll = el.scrollTop;
-  el.innerHTML = html;
+  morph(el, html);
   el.scrollTop = scroll;
-  if (focusId) {
-    const next = el.querySelector(`[data-focus="${focusId}"],#${CSS.escape(focusId)}`);
-    if (next) { next.focus({preventScroll: true}); if (sel && next.setSelectionRange) try { next.setSelectionRange(...sel); } catch {} }
-  }
+  if (!focusId) return;
+  // The field itself is usually kept; if the markup around it changed shape, its replacement takes the focus.
+  const next = el.contains(active) ? active : el.querySelector(`[data-focus="${focusId}"],#${CSS.escape(focusId)}`);
+  if (!next) return;
+  if (document.activeElement !== next) next.focus({preventScroll: true});
+  if (sel && next.setSelectionRange) try { next.setSelectionRange(...sel); } catch {}
 }
 
 // A deterministic QR-like pattern for the demo ticket (not a scannable code).
