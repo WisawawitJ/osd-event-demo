@@ -36,7 +36,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (88), about 60 s: run before a commit
+npm test                 # all behaviour checks (89), about 60 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -81,6 +81,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 
 - **Koi** swim slow loops in the pond, each sized to keep the fish in the water, waving their tails. The motion is in
   the vertex shader (no per-fish CPU work); the pond redraws at 15 fps only while it is in view, and not when paused.
+- **Street lights** stand on the main road's kerb by the car park, their arms over the road. At night each throws a
+  cone of lit air down to a soft pool on the road, drawn as the meeting room's light (`src/viewer/light-cone.js`).
 - **Headlights:** at night cars with the engine on (driving, queuing, at the barrier) have their lamps lit, and the
   light on the road ahead: two soft lobes, one from each lamp, starting at the bumper and meeting ahead of the car
   (also in the plate camera's picture), and their beams in the air: lit air like the meeting room's light cone,

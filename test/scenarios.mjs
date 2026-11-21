@@ -1036,6 +1036,27 @@ export const scenarios = [
         for(let i=0;i<pos.count;i++){v.fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld);if(v.y>.8&&v.z>13.6&&v.z<18.8&&v.x>-58&&v.x<-12){out.push((o.name||'mesh')+' at x'+v.x.toFixed(1)+' z'+v.z.toFixed(1));break;}}});return out})()`);
     expect(blocking.length === 0, `no obstacle in the lanes (${blocking.join('; ')})`);
   }},
+  {name: 'street lights stand along the main road and light it at night (lit air down to a pool on the road), not by day', async run(p, expect) {
+    await p.goto(parking('&time=20:00'));
+    await p.until(`${ready} && document.documentElement.dataset.night === 'true'`, {timeout: 40000});
+    const lights = await p.eval(`(()=>{const V=__camera.position.constructor;return __parking.lot.root.children.filter(o=>o.name==='Demo_street_light').map(o=>{o.geometry.computeBoundingBox();const b=o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);return {visible:o.visible,cone:o.geometry.type==='CylinderGeometry',z:(b.min.z+b.max.z)/2,x:(b.min.x+b.max.x)/2};});})()`);
+    const cones = lights.filter(l => l.cone);
+    // The street runs from z 22.5 (the kerb on the site's side) to 29.5; the lamps hang over its near lanes.
+    expect(cones.length === 3 && cones.every(c => c.z > 22.5 && c.z < 26), `three street lights over the main road (${cones.map(c => `x${c.x.toFixed(0)} z${c.z.toFixed(1)}`).join(', ')})`);
+    expect(lights.length === 4 && lights.every(l => l.visible), 'their cones and the pools on the road show at night');
+    // Lit air, as the meeting room's cone: it glows seen from the side and from straight above.
+    const glow = await p.eval(`(()=>{const c=__parking.lot.root.children.find(o=>o.name==='Demo_street_light'&&o.geometry.type==='CylinderGeometry'),V=__camera.position.constructor;
+      const solo=new __scene.constructor(),copy=c.clone();copy.matrixAutoUpdate=false;copy.matrix.copy(c.matrixWorld);
+      const cam=__camera.clone(),gl=__renderer.getContext(),px=new Uint8Array(4),aim=c.getWorldPosition(new V()).add(new V(0,1.5,0));
+      const light=off=>{cam.position.copy(aim).add(new V(...off));cam.lookAt(aim);cam.updateMatrixWorld();
+        const read=()=>{gl.readPixels(gl.drawingBufferWidth>>1,gl.drawingBufferHeight>>1,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);return px[0]+px[1]+px[2];};
+        solo.remove(copy);__renderer.render(solo,cam);const dark=read();solo.add(copy);__renderer.render(solo,cam);return read()-dark;};
+      return {side:light([9,0,3]),above:light([.01,12,0])};})()`);
+    expect(glow.side > 25 && glow.above > 25, `the cone glows seen from the side and from above (side ${glow.side}, above ${glow.above})`);
+    await p.eval('__world.jumpTo(10*60)');
+    await p.until(`document.documentElement.dataset.night === 'false'`, {timeout: 5000, what: 'day'});
+    expect(await p.eval(`__parking.lot.root.children.filter(o=>o.name==='Demo_street_light').every(o=>!o.visible)`), 'no street light by day');
+  }},
   {name: 'cars drive at their set speed, also while the page is busy', async run(p, expect) {
     // Real speed. Street cars run at exactly 7 m/s (eastbound) or 9 m/s (westbound).
     await p.goto('?dest=parking&debug=1');

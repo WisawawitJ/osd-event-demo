@@ -1,5 +1,6 @@
 import * as T from 'osd/node_modules/three/build/three.module.js';
 import {demoNow} from 'osd/parking/clock.js';
+import {createLightConeMaterial, createLightConeGeometry} from 'osd/viewer/light-cone.js';
 // Presentation-only objects. No bindings to hardware or Home Assistant.
 export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
  const groups={},owned=[],materials=[];let current='overview';
@@ -41,33 +42,9 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
   const poolMaterial=new T.MeshBasicMaterial({color:'#ffcf73',map:glowMap,transparent:true,opacity:.75,depthWrite:false,blending:T.AdditiveBlending});materials.push(poolMaterial);
   poolMaterial.userData.glowMap=glowMap;
   const pool=mesh(meeting,new T.CircleGeometry(1.9,40),poolMaterial,[lx,.06,lz]);pool.rotation.x=-Math.PI/2;lamp.push(pool);
-  // The cone is lit air, not a surface: each pixel adds up the glow along its view ray through the cone (brightest
-  // under the lamp and on the axis, fading out towards the floor and the edge). Drawn as the cone's hollow shell, it
-  // looked right only from the side: from above, the view passed through its narrow top to the floor and saw no
-  // glow at all there, a dark disc under the lamp.
-  const height=ly-.1,beamMaterial=new T.ShaderMaterial({
-   uniforms:{color:{value:new T.Color('#ffd88a')},opacity:{value:1},eye:{value:new T.Vector3()},shape:{value:new T.Vector3(height/2,.45,1.7)}},
-   vertexShader:'varying vec3 local; void main(){local=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-   fragmentShader:`uniform vec3 color,eye,shape; uniform float opacity; varying vec3 local;
-    float glow(vec3 p){float h=(p.y+shape.x)/(2.*shape.x);if(h<0.||h>1.)return 0.;float q=length(p.xz)/mix(shape.z,shape.y,h);return q<1.?(1.-q*q)*h*h:0.;}
-    void main(){
-     // Entered here (a front face), or from the eye when it is inside the cone (then only the back faces draw).
-     float hEye=(eye.y+shape.x)/(2.*shape.x);bool inside=hEye>0.&&hEye<1.&&length(eye.xz)<mix(shape.z,shape.y,hEye);
-     if(gl_FrontFacing==inside)discard;
-     vec3 d=normalize(local-eye);float t0=inside?0.:distance(local,eye);
-     // Leaves the cone's bounding cylinder (the wide bottom's radius) or its top or bottom.
-     float a=dot(d.xz,d.xz),b=dot(eye.xz,d.xz),c=dot(eye.xz,eye.xz)-shape.z*shape.z;
-     float t1=a>1e-6?(-b+sqrt(max(0.,b*b-a*c)))/a:1e4;
-     if(abs(d.y)>1e-6)t1=min(t1,((d.y>0.?shape.x:-shape.x)-eye.y)/d.y);
-     float dt=max(0.,t1-t0)/24.,jitter=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(.06711056,.00583715)))),sum=0.;
-     for(int i=0;i<24;i++)sum+=glow(eye+d*(t0+(float(i)+jitter)*dt));
-     gl_FragColor=vec4(color,(1.-exp(-1.1*sum*dt))*opacity);
-     #include <tonemapping_fragment>
-     #include <colorspace_fragment>
-    }`,
-   transparent:true,depthWrite:false,side:T.DoubleSide,forceSinglePass:true,blending:T.AdditiveBlending});materials.push(beamMaterial);
-  const beam=mesh(meeting,new T.CylinderGeometry(.45,1.7,height,32,1,false),beamMaterial,[lx,height/2+.05,lz]);lamp.push(beam);
-  beam.onBeforeRender=(renderer,scene,camera)=>{beamMaterial.uniforms.eye.value.setFromMatrixPosition(camera.matrixWorld);beam.worldToLocal(beamMaterial.uniforms.eye.value);beamMaterial.uniforms.opacity.value=beamMaterial.opacity;};
+  // The cone of lit air under the lamp (light-cone.js).
+  const cone={height:ly-.1,top:.45,bottom:1.7},beamMaterial=createLightConeMaterial({color:'#ffd88a',...cone});materials.push(beamMaterial);
+  const beam=mesh(meeting,createLightConeGeometry(cone),beamMaterial,[lx,cone.height/2+.05,lz]);lamp.push(beam);
  }
  const pond=group('pond',1),pondMaterial=mat('#1b9caa',.8),pondRing=mesh(pond,new T.TorusGeometry(.23,.028,8,36),pondMaterial,[23.2,.32,0]);pondRing.rotation.x=-Math.PI/2;
  mesh(pond,new T.CylinderGeometry(.045,.045,.45,12),mat('#3f6975'),[23.2,.3,0]);
