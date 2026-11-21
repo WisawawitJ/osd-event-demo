@@ -126,7 +126,7 @@ export function createLot({scene, stalls, schedule}) {
   let seed = 7;
   const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const blobs = GREENS.map(() => []), trunkList = [];
-  const treeSpots = [[-36.8, -17.6], [-45, -17.6], [-52.4, -17.6], [-28.4, -17.6], [-62, 7], [-62, -5], [-62, 16], [-42, 20.7], [-54, 20.7], [-33.5, 20.7]];
+  const treeSpots = [[-36.8, -17.6], [-45, -17.6], [-52.4, -17.6], [-28.4, -17.6], [-62, 7], [-62, -5], [-62, 16], [-46, 20.7], [-59, 20.7], [-38, 20.7]]; // the last three between the street lights
   for (const [x, z] of treeSpots) {
     const h = 3.3 + rand() * .8, r = 1.25 + rand() * .35;
     trunkList.push(m4.compose(v.set(x, Y.road, z), q.identity(), sc.set(1, h + .4, 1)).clone());
@@ -154,39 +154,42 @@ export function createLot({scene, stalls, schedule}) {
   const leaves = blobs.map((list, k) => { const im = new THREE.InstancedMesh(blobGeo, leafMats[k], list.length); list.forEach((mm, i) => im.setMatrixAt(i, mm)); return im; });
   for (const m of [trunks, ...leaves]) { m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); root.add(m); }
 
-  // Light poles in the lot, and street lights along the main road's kerb (between the trees, clear of the gate and
-  // its sign), their arms reaching out over the road.
+  // Light poles in the lot, and street lights all along the main road's kerb, 17 m apart (the gap that clears the
+  // gate, its sign and camera), their arms reaching out over the road. Every lamp hangs LAMP_HEIGHT above its ground.
+  const LAMP_HEIGHT = 6.2, SPACING = 17;
   const poleMat = mat({color: '#59636b', metalness: .4, roughness: .5});
   const lampMat = new THREE.MeshStandardMaterial({color: '#f6f1df', emissive: '#ffe7a6', emissiveIntensity: 0});
   materials.push(lampMat);
-  const poles = [], lamps = [];
+  const poles = [], heads = [], lit = []; // lit: [x, ground y, z] under each lamp
   for (const [x, z] of [[-31.2, -4], [-31.2, 8], [-47.4, -4], [-47.4, 8]]) {
-    poles.push(new THREE.CylinderGeometry(.07, .09, 6, 8).translate(x, Y.road + 3, z));
-    lamps.push(new THREE.BoxGeometry(.9, .14, .34).translate(x + .35, Y.road + 6, z));
+    poles.push(new THREE.CylinderGeometry(.07, .09, LAMP_HEIGHT + .1, 8).translate(x, Y.road + (LAMP_HEIGHT + .1) / 2, z));
+    heads.push(new THREE.BoxGeometry(.9, .14, .34).translate(x + .35, Y.road + LAMP_HEIGHT + .07, z));
+    lit.push([x + .35, Y.road, z]);
   }
-  const STREET_LIGHT = {height: 6.5, arm: 1.7, z: STREET.north - .3}, streetLamps = [-59, -48, -37].map(x => [x, STREET_LIGHT.z + STREET_LIGHT.arm - .15]);
-  for (const [x] of streetLamps) {
-    poles.push(new THREE.CylinderGeometry(.08, .1, STREET_LIGHT.height, 8).translate(x, Y.road + .05 + STREET_LIGHT.height / 2, STREET_LIGHT.z));
-    poles.push(new THREE.BoxGeometry(.08, .08, STREET_LIGHT.arm).translate(x, Y.road + STREET_LIGHT.height, STREET_LIGHT.z + STREET_LIGHT.arm / 2));
+  const kerbZ = STREET.north - .3, arm = 1.7, streetY = Y.road - .015;
+  for (let x = -84.5; x < 90; x += SPACING) {
+    poles.push(new THREE.CylinderGeometry(.08, .1, LAMP_HEIGHT + .2, 8).translate(x, Y.road + .05 + (LAMP_HEIGHT + .2) / 2, kerbZ));
+    poles.push(new THREE.BoxGeometry(.08, .08, arm).translate(x, Y.road + LAMP_HEIGHT + .2, kerbZ + arm / 2));
+    heads.push(new THREE.BoxGeometry(.34, .14, .9).translate(x, streetY + LAMP_HEIGHT + .07, kerbZ + arm - .15));
+    lit.push([x, streetY, kerbZ + arm - .15]);
   }
-  for (const [x, z] of streetLamps) lamps.push(new THREE.BoxGeometry(.34, .14, .9).translate(x, Y.road + STREET_LIGHT.height - .08, z));
   put(mergeGeometries(poles), poleMat);
-  put(mergeGeometries(lamps), lampMat);
-  for (const g of [...poles, ...lamps]) g.dispose();
-  // At night each street light throws light: a cone of lit air down to the road (light-cone.js, as the meeting room's
-  // light) and a soft pool on the road. Painted, not real lights, so they cost the rest of the scene nothing.
+  put(mergeGeometries(heads), lampMat);
+  for (const g of [...poles, ...heads]) g.dispose();
+  // At night each lamp throws light: a cone of lit air down to the ground (light-cone.js, as the meeting room's
+  // light) and a soft pool where it lands. Painted, not real lights, so they cost the rest of the scene nothing.
   const glowCanvas = document.createElement('canvas'); glowCanvas.width = glowCanvas.height = 128;
   const gc = glowCanvas.getContext('2d'), gg = gc.createRadialGradient(64, 64, 2, 64, 64, 64);
   gg.addColorStop(0, 'rgba(255,255,255,1)'); gg.addColorStop(.5, 'rgba(255,255,255,.45)'); gg.addColorStop(1, 'rgba(255,255,255,0)');
   gc.fillStyle = gg; gc.fillRect(0, 0, 128, 128);
   const glowTexture = new THREE.CanvasTexture(glowCanvas); textures.push(glowTexture);
-  const streetY = Y.road - .015, cone = {height: STREET_LIGHT.height - .2 - (streetY - Y.road), top: .3, bottom: 3.4};
-  const coneMaterial = createLightConeMaterial({color: '#ffe2ad', ...cone, strength: .5}); materials.push(coneMaterial);
+  const cone = {height: LAMP_HEIGHT, top: .3, bottom: 5.5};
+  const coneMaterial = createLightConeMaterial({color: '#ffe2ad', ...cone, strength: .4}); materials.push(coneMaterial);
   const coneGeometry = createLightConeGeometry(cone); owned.push(coneGeometry);
-  const streetGlow = streetLamps.map(([x, z]) => { const m = new THREE.Mesh(coneGeometry, coneMaterial); m.position.set(x, streetY + cone.height / 2, z); root.add(m); return m; });
-  streetGlow.push(put(mergeGeometries(streetLamps.map(([x, z]) => new THREE.CircleGeometry(4.2, 40).rotateX(-Math.PI / 2).translate(x, streetY + .02, z))),
-    basic({color: '#ffd9a0', map: glowTexture, transparent: true, opacity: .55, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12})));
-  for (const o of streetGlow) { o.receiveShadow = false; o.visible = false; o.name = 'Demo_street_light'; }
+  const lampLight = lit.map(([x, y, z]) => { const m = new THREE.Mesh(coneGeometry, coneMaterial); m.position.set(x, y + cone.height / 2, z); root.add(m); return m; });
+  lampLight.push(put(mergeGeometries(lit.map(([x, y, z]) => new THREE.CircleGeometry(6.8, 48).rotateX(-Math.PI / 2).translate(x, y + .02, z))),
+    basic({color: '#ffd9a0', map: glowTexture, transparent: true, opacity: .5, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12})));
+  for (const o of lampLight) { o.receiveShadow = false; o.visible = false; o.name = 'Demo_lamp_light'; }
 
   // Barrier: cabinet, boom, status lamp
   const gate = new THREE.Group(); gate.name = 'Demo_main_barrier'; root.add(gate);
@@ -287,7 +290,7 @@ export function createLot({scene, stalls, schedule}) {
 
   function setNight(night) {
     lampMat.emissiveIntensity = night ? 2.2 : 0;
-    for (const o of streetGlow) o.visible = night;
+    for (const o of lampLight) o.visible = night;
     schedule();
   }
 
