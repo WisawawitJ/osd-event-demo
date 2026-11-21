@@ -83,8 +83,9 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   the vertex shader (no per-fish CPU work); the pond redraws at 15 fps only while it is in view, and not when paused.
 - **Headlights:** at night cars with the engine on (driving, queuing, at the barrier) have their lamps lit, and the
   light on the road ahead: two soft lobes, one from each lamp, starting at the bumper and meeting ahead of the car
-  (also in the plate camera's picture). The light is painted on the road, not a real light, so every car on the move
-  has it at no cost to the rest of the scene; parked cars and their plates are dark. The start-up warm-up prepares the night's shaders too, so the first dusk
+  (also in the plate camera's picture), and their beams in the air: lit air like the meeting room's light cone,
+  brightest near the lamps and fading ahead, seen from any side. Both are painted, not real lights, so every car on
+  the move has them at no cost to the rest of the scene; parked cars and their plates are dark. The start-up warm-up prepares the night's shaders too, so the first dusk
   does not freeze the view.
 - **Sky:** the sun crosses the building, low and warm in the early morning and late afternoon; at night a dim moonlight
   carries on along the same path, so shadows turn smoothly all day and never jump (not at dusk, dawn or midnight). Room lights, car-park lamps

@@ -1,7 +1,7 @@
-// Low-poly cars, four draw calls each (five with headlights on) and no per-car geometry:
+// Low-poly cars, four draw calls each (six with headlights on) and no per-car geometry:
 //   body (body + roof, one material per paint colour), details (glass + wheels, vertex colours),
 //   decals (both plates and the four lamps, unlit, one small texture per plate), a soft blob shadow, and at night the
-//   headlights' light on the road (see headlightPool).
+//   headlights' light on the road (see headlightPool) and their beams in the air (see headlightBeams).
 // A car faces local +Z and sits on y = 0.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -62,7 +62,7 @@ function sharedParts() {
   const blobTexture = new THREE.CanvasTexture(blobCanvas);
   const blob = new THREE.PlaneGeometry(2.5, 5.1).rotateX(-Math.PI / 2);
   shared = {
-    body, details, decals, blob, ...headlightPool(),
+    body, details, decals, blob, ...headlightPool(), ...headlightBeams(),
     bodyMaterials: CAR_COLORS.map(color => new THREE.MeshStandardMaterial({color, roughness: .32, metalness: .45})),
     detailMaterial: new THREE.MeshStandardMaterial({vertexColors: true, roughness: .3, metalness: .5}),
     // The soft shadow sits on the road; the depth offset stops it flickering against the asphalt and paint.
@@ -127,6 +127,44 @@ function headlightPool() {
   return {pool, poolMaterial, poolTexture};
 }
 
+// Headlight beams: the lit air in front of each lamp, as the meeting room's light cone is drawn (tour-effects.js).
+// One box ahead of the bumper holds both beams; for each pixel the shader adds up the glow of the two cones along the
+// view ray through the box (brightest near the lamps and on each beam's axis, thinning with distance, cut off at
+// the road), so the beams read as light in the air from any side, above included.
+const BEAM = {lampX: .6, lampY: .74, lampZ: 2.24, reach: 8.5, width: 4.6, height: 1.3};
+function headlightBeams() {
+  const box = new THREE.BoxGeometry(BEAM.width, BEAM.height, BEAM.reach).translate(0, BEAM.height / 2, BEAM.lampZ + BEAM.reach / 2);
+  const material = new THREE.ShaderMaterial({
+    uniforms: {color: {value: new THREE.Color(0xffe6b8)}, lamp: {value: new THREE.Vector3(BEAM.lampX, BEAM.lampY, BEAM.lampZ)}, size: {value: new THREE.Vector3(BEAM.width / 2, BEAM.height, BEAM.reach)}},
+    vertexShader: `varying vec3 local; varying vec3 eye;
+      void main(){local=position;eye=(inverse(modelMatrix)*vec4(cameraPosition,1.)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+    fragmentShader: `uniform vec3 color,lamp,size; varying vec3 local; varying vec3 eye;
+      // One lamp's beam: a cone from the lamp, aimed ahead and down to meet the road ~6.5 m out, leaning slightly in.
+      float beam(vec3 p,float side){
+        vec3 apex=vec3(side*lamp.x,lamp.y,lamp.z),axis=normalize(vec3(-side*.035,-.112,1.));
+        vec3 v=p-apex;float t=dot(v,axis);if(t<=0.)return 0.;
+        float q=length(v-axis*t)/(.09+t*.2);if(q>=1.)return 0.;
+        return (1.-q*q)*smoothstep(0.,.35,t)/(1.+t*t/6.)*(1.-smoothstep(size.z-2.5,size.z-.3,t));
+      }
+      float glow(vec3 p){return p.y<.03?0.:beam(p,1.)+beam(p,-1.);}
+      void main(){
+        // Entered here (a front face), or from the eye when it is inside the box (then only the back faces draw).
+        vec3 lo=vec3(-size.x,0.,lamp.z),hi=vec3(size.x,size.y,lamp.z+size.z);
+        bool inside=all(greaterThan(eye,lo))&&all(lessThan(eye,hi));
+        if(gl_FrontFacing==inside)discard;
+        vec3 d=normalize(local-eye);float t0=inside?0.:distance(local,eye);
+        vec3 inv=1./d,far=max((lo-eye)*inv,(hi-eye)*inv);float t1=min(min(far.x,far.y),far.z);
+        float dt=max(0.,t1-t0)/32.,jitter=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(.06711056,.00583715)))),sum=0.;
+        for(int i=0;i<32;i++)sum+=glow(eye+d*(t0+(float(i)+jitter)*dt));
+        gl_FragColor=vec4(color,1.-exp(-.55*sum*dt));
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, blending: THREE.AdditiveBlending,
+  });
+  return {beam: box, beamMaterial: material};
+}
+
 export function createCar({plate, province, color = 0}) {
   const p = sharedParts();
   const car = new THREE.Group();
@@ -141,6 +179,8 @@ export function createCar({plate, province, color = 0}) {
   blob.position.y = .025; blob.updateMatrix(); blob.renderOrder = -1; blob.receiveShadow = false;
   const pool = add(p.pool, p.poolMaterial);
   pool.receiveShadow = false; pool.visible = false; pool.name = 'Demo_car_headlights';
+  const beams = add(p.beam, p.beamMaterial);
+  beams.receiveShadow = false; beams.visible = false; beams.name = 'Demo_car_headlight_beams';
   car.userData = {plate, province};
   return car;
 }
@@ -149,16 +189,17 @@ export function createCar({plate, province, color = 0}) {
 // dim, as unlit paint would be. In daytime both look as drawn. Each car's plate material is its own (one per plate;
 // through-traffic shares one, and it is always on the move).
 export function setCarLamps(car, on, night) {
-  const decals = car.children[2], pool = car.children[4];
+  const decals = car.children[2], pool = car.children[4], beams = car.children[5];
   if (decals) decals.material.color.setScalar(!night || on ? 1 : .3);
   if (pool) pool.visible = night && on;
+  if (beams) beams.visible = night && on;
 }
 
 export function disposeCars() {
   if (!shared) return;
-  for (const k of ['body', 'details', 'decals', 'blob', 'pool']) shared[k].dispose();
+  for (const k of ['body', 'details', 'decals', 'blob', 'pool', 'beam']) shared[k].dispose();
   for (const m of shared.bodyMaterials) m.dispose();
-  for (const k of ['detailMaterial', 'blobMaterial', 'blobTexture', 'poolMaterial', 'poolTexture']) shared[k].dispose();
+  for (const k of ['detailMaterial', 'blobMaterial', 'blobTexture', 'poolMaterial', 'poolTexture', 'beamMaterial']) shared[k].dispose();
   for (const m of plateCache.values()) { m.map.dispose(); m.dispose(); }
   plateCache.clear();
   shared = null;

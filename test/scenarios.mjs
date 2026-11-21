@@ -819,14 +819,25 @@ export const scenarios = [
     await p.sleep(1100);
     expect(await p.eval('__fades') === 0, `no element fades its own colours during the switch (${await p.eval('__fades')} at most)`);
   }},
-  {quick: true, name: 'night: every car on the move lights the road from its bumper; parked cars are dark', async run(p, expect) {
+  {quick: true, name: 'night: every car on the move lights the road from its bumper and the air ahead with its beams; parked cars are dark', async run(p, expect) {
     await p.goto(parking('&time=20:00'));
     await p.until(`${ready} && document.documentElement.dataset.night === 'true'`, {timeout: 40000});
-    const lamps = c => `(c=>c.children[2].material.color.r)(${c})`, pool = c => `${c}.getObjectByName('Demo_car_headlights')`;
+    const lamps = c => `(c=>c.children[2].material.color.r)(${c})`, pool = c => `${c}.getObjectByName('Demo_car_headlights')`, beams = c => `${c}.getObjectByName('Demo_car_headlight_beams')`;
     await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');window.__out=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__parking.sim.state.presence.get(k).plate);window.__still=__parking.lot.root.children.find(c=>c.name.startsWith('Demo_car_')&&c!==__out&&c.visible&&__parking.traffic.parkedKeys().some(k=>'Demo_car_'+__parking.sim.state.presence.get(k).plate===c.name));void __parking.traffic.leave(k)})()`);
     await p.until(`${pool('__out')}.visible`, {timeout: 10000, what: 'the leaving car lights the road'});
     expect(await p.eval(lamps('__out')) === 1, 'the leaving car has its lamps on');
-    expect(await p.eval(`!${pool('__still')}.visible`) && await p.eval(lamps('__still')) < .5, 'a parked car is dark, with no light on the road');
+    expect(await p.eval(`!!${beams('__out')}?.visible`), 'and its beams in the air');
+    expect(await p.eval(`!${pool('__still')}.visible && !${beams('__still')}?.visible`) && await p.eval(lamps('__still')) < .5, 'a parked car is dark, with no light on the road or in the air');
+    // The beams are lit air (as the meeting room's cone): they glow seen from the side and from above alike. Drawn
+    // alone in a scene, the light they add at a point on a beam's axis 2.5 m ahead of the bumper.
+    const glow = await p.eval(`(()=>{const b=${beams('__out')},V=__camera.position.constructor;b.updateWorldMatrix(true,false);
+      const solo=new __scene.constructor(),copy=b.clone();copy.matrixAutoUpdate=false;copy.matrix.copy(b.matrixWorld);copy.visible=true;
+      const cam=__camera.clone(),gl=__renderer.getContext(),px=new Uint8Array(4),aim=new V(.6,.5,4.7).applyMatrix4(b.matrixWorld);
+      const light=local=>{cam.position.copy(new V(...local).applyMatrix4(b.matrixWorld));cam.lookAt(aim);cam.updateMatrixWorld();
+        const read=()=>{gl.readPixels(gl.drawingBufferWidth>>1,gl.drawingBufferHeight>>1,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);return px[0]+px[1]+px[2];};
+        solo.remove(copy);__renderer.render(solo,cam);const dark=read();solo.add(copy);__renderer.render(solo,cam);return read()-dark;};
+      return {side:light([7,.6,4.7]),above:light([.61,8,4.7])};})()`);
+    expect(glow.side > 25 && glow.above > 25, `the beams glow seen from the side and from above (side ${glow.side}, above ${glow.above})`);
     // The light grows out from under the bumper (the lamps), not metres ahead of it, and is part of the car (it moves
     // with it). Its patch starts under the car's nose, hidden by the body, and the light fades to nothing before every
     // edge of the patch (a light still bright at an edge showed as a straight cut).
@@ -836,12 +847,12 @@ export const scenarios = [
       return {near:a(0,0,W,1),far:a(0,H-1,W,1),left:a(0,0,1,H),right:a(W-1,0,1,H),peak:a(0,0,W,H)};})()`);
     expect(edges.peak > 200 && Math.max(edges.near, edges.far, edges.left, edges.right) < 4, `soft on every edge (edge alpha near ${edges.near}, far ${edges.far}, sides ${edges.left}/${edges.right}; brightest ${edges.peak})`);
     // Every car on the move has its light: none of them waits for a free light, as the three spot lights made them do.
-    await p.until(`(()=>{const moving=__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car_')&&c.visible&&c.children[2].material.color.r===1);return moving.length>=2&&moving.every(c=>c.getObjectByName('Demo_car_headlights').visible)})()`, {timeout: 20000, what: 'two or more cars on the move, all with their light'});
+    await p.until(`(()=>{const moving=__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car_')&&c.visible&&c.children[2].material.color.r===1);return moving.length>=2&&moving.every(c=>c.getObjectByName('Demo_car_headlights').visible&&c.getObjectByName('Demo_car_headlight_beams').visible)})()`, {timeout: 20000, what: 'two or more cars on the move, all with their light and beams'});
     expect(!(await p.eval(`__scene.getObjectsByProperty('isSpotLight',true).some(s=>s.name.startsWith('Demo_headlight'))`)), 'no spot lights for headlights (the light is painted, so it costs the scene nothing)');
     // Daytime: no light on the road, every car drawn as is.
     await p.eval('__world.jumpTo(9*60)');
     await p.until(`document.documentElement.dataset.night === 'false'`, {timeout: 5000, what: 'day'});
-    expect(await p.eval(`__parking.lot.root.children.every(c=>!c.getObjectByName('Demo_car_headlights')?.visible)`), 'no headlight light in the daytime');
+    expect(await p.eval(`__parking.lot.root.children.every(c=>!c.getObjectByName('Demo_car_headlights')?.visible&&!c.getObjectByName('Demo_car_headlight_beams')?.visible)`), 'no headlight light or beams in the daytime');
     expect(await p.eval(lamps('__still')) === 1, 'parked car drawn as is in the daytime');
   }},
   {name: 'night: the first dusk does not freeze the view (night shaders ready from the start)', async run(p, expect) {
