@@ -137,9 +137,17 @@ try {
   }
   // Touchpads: two fingers scroll to pan, as in maps (holding the right button, the other way to pan, is awkward on a
   // touchpad); a pinch still zooms (it arrives as a wheel with ctrlKey), and so does a mouse wheel. Shift- or Ctrl-drag
-  // pans too. A touchpad's scroll is told by a sideways part or, in Chrome, by its legacy wheelDelta being 3× its delta
-  // (a wheel notch's is 120). Runs before the close zoom below, which would take a scroll up as a step forward.
-  const touchpadScroll = event => !event.ctrlKey && event.deltaMode === 0 && (event.deltaX !== 0 || (Boolean(event.wheelDeltaY) && Math.abs(event.wheelDeltaY) === Math.abs(event.deltaY) * 3));
+  // pans too. A touchpad's scroll comes as a stream of small steps (a few px, often with a sideways part); a wheel notch
+  // moves 50 px or more at once (53⅓ in Chromium on Linux, 100 on Windows). (wheelDelta did not tell them apart on
+  // Linux.) Once a scroll pans, the rest of its stream does too, so a fast flick's bigger steps do not turn into zooms.
+  // Runs before the close zoom below, which would take a scroll up as a step forward.
+  let panningUntil = 0;
+  const touchpadScroll = event => {
+    if (event.ctrlKey || event.deltaMode !== 0) return false;
+    const now = performance.now(), pad = now < panningUntil || event.deltaX !== 0 || Math.abs(event.deltaY) < 50;
+    if (pad) panningUntil = now + 200;
+    return pad;
+  };
   canvas.addEventListener('wheel', event => {
     if (!model || !controls.enabled || !controls.enablePan || !touchpadScroll(event)) return;
     event.preventDefault(); event.stopImmediatePropagation();

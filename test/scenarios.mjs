@@ -1454,6 +1454,10 @@ export const scenarios = [
       return JSON.stringify({moved:+t.distanceTo(t0).toFixed(3),zoom:+(c.position.distanceTo(t)-d0).toFixed(3)});})()`).then(JSON.parse);
     const scroll = await wheel({deltaX: 30, deltaY: 20});
     expect(scroll.moved > 0 && Math.abs(scroll.zoom) < .01, `two-finger scroll pans (target moved ${scroll.moved}, distance ${scroll.zoom})`);
+    // Straight up or down too, small steps as a touchpad sends them (in Chromium on Linux nothing else tells them apart).
+    const vertical = await wheel({deltaY: -8});
+    expect(vertical.moved > 0 && Math.abs(vertical.zoom) < .01, `a straight two-finger scroll pans (target moved ${vertical.moved}, distance ${vertical.zoom})`);
+    await p.sleep(300); // the scroll's stream over
     const pinch = await wheel({deltaY: 20, ctrlKey: true});
     expect(pinch.zoom > 0, `pinch zooms (distance ${pinch.zoom})`);
     const mouse = await wheel({deltaY: 100});
