@@ -172,9 +172,11 @@
 .pk-toolbar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
 .pk-toolbar input[type=search] { font: inherit; font-size: 12.5px; padding: 9px 12px; border: 1px solid #d8e0e8; border-radius: 9px; background: #fff; }
 .pk-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.pk-chips button { font-size: 11.5px; padding: 5px 10px !important; min-height: 32px !important; border-radius: 16px; background: #f1f4f8; color: #55565a; }
-.pk-chips button[aria-pressed=true] { background: #253b43; color: #fff; }
-.pk-chips small { opacity: .7; margin-left: 2px; }
+.pk-chips button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 11.5px; line-height: 1; padding: 0 12px !important; min-height: 32px !important; border-radius: 16px; background: #f1f4f8; color: #55565a; }
+.pk-chips button[aria-pressed=true] { background: var(--ink); color: #fff; }
+.pk-chips small { opacity: .7; font-size: 10.5px; }
+/* The page font keeps room above Latin letters for Thai marks: in English the label sits 1px high, so it moves down. */
+html[lang=en] .pk-chips button { padding-top: 2px !important; }
 .pk-list { display: flex; flex-direction: column; }
 .pk-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 10px 8px !important; border-bottom: 1px solid var(--pk-line); border-radius: 8px; min-height: 0 !important; }
 .pk-row.is-new { background: #f1f5ff; }
