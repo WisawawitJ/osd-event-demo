@@ -386,9 +386,21 @@ export const scenarios = [
     expect(!(await p.eval('__parking.story.running')), 'touch stopped the story');
   }},
 
+  {name: 'Play the story at once after tapping Parking: the story keeps the car park', async run(p, expect) {
+    // Real speed: the flight to the car park is still on its way when Play is tapped, and the story's first camera
+    // move ends it.
+    await p.goto('?debug=1');
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.click('[data-destination="parking"]');
+    await p.until('__parking.active', {timeout: 10000});
+    await p.click('[data-bar="play"]');
+    await p.sleep(2500);
+    const r = JSON.parse(await p.eval(`JSON.stringify({story:__parking.story.running,active:__parking.active,dest:document.body.dataset.tourDestination})`));
+    expect(r.story && r.active && r.dest === 'parking', `story still playing at the car park (story ${r.story}, car park ${r.active}, stop ${r.dest})`);
+  }},
   {name: 'kiosk recovers from an idle guided story', async run(p, expect) {
-    // speed 10, not 30: the 60 s idle timeout becomes 6 s, enough room for the setup taps below under load.
-    await p.goto('?kiosk=1&debug=1&speed=10');
+    // speed 5, not 30: the 60 s idle timeout becomes 12 s, room for the setup taps and the story's first step under load.
+    await p.goto('?kiosk=1&debug=1&speed=5');
     await p.until('window.__parking && document.querySelector("#kiosk-toggle").checked', {timeout: 40000});
     await p.click('#viewport');
     await p.click('[data-destination="parking"]');
@@ -396,7 +408,7 @@ export const scenarios = [
     if (await p.eval(`document.querySelector('[data-bar="auto"]').checked`)) await p.click('[data-bar="auto"]');
     await p.click('[data-bar="play"]');
     await p.until('__parking.story.waitingForNext', {timeout: 30000, what: 'guided story waiting'});
-    await p.until(`document.body.dataset.tourDestination !== 'parking' || (__parking.story.running && __parking.story.auto)`, {timeout: 20000, what: 'loop takes over (60 s / 10)'});
+    await p.until(`document.body.dataset.tourDestination !== 'parking' || (__parking.story.running && __parking.story.auto)`, {timeout: 30000, what: 'loop takes over (60 s / 5)'});
     expect(true, 'loop resumed');
   }},
   {name: 'car park keeps living at building stops (staff cars come and go)', async run(p, expect) {
@@ -421,6 +433,32 @@ export const scenarios = [
     await p.sleep(1100);
     expect(await p.eval('__fades') === 0, `no element fades its own colours during the switch (${await p.eval('__fades')} at most)`);
   }},
+  {name: 'night: cars on the move light the road ahead; parked cars are dark', async run(p, expect) {
+    await p.goto(parking('&time=20:00'));
+    await p.until(`${ready} && document.documentElement.dataset.night === 'true'`, {timeout: 40000});
+    const lamps = c => `(c=>c.children[2].material.color.r)(${c})`;
+    const beams = `__scene.getObjectsByProperty('isSpotLight',true).filter(s=>s.name.startsWith('Demo_headlight'))`;
+    await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');window.__out=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__parking.sim.state.presence.get(k).plate);window.__still=__parking.lot.root.children.find(c=>c.name.startsWith('Demo_car_')&&c!==__out&&c.visible&&__parking.traffic.parkedKeys().some(k=>'Demo_car_'+__parking.sim.state.presence.get(k).plate===c.name));void __parking.traffic.leave(k)})()`);
+    await p.until(`(()=>{const b=${beams}.find(s=>s.intensity>0&&s.position.distanceTo(__out.position)<3);return !!b})()`, {timeout: 10000, what: 'a headlight beam on the car pulling out'});
+    expect(await p.eval(lamps('__out')) === 1, 'the leaving car has its lamps on');
+    expect(await p.eval(lamps('__still')) < .5, 'a parked car is dark');
+    expect(await p.eval(`${beams}.length === 4 && ${beams}.every(s=>s.visible&&!s.castShadow)`), 'four shadowless beams in the scene at night');
+    // Daytime: no beams in the scene, every car drawn as is.
+    await p.eval('__world.jumpTo(9*60)');
+    await p.until(`document.documentElement.dataset.night === 'false'`, {timeout: 5000, what: 'day'});
+    expect(await p.eval(`${beams}.every(s=>!s.visible)`), 'no beams in the daytime');
+    expect(await p.eval(lamps('__still')) === 1, 'parked car drawn as is in the daytime');
+  }},
+  {name: 'night: the first dusk does not freeze the view (night shaders ready from the start)', async run(p, expect) {
+    // Real speed. The night's lights (rooms, headlight beams) change the shaders; the warm-up prepares them, so the
+    // first switch draws like any frame. Before, it stalled ~1.8 s compiling and linking.
+    await p.goto('?debug=1&time=17:00&dest=parking');
+    await p.until(`${ready} && document.documentElement.dataset.warm==='done' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 40000});
+    await p.sleep(1000);
+    const worst = await p.eval(`new Promise(ok=>{let last=performance.now(),worst=0;const end=last+2500;(function f(t){worst=Math.max(worst,t-last);last=t;if(t<end)requestAnimationFrame(f);else ok(Math.round(worst));})(last);__world.jumpTo(20*60);})`);
+    expect(await p.eval(`document.documentElement.dataset.night`) === 'true', 'night');
+    expect(worst < 700, `longest frame around the first dusk: ${worst} ms`);
+  }},
   {name: 'night: switching the meeting-room light changes only that room', async run(p, expect) {
     await p.goto(`?${FAST}`);
     await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
@@ -428,7 +466,7 @@ export const scenarios = [
     await p.until("document.body.dataset.tourDestination === 'meeting' && !document.querySelector('#tour-night').disabled", {timeout: 20000});
     await p.click('#tour-night');
     await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 10000});
-    const spots = `JSON.stringify(__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.visible).map(l=>[l.userData.roomId,l.position.x.toFixed(1),l.position.z.toFixed(1),l.intensity]))`;
+    const spots = `JSON.stringify(__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.visible&&l.name.startsWith('Simulation_spot')).map(l=>[l.userData.roomId,l.position.x.toFixed(1),l.position.z.toFixed(1),l.intensity]))`;
     const before = JSON.parse(await p.eval(spots));
     await p.click('[data-control="light"]');
     await p.sleep(300);
@@ -711,6 +749,8 @@ export const scenarios = [
     await p.sleep(1000);
     const m1 = await p.eval('__world.minute()');
     expect(m1 - m0 > 20, `world time runs as a time-lapse (${m0.toFixed(0)} → ${m1.toFixed(0)} in 1 s)`);
+    // Paused from here, so a slow machine cannot run the clock on past what is checked (jumps still move it).
+    await p.eval('__world.setPaused(true)');
     // Evening: the car park empties (it is on screen at the overview, but not watched: made up at once).
     const night = JSON.parse(await p.eval(`JSON.stringify((()=>{const from=__world.now();__world.jumpTo(20*60);const to=__world.now();return {from,to,parked:__parking.sim.state.presence.size,exits:__parking.sim.state.events.filter(e=>e.kind==='exit'&&e.at>from&&e.at<=to).length}})())`));
     expect(night.parked <= 6, `car park nearly empty at 20:00 (${night.parked} cars)`);
@@ -726,7 +766,7 @@ export const scenarios = [
   {name: 'day cycle: Night/Day button, the timeline slider and moments move the world clock', async run(p, expect) {
     // Real speed (a time-lapse of 2 world minutes a second), so the clock is read close to where the jump left it.
     await p.goto('?debug=1&day=10&time=09:00');
-    await p.until(`${UP} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && !document.querySelector('#tour-night').disabled`, {timeout: 40000});
     await p.click('#tour-night');
     await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 5000, what: 'night'});
     const m = await p.eval('__world.minute()');

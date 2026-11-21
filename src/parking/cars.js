@@ -109,6 +109,14 @@ export function createCar({plate, province, color = 0}) {
   return car;
 }
 
+// Lamps and plate at night: a car with its engine on shows its lamps (and plate) bright; a parked one at night is
+// dim, as unlit paint would be. In daytime both look as drawn. Each car's plate material is its own (one per plate;
+// through-traffic shares one, and it is always on the move).
+export function setCarLamps(car, on, night) {
+  const decals = car.children[2];
+  if (decals) decals.material.color.setScalar(!night || on ? 1 : .3);
+}
+
 export function disposeCars() {
   if (!shared) return;
   for (const k of ['body', 'details', 'decals', 'blob']) shared[k].dispose();

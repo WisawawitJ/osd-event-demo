@@ -107,6 +107,10 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     light.shadow.bias = -.0004;
     light.shadow.normalBias = .025;
     light.shadow.radius = 4;
+    // In the scene from the start (hidden until night), with its shadow setting fixed: the viewer's warm-up can then
+    // compile the night's shaders before anyone sees the first dusk (main.js).
+    light.castShadow = index < shadowSpots;
+    scene.add(light, light.target);
     return light;
   });
   const worldPoint = new THREE.Vector3();
@@ -141,7 +145,6 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     lights.forEach((light, index) => {
       const emitter = candidates[index];
       light.visible = Boolean(emitter);
-      light.castShadow = Boolean(emitter) && index < shadowSpots;
       if (!emitter) return;
       const { room, position } = emitter;
       const root = floors.get(String(room.floor));

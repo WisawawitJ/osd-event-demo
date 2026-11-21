@@ -130,6 +130,8 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   const arrived=await navigate(id,{instant,onApproach:commit,onPhase(phase){if(ticket===sequence){$('#scene-chip').textContent=`${phase} → ${d.floor} · ${d.panel}`;$('#flight-status').textContent=L(`กำลังไป ${d.floor} · ${d.panel}`,`Heading to ${d.floor} · ${d.panel}`);}}});
   if(disposed||ticket!==sequence)return false;
   traveling=false;landed=Boolean(arrived);pendingDestination=null;document.querySelectorAll('[data-destination]').forEach(b=>{b.removeAttribute('aria-busy');b.setAttribute('aria-pressed',String(b.dataset.destination===(arrived||committed?id:destination)));});
+  // The parking story started on the way (its camera move ends this flight): the car park is the stop all the same.
+  if(!arrived&&!committed&&id==='parking'&&parking?.story.running)commit();
   if(!arrived&&!committed){
    $('#scene-chip').textContent=L('หยุดการบินแล้ว · หมุนสำรวจหรือเลือกจุดต่อไป','Flight stopped · orbit to explore or pick the next spot');effects.select(destination);
    if(destination==='parking'&&!parking?.active)parking?.enter();

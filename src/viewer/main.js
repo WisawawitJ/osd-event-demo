@@ -46,10 +46,14 @@ function setPageNight(night){
   const first=pageNight===null;pageNight=value;
   // No CSS transitions from now until the new look is in place (the night button's own pressed state included).
   root.classList.add('theme-switch');
-  const apply=()=>{root.dataset.night=pageNight;requestAnimationFrame(()=>requestAnimationFrame(()=>root.classList.remove('theme-switch')));};
+  let applied=false;
+  const apply=()=>{applied=true;root.dataset.night=pageNight;requestAnimationFrame(()=>requestAnimationFrame(()=>root.classList.remove('theme-switch')));};
   if(first||!document.startViewTransition||matchMedia('(prefers-reduced-motion: reduce)').matches){apply();return;}
   // A switch made while another is still starting replaces it; the skipped one only rejects its promises.
   const transition=document.startViewTransition(apply);transition.ready.catch(()=>{});transition.finished.catch(()=>{});transition.updateCallbackDone.catch(()=>{});
+  // The cross-fade starts at the browser's next frame; if that is slow to come (a busy or idle page), the new look
+  // goes in without it rather than late.
+  setTimeout(()=>{if(!applied)transition.skipTransition();},250);
 }
 // Texts follow the saved TH/EN choice on both pages (the showcase can also switch while open).
 const L=(th,en)=>getLang()==='en'?en:th;
@@ -523,7 +527,7 @@ try {
        parking=parkingModule.createParking({scene,schedule,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
        parking.lot.root.visible=renderKit.ground.visible;
        if(new URLSearchParams(location.search).has('debug'))window.__parking=parking;
-       simulation.subscribe(()=>parking.setNight(simulation.getState().night));
+       parking.setNight(simulation.getState().night);simulation.subscribe(()=>parking.setNight(simulation.getState().night));
        // Camera poses aimed at the real objects: the pond, the roof's solar panels and the entrance barrier. The
        // original hard-coded targets sat 4–5 m off them; the viewing angles and distances are kept.
        function objectPoses(){
@@ -602,6 +606,12 @@ try {
         let forcing=0;const forced=fn=>{forcing++;try{return fn();}finally{forcing--;}};
         scene.traverse(object=>{if(object.visible||object.isLight)return;const state={wanted:false,forced:true};hidden.push([object,state]);
          Object.defineProperty(object,'visible',{configurable:true,enumerable:true,get:()=>forcing?state.forced:state.wanted,set:value=>{if(forcing)state.forced=value;else state.wanted=value;}});});
+        // The night's lights (the rooms' spot lights and the headlight beams) change the number of lights, so the
+        // shaders for the other half of the day are compiled here too: the first dusk (or dawn) then does not freeze
+        // the view for a second and a half. They keep their current state, and swap only for the last compile.
+        const nightLights=[];
+        scene.traverse(object=>{if(!object.isSpotLight||!/^(Simulation_spot_|Demo_headlight_beam_)/.test(object.name))return;const state={wanted:object.visible,forced:object.visible};nightLights.push([object,state]);
+         Object.defineProperty(object,'visible',{configurable:true,enumerable:true,get:()=>forcing?state.forced:state.wanted,set:value=>{if(forcing)state.forced=value;else state.wanted=value;}});});
         const target=new THREE.WebGLRenderTarget(16,16);
         const drawOffscreen=()=>forced(()=>{const previous=renderer.getRenderTarget();renderer.shadowMap.needsUpdate=true;renderer.setRenderTarget(target);renderer.render(scene,camera);renderer.setRenderTarget(previous);});
         const setTransparent=value=>{for(const material of opaque){material.transparent=value;material.needsUpdate=true;}};
@@ -613,9 +623,17 @@ try {
          setTransparent(true);
          await forced(()=>renderer.compileAsync(scene,camera));
          drawOffscreen();
+         setTransparent(false);
+         for(const [,state] of nightLights)state.forced=!state.wanted;
+         await forced(()=>renderer.compileAsync(scene,camera));
+         drawOffscreen();
+         // Off-screen frames use other shader variants (linear colour, no tone mapping) than the canvas: the canvas's
+         // own are first used, and finish linking, in one frame drawn to the screen clipped to a single pixel, which
+         // the next real frame covers.
+         forced(()=>{renderer.shadowMap.needsUpdate=true;renderer.setScissorTest(true);renderer.setScissor(0,0,1,1);try{renderer.render(scene,camera);}finally{renderer.setScissorTest(false);}});
         })().catch(()=>{}).finally(()=>{
          setTransparent(false);
-         for(const [object,state] of hidden)Object.defineProperty(object,'visible',{configurable:true,enumerable:true,writable:true,value:state.wanted});
+         for(const [object,state] of [...hidden,...nightLights])Object.defineProperty(object,'visible',{configurable:true,enumerable:true,writable:true,value:state.wanted});
          warming=false;
          status.dataset.state='ready';status.textContent=L('โมเดลพร้อมแสดง','Model ready');
          target.dispose();renderer.shadowMap.needsUpdate=true;document.documentElement.dataset.warm='done';schedule();
@@ -667,7 +685,7 @@ try {
        const {createParkingScene}=await import('osd/parking/index.js');
        parking=createParkingScene({scene,schedule});
        parking.lot.root.visible=renderKit.ground.visible;
-       simulation.subscribe(()=>parking.setNight(simulation.getState().night));
+       parking.setNight(simulation.getState().night);simulation.subscribe(()=>parking.setNight(simulation.getState().night));
       }
     } catch (error) {
       if (error.name !== 'AbortError' && !disposed) fail(L('โหลดโมเดลไม่สำเร็จ ตรวจสอบไฟล์โมเดล แล้วลองโหลดใหม่','Could not load the model. Check the model file, then reload.'));

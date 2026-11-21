@@ -1,6 +1,7 @@
 // Car movement and the gate sequence. Routes are built from straight lines and arcs ("turtle" style),
 // so turns look like real cornering. Heading h means forward = (sin h, cos h) in (x, z).
-import {createCar} from './cars.js';
+import * as THREE from 'osd/node_modules/three/build/three.module.js';
+import {createCar, setCarLamps} from './cars.js';
 import {DRIVE, GATE, STREET, groundY} from './layout.js';
 import {SPEED, demoNow, isPaused} from './clock.js';
 
@@ -118,9 +119,50 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   function makeAgent({plate, province, type, color}) {
     const car = createCar({plate, province, color});
     lot.root.add(car);
-    return {car, plate, province, type, color};
+    const agent = {car, plate, province, type, color, lit: false};
+    live.add(agent); updateLamps();
+    return agent;
   }
-  const removeAgent = agent => agent.car.removeFromParent();
+  const removeAgent = agent => { agent.car.removeFromParent(); live.delete(agent); };
+
+  // Headlights. At night every car with its engine running (on the move, queuing or waiting at the barrier) has its
+  // lamps on, and the BEAMS of them nearest the gate also light the road with a spot light; parked cars are dark.
+  // The spot lights are a fixed pool without shadows, in the scene only at night (like the rooms' lights), so the
+  // number of lights, and with it the shaders, changes only at dusk and dawn.
+  const BEAMS = 4, BEAM = {intensity: 70, distance: 26, angle: .52, penumbra: .65, decay: 1.5};
+  const live = new Set();
+  let night = false;
+  const beams = Array.from({length: BEAMS}, (_, i) => {
+    const s = new THREE.SpotLight(0xffefc8, 0, BEAM.distance, BEAM.angle, BEAM.penumbra, BEAM.decay);
+    s.name = `Demo_headlight_beam_${i + 1}`; s.visible = false;
+    lot.root.add(s, s.target);
+    return s;
+  });
+  const lampFrom = new THREE.Vector3(0, .72, 2.3), lampTo = new THREE.Vector3(0, 0, 14);
+  const parked = a => Boolean(a.stall) && !a.leaving && !movers.has(a.mover);
+  const fromGate = a => Math.hypot(a.car.position.x - GATE.entryX, a.car.position.z - GATE.z);
+  function updateLamps() {
+    const lit = [];
+    for (const a of live) {
+      const on = night && a.car.visible && !parked(a);
+      if (on !== a.lit) { a.lit = on; setCarLamps(a.car, on, night); }
+      if (on) lit.push(a);
+    }
+    lit.sort((p, q) => fromGate(p) - fromGate(q));
+    beams.forEach((s, i) => {
+      const a = lit[i];
+      s.visible = night; s.intensity = a ? BEAM.intensity : 0;
+      if (!a) return;
+      s.position.copy(lampFrom).applyMatrix4(a.car.matrix);
+      s.target.position.copy(lampTo).applyMatrix4(a.car.matrix);
+    });
+  }
+  function setNight(value) {
+    night = Boolean(value);
+    // Parked cars' plates and lamps dim at night even though their lamps stay off.
+    for (const a of live) { a.lit = night && a.car.visible && !parked(a); setCarLamps(a.car, a.lit, night); }
+    updateLamps(); schedule();
+  }
   function guard(agent, fn) {
     return fn().catch(error => { removeAgent(agent); if (error !== ABORT) throw error; return 'aborted'; });
   }
@@ -141,7 +183,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     arriving.clear(); streetCars.clear();
     lot.setBoom(false); kick();
     for (const k of sim.state.presence.keys()) parkCar(k);
-    refreshBays();
+    refreshBays(); updateLamps();
     schedule();
   }
   function parkCar(k) {
@@ -357,6 +399,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
       }
     }
     for (const m of movers) place(m.agent, sample(m.route, m.s), m.reverse);
+    if (night) updateLamps();
     schedule();
     // Chain straight to the next frame: going through kick() reset `last` to now and lost the time spent in this
     // frame, so cars moved only ~75% as fast, and slower still whenever the page was busy (scrolling, zooming out).
@@ -364,7 +407,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   }
 
   return {
-    syncParked, arrive, leave, passBy, refreshBays,
+    syncParked, arrive, leave, passBy, refreshBays, setNight,
     // A manual open with no car read: one pulse, held briefly, then closed.
     pulse(holdMs = 5000) { const gen = generation; return withGate(async () => { await openBoom(gen); await wait(holdMs, gen); await closeBoom(gen); }).catch(() => {}); },
     parkedKeys: () => [...agents.entries()].filter(([, a]) => !a.leaving && a.stall).map(([k]) => k),

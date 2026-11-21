@@ -359,7 +359,7 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
     // Runs the story once (the showcase loop calls this) and resolves when it ends or stops.
     playStory({auto = true} = {}) { world.setPaused(false); story.setAuto(auto); return story.play({auto}); },
     stopStory() { story.stop(); },
-    setNight(night) { lot.setNight(night); },
+    setNight(night) { lot.setNight(night); traffic.setNight(night); },
     toggleLang() { setLang(getLang() === 'en' ? 'th' : 'en'); },
     setInteractHandler(fn) { interactHandler = fn; },
     dispose() { afterRender?.delete(drawLiveFeed); story.stop(); stopLife(); cancelLater(passTimer); clearInterval(autoDeny); lot.dispose(); disposeCars(); },
@@ -382,7 +382,7 @@ export function createParkingScene({scene, schedule}) {
     leave() { const keys = leavingCandidates(sim, traffic, {staffOnly: true}); if (keys.length) traffic.leave(pickOne(keys)); }});
   return {
     lot, sim, traffic,
-    setNight(night) { lot.setNight(night); },
+    setNight(night) { lot.setNight(night); traffic.setNight(night); },
     dispose() { stopLife(); for (const handle of Object.values(timers)) cancelLater(handle); lot.dispose(); disposeCars(); },
   };
 }

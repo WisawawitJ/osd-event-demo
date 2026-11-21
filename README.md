@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (58), about 55 s
+npm test                 # all behaviour checks (61), about 60 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -58,6 +58,10 @@ morning, noon, dusk and night. On the timeline, **Pause** freezes everything (cl
 scenarios and the idle orbit; the camera can still be moved) until **Resume**, Follow the day, Start tour or the story's
 Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 
+- **Headlights:** at night cars with the engine on (driving, queuing, at the barrier) have their lamps lit, and the
+  four nearest the gate light the road ahead with real spot lights (a fixed pool without shadows, only at night);
+  parked cars and their plates are dark. The start-up warm-up prepares the night's shaders too, so the first dusk
+  does not freeze the view.
 - **Sky:** the sun crosses the building, low and warm in the early morning and late afternoon; at night a dim moonlight
   carries on along the same path, so shadows turn smoothly all day and never jump (not at dusk, dawn or midnight). Room lights, car-park lamps
   and the dark page come on after sunset (about 18:05) and go off before sunrise.
