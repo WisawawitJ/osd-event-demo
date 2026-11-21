@@ -264,7 +264,7 @@
 .pk-audit small { color: var(--muted); font-size: 10.5px; }
 
 /* Plate-camera feed overlay */
-.pk-feed { position: absolute; right: 20px; top: 62px; width: min(330px, 40%); background: #0f1720; color: #e6edf3; border-radius: 13px; overflow: hidden; box-shadow: 0 12px 34px #0f172033; pointer-events: auto; animation: pk-in .25s ease-out; }
+.pk-feed { position: absolute; right: var(--corner-right, 20px); top: var(--corner-free, 62px); transition: top .2s; width: min(330px, 40%); background: #0f1720; color: #e6edf3; border-radius: 13px; overflow: hidden; box-shadow: 0 12px 34px #0f172033; pointer-events: auto; animation: pk-in .25s ease-out; }
 .pk-feed-head { display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 7px 10px; color: #b7c4d1; }
 .pk-feed-head span { display: flex; align-items: center; gap: 6px; }
 .pk-feed-head time { font-variant-numeric: tabular-nums; }

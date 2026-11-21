@@ -333,9 +333,11 @@ export const scenarios = [
     await p.until(ready, {timeout: 40000});
     await p.eval(`(()=>{const s=__parking.sim;s.recordEntry({plate:'4ศย 5150',province:'ปทุมธานี',type:'unknown',stallId:s.freeStall('staff').id,color:1,manual:{by:'staff.name',reason:'gate.reason.delivery'}})})()`);
     await p.click('[data-tab="gate"]');
+    // Counted before the presses: the background traffic may already have this plate on its way to the gate.
+    const cars = `__parking.lot.root.children.filter(c=>c.name==='Demo_car_4ศย 5150').length`, before = await p.eval(cars);
     for (let i = 0; i < 10; i++) await p.click('[data-sim="unknown"]');
     await p.sleep(300);
-    expect(await p.eval(`__parking.lot.root.children.filter(c=>c.name==='Demo_car_4ศย 5150').length`) === 0, 'parked unknown plate not sent again');
+    expect(await p.eval(cars) === before, `parked unknown plate not sent again (${before} → ${await p.eval(cars)} cars)`);
   }},
 
   {name: 'calendar invite is an arrival-day reminder', async run(p, expect) {
@@ -1462,6 +1464,22 @@ export const scenarios = [
     expect(pinch.zoom > 0, `pinch zooms (distance ${pinch.zoom})`);
     const mouse = await wheel({deltaY: 100});
     expect(mouse.zoom > 0, `a mouse wheel notch zooms (distance ${mouse.zoom})`);
+  }},
+  {name: 'the plate camera card sits up in the corner, below the corner\'s text only when there is some', async run(p, expect) {
+    // It always left room for the corner's room-colours bar and flight status, so at the car park, where both are
+    // usually empty, it hung below an empty gap.
+    await p.goto(parking());
+    await p.until(`${ready} && ${STILL}`, {timeout: 40000});
+    await p.eval(`void __parking.traffic.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:5,fromX:-40})`);
+    await p.until(`!!document.querySelector('.pk-feed:not([hidden])')`, {timeout: 30000, what: 'the plate camera card'});
+    await p.eval('__world.setPaused(true)');
+    const top = sel => `Math.round(document.querySelector('${sel}').getBoundingClientRect().top)`;
+    expect(Math.abs(await p.eval(top('.pk-feed')) - await p.eval(top('.scene-title'))) <= 1, 'level with the stop\'s title card when the corner is empty');
+    await p.eval(`document.querySelector('#flight-status').textContent='Heading to the car park'`);
+    await p.sleep(300);
+    const r = JSON.parse(await p.eval(`JSON.stringify({feed:document.querySelector('.pk-feed').getBoundingClientRect().top,text:document.querySelector('#flight-status').getBoundingClientRect().bottom})`));
+    expect(r.feed >= r.text, `below the corner's text when there is some (card ${Math.round(r.feed)}, text ends ${Math.round(r.text)})`);
+    await p.eval(`document.querySelector('#flight-status').textContent='';__world.setPaused(false)`);
   }},
   {name: 'metric pairs stay aligned when one label wraps', async run(p, expect) {
     await p.goto(`?${FAST}`);

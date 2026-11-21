@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (146), about 100 s: run before a commit
+npm test                 # all behaviour checks (147), about 100 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```

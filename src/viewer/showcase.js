@@ -227,6 +227,13 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
  // Night and day are the world clock's: the button moves it on to 20:00, or to 07:30.
  listen($('#tour-night'),'click',()=>{stopFollowing();if(parking?.story.running)parking.stopStory();insights?.jumpTo(simulation.getState().night?7*60+30:20*60);});
  const unsubscribe=simulation.subscribe(()=>render());
+ // The car park's plate camera card sits in the view's top-right corner, under what the corner shows (the room colours
+ // bar, the flight's status) or, when it shows nothing, level with the stop's title card (it waited below an empty gap).
+ const corner=$('.scene-top-right'),stage=$('#viewport'),titleCard=$('.scene-title');
+ const placeCornerCard=()=>{const v=stage.getBoundingClientRect(),c=corner.getBoundingClientRect();
+  stage.style.setProperty('--corner-free',`${Math.round((c.height<1?titleCard.getBoundingClientRect().top:c.bottom+8)-v.top)}px`);
+  stage.style.setProperty('--corner-right',`${Math.round(v.right-c.right)}px`);};
+ const cornerSize=new ResizeObserver(placeCornerCard);cornerSize.observe(corner);cornerSize.observe(stage);signal.addEventListener('abort',()=>cornerSize.disconnect(),{once:true});
  simulation.setInteractionFilter(room=>!traveling&&destination==='meeting'&&room.id===meetingId);
  listen(document,'visibilitychange',()=>{if(document.hidden){stopTour(['พักการพาชมเมื่อออกจากหน้านี้','Tour paused while you were away']);stopScenario();cancelFlight();render();}});
  onUserOrbit(()=>{stopFollowing();stopTour(['กำลังสำรวจด้วยตัวเอง','Exploring on your own']);cancelFlight();});
