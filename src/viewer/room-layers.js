@@ -5,7 +5,7 @@ export function createRoomLayers({model,rooms,schedule}){
  const publicIds=new Map(rooms.map(r=>[r.layoutId??r.id,r.id])),roomFloors=new Map(rooms.map(r=>[r.id,String(r.floor)])),overlays=[];
  const floors=[];model.traverse(o=>{if(o.isMesh&&o.userData.type==='floor'&&publicIds.has(o.userData.room))floors.push(o);});
  for(const floor of floors){
-  const material=new MeshBasicMaterial({color:'#65bbaa',transparent:true,opacity:.48,depthWrite:false,side:DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2,toneMapped:false});
+  const material=new MeshBasicMaterial({color:'#65bbaa',transparent:true,opacity:.48,depthWrite:false,side:DoubleSide,forceSinglePass:true,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2,toneMapped:false});
   const overlay=new Mesh(floor.geometry,material);const room=publicIds.get(floor.userData.room);overlay.name=`Insight_floor_${room}`;overlay.userData.insightRoom=room;
   overlay.position.copy(floor.position);overlay.position.y+=.012;overlay.quaternion.copy(floor.quaternion);overlay.scale.copy(floor.scale);overlay.renderOrder=2;overlay.visible=false;overlay.raycast=()=>{};
   floor.parent.add(overlay);overlays.push(overlay);

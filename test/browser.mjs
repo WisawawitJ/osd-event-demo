@@ -25,33 +25,51 @@ function freePort() {
 async function startServer() {
   const port = await freePort();
   const child = spawn(process.execPath, [join(root, 'scripts/serve.mjs'), String(port)], {stdio: 'ignore'});
-  for (let i = 0; i < 50; i++) { try { await fetch(`http://127.0.0.1:${port}/`); return {url: `http://127.0.0.1:${port}/`, stop: () => child.kill()}; } catch {} await sleep(100); }
-  child.kill();
+  running.add(child);
+  const stop = () => { child.kill(); running.delete(child); };
+  for (let i = 0; i < 50; i++) { try { await fetch(`http://127.0.0.1:${port}/`); return {url: `http://127.0.0.1:${port}/`, stop}; } catch {} await sleep(100); }
+  stop();
   throw new Error('test server did not start');
 }
+
+// Browsers and servers still running when the runner exits or is interrupted are killed: a left-over headless page
+// keeps drawing the demo at full speed and slowed (and hung) later runs on the same GPU.
+const running = new Set();
+process.on('exit', () => { for (const chrome of running) chrome.kill('SIGKILL'); });
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => process.exit(130));
 
 async function startBrowser(flags, profileRoot) {
   const port = await freePort();
   const profile = mkdtempSync(join(profileRoot, 'chrome-'));
   const chrome = spawn(process.env.CHROMIUM || 'chromium', ['--headless=new', '--no-sandbox', '--hide-scrollbars', '--window-size=1600,1000', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, ...flags, 'about:blank'], {stdio: 'ignore'});
-  let target;
-  for (let i = 0; i < 80 && !target; i++) { try { target = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find(t => t.type === 'page'); } catch {} if (!target) await sleep(100); }
-  if (!target) { chrome.kill('SIGKILL'); throw new Error('chromium did not start'); }
-  const ws = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((ok, fail) => { ws.addEventListener('open', ok); ws.addEventListener('error', fail); });
-  let id = 0;
-  const pending = new Map(), logs = [];
-  ws.addEventListener('message', e => {
-    const m = JSON.parse(e.data);
-    if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-    else if (m.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(m.params.type)) logs.push(`[${m.params.type}] ${m.params.args.map(a => a.value ?? a.description).join(' ')}`);
-    else if (m.method === 'Runtime.exceptionThrown') logs.push(`[exception] ${m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text}`);
-  });
-  const send = (method, params = {}) => new Promise(ok => { const i = ++id; pending.set(i, ok); ws.send(JSON.stringify({id: i, method, params})); });
-  await send('Runtime.enable');
-  await send('Page.enable');
-  await send('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false});
-  return {send, logs, close() { ws.close(); chrome.kill('SIGKILL'); try { rmSync(profile, {recursive: true, force: true}); } catch {} }};
+  running.add(chrome);
+  let ws = null;
+  const close = () => { ws?.close(); chrome.kill('SIGKILL'); running.delete(chrome); try { rmSync(profile, {recursive: true, force: true}); } catch {} };
+  try {
+    let target;
+    for (let i = 0; i < 80 && !target; i++) { try { target = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find(t => t.type === 'page'); } catch {} if (!target) await sleep(100); }
+    if (!target) throw new Error('chromium did not start');
+    ws = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((ok, fail) => { ws.addEventListener('open', ok); ws.addEventListener('error', fail); });
+    let id = 0;
+    const pending = new Map(), logs = [];
+    ws.addEventListener('message', e => {
+      const m = JSON.parse(e.data);
+      if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
+      else if (m.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(m.params.type)) logs.push(`[${m.params.type}] ${m.params.args.map(a => a.value ?? a.description).join(' ')}`);
+      else if (m.method === 'Runtime.exceptionThrown') logs.push(`[exception] ${m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text}`);
+    });
+    // A call that gets no answer (a hung page or GPU process) fails the check instead of hanging the whole run.
+    const send = (method, params = {}) => new Promise((ok, fail) => {
+      const i = ++id, timer = setTimeout(() => { pending.delete(i); fail(new Error(`DevTools ${method} got no answer in 90 s`)); }, 90000);
+      pending.set(i, m => { clearTimeout(timer); ok(m); });
+      ws.send(JSON.stringify({id: i, method, params}));
+    });
+    await send('Runtime.enable');
+    await send('Page.enable');
+    await send('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false});
+    return {send, logs, close};
+  } catch (error) { close(); throw error; } // a browser that started but does not answer is not left running
 }
 
 // Opens a browser and server. `gpu` is a GPU_MODES key or 'auto' (first mode that gives hardware WebGL).
@@ -62,13 +80,17 @@ export async function open({gpu = process.env.GPU || 'auto', shots = join(root, 
   const server = await startServer();
   const modes = gpu === 'auto' ? Object.keys(GPU_MODES) : [gpu];
   let browser, renderer = '';
-  for (const mode of modes) {
-    browser = await startBrowser(GPU_MODES[mode], profileRoot);
-    renderer = (await browser.send('Runtime.evaluate', {expression: `(()=>{const g=document.createElement('canvas').getContext('webgl2');const d=g&&g.getExtension('WEBGL_debug_renderer_info');return g?(d?g.getParameter(d.UNMASKED_RENDERER_WEBGL):'webgl2'):''})()`, returnByValue: true})).result?.result?.value || '';
-    const hardware = renderer && !/swiftshader|llvmpipe|software/i.test(renderer);
-    if (hardware || mode === 'software' || gpu !== 'auto') { renderer = `${mode}: ${renderer || 'no WebGL'}`; break; }
-    browser.close();
-  }
+  // A browser that fails to start or answer leaves nothing running behind the error.
+  try {
+    for (const mode of modes) {
+      browser = null;
+      browser = await startBrowser(GPU_MODES[mode], profileRoot);
+      renderer = (await browser.send('Runtime.evaluate', {expression: `(()=>{const g=document.createElement('canvas').getContext('webgl2');const d=g&&g.getExtension('WEBGL_debug_renderer_info');return g?(d?g.getParameter(d.UNMASKED_RENDERER_WEBGL):'webgl2'):''})()`, returnByValue: true})).result?.result?.value || '';
+      const hardware = renderer && !/swiftshader|llvmpipe|software/i.test(renderer);
+      if (hardware || mode === 'software' || gpu !== 'auto') { renderer = `${mode}: ${renderer || 'no WebGL'}`; break; }
+      browser.close();
+    }
+  } catch (error) { browser?.close(); server.stop(); throw error; }
   const {send, logs} = browser;
   let shot = 0;
   const page = {
@@ -81,11 +103,13 @@ export async function open({gpu = process.env.GPU || 'auto', shots = join(root, 
       if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text);
       return r.result?.result?.value;
     },
-    // Polls a page expression until it is truthy; throws with `what` on timeout.
+    // Polls a page expression until it is truthy; throws with `what` on timeout. An expression that throws counts as
+    // not yet (a page still loading has no document element or app objects); the last error is shown on timeout.
     async until(expression, {timeout = 30000, what = expression} = {}) {
       const end = Date.now() + timeout;
-      while (Date.now() < end) { if (await page.eval(expression)) return; await sleep(100); }
-      throw new Error(`timed out waiting for ${what}`);
+      let error = null;
+      while (Date.now() < end) { try { if (await page.eval(expression)) return; error = null; } catch (e) { error = e; } await sleep(100); }
+      throw new Error(`timed out waiting for ${what}${error ? ` (last error: ${error.message.split('\n')[0]})` : ''}`);
     },
     // Like a real tap: pointer events first (the booth's idle timer listens for them), then the click.
     async click(selector) { const r = await page.eval(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const o={bubbles:true,cancelable:true,pointerId:1,pointerType:'mouse',isPrimary:true};e.dispatchEvent(new PointerEvent('pointerdown',{...o,buttons:1}));e.dispatchEvent(new PointerEvent('pointerup',o));e.click();return true})()`); if (!r) throw new Error(`no element ${selector}`); },

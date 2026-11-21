@@ -1,8 +1,7 @@
 // The guided parking story: one visitor from request to exit, plus an unknown car.
 // Auto mode advances by itself; guided mode waits for Next or for the presenter to click the cued button.
-import {t} from './i18n.js';
+import {t, bkk} from './i18n.js';
 import {STORY} from './sim.js';
-import {bkk} from './i18n.js';
 import {SPEED} from './clock.js';
 
 const ABORT = Symbol('story-abort');

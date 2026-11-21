@@ -65,7 +65,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   const agents = new Map(); // presence key -> parked (or leaving) agent
   const movers = new Set();
   const ambientCars = new Set();
-  let gateQueue = Promise.resolve(), entryLane = Promise.resolve(), exitLane = Promise.resolve();
+  let gateQueue = Promise.resolve(), entryLane = Promise.resolve(), entryShown = Promise.resolve(), exitLane = Promise.resolve();
   let generation = 0, frame = 0, last = 0;
   // Street discipline: through-traffic keeps one speed per lane, yields to cars joining the eastbound lane,
   // and does not spawn into it while a car is driving up to the gate or pulling out.
@@ -135,7 +135,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     for (const m of [...movers]) { movers.delete(m); m.resolve(); }
     for (const a of [...agents.values(), ...ambientCars]) removeAgent(a);
     agents.clear(); ambientCars.clear();
-    gateQueue = entryLane = exitLane = Promise.resolve();
+    gateQueue = entryLane = entryShown = exitLane = Promise.resolve();
     entryPending = streetArrivals = exitingStreet = eastHold = gateHolders = 0;
     boomCommand++;
     arriving.clear(); streetCars.clear();
@@ -174,9 +174,12 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     const agent = makeAgent({plate, province, type: 'unknown', color});
     agent.car.visible = false;
     const k = sim.key(plate, province);
-    let resolveLane, released = false, onStreet = false, joined = false;
-    const previous = entryLane;
+    let resolveLane, resolveShown, released = false, onStreet = false, joined = false;
+    const previous = entryLane, previousShown = entryShown;
     entryLane = new Promise(r => { resolveLane = r; });
+    // Cars appear in arrival order: a later car holding at the queue point could otherwise stand on the spawn point
+    // of an earlier one still waiting for a gap, and each would wait for the other.
+    entryShown = new Promise(r => { resolveShown = r; });
     const ahead = entryPending++;
     arriving.add(k);
     // Counters belong to the run that raised them: after a reset they start from zero and must stay there.
@@ -197,11 +200,12 @@ export function createTraffic({lot, sim, schedule, hooks}) {
         const holdX = -33 - 6.5 * Math.max(0, ahead - 1);
         const queue = ahead > 0 && holdX > fromX + 2;
         if (ahead > 0 && !queue) { await previous; alive(); }
+        await previousShown; alive();
         // Appear only once the spawn point is clear of through-traffic and of the previous arrival.
         await eastGap(fromX - 14, fromX + 30, gen);
         await waitFor(() => eastClear(fromX - 14, fromX + 30) && streetClear(fromX - 6, fromX + 9), gen);
         place(agent, {x: fromX, z: STREET.laneEast, h: EAST});
-        agent.car.visible = true;
+        agent.car.visible = true; resolveShown();
         onStreet = true; streetArrivals++; streetCars.add(agent);
         if (queue) {
           await drive(agent, streetToHold(fromX, holdX), {startMoving: fromX > -90}, gen);
@@ -249,7 +253,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
         schedule();
         return passage.result;
       } finally {
-        releaseLane(); offStreet();
+        resolveShown(); releaseLane(); offStreet();
         if (gen === generation) { arriving.delete(k); if (joined) exitingStreet--; }
       }
     });

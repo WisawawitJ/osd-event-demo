@@ -60,6 +60,20 @@ export const scenarios = [
     expect(audit === 'gate.reason.delivery', `audit has the reason (got ${audit})`);
   }},
 
+  {name: 'a later arrival never blocks the spawn point of an earlier one still waiting for a gap', async run(p, expect) {
+    await p.goto('?dest=parking&debug=1&speed=10');
+    await p.until(ready, {timeout: 40000});
+    // An eastbound through car just short of x=-40: car A (spawning at -40) waits for it to pass; car B, arriving
+    // next from -60, gets its gap first. B used to appear first, drive to the queue point at -33 (on A's spawn
+    // point) and wait there for A, which waited for B to move.
+    await p.until(`(__parking.traffic.passBy(1), !!(window.__thru = __parking.lot.root.children.find(c => c.name === 'Demo_car_' && c.visible && Math.abs(c.position.z - 24.5) < .3 && c.position.x < -60)))`, {timeout: 20000, what: 'an eastbound through car'});
+    await p.until(`__thru.position.x > -48`, {timeout: 20000, what: 'the through car near x=-40'});
+    await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const [a,b]=__parking.sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(__parking.sim.key(v.plate,v.province)));
+      const before=new Set(__parking.lot.root.children);void __parking.traffic.arrive({plate:a.plate,province:a.province,color:a.color,fromX:-40});const ca=__parking.lot.root.children.find(c=>!before.has(c));
+      void __parking.traffic.arrive({plate:b.plate,province:b.province,color:b.color,fromX:-60});window.__pair=[ca,__parking.lot.root.children.find(c=>!before.has(c)&&c!==ca)]})()`);
+    await p.until(`__pair.every(c=>c.visible&&c.position.z<15)`, {timeout: 30000, what: 'both cars through the gate (hidden cars have not appeared yet)'});
+    expect(true, 'both arrivals reached the car park');
+  }},
   {name: 'reset cancels queued traffic', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
@@ -139,6 +153,223 @@ export const scenarios = [
     await p.goto(`?explore=1&${FAST}#explore`);
     await p.until("document.querySelector('#status')?.dataset.state === 'ready'", {timeout: 40000, what: 'model ready'});
     expect(await p.eval(`document.querySelector('.back-link')?.getAttribute('href')`) === '#showcase', 'back link to the showcase');
+    expect(await p.eval(`!document.querySelector('a[download]')`), 'no model download link (the demo runs locally)');
+  }},
+
+  {name: 'explore page follows the English choice', async run(p, expect) {
+    await p.goto(`?explore=1&${FAST}#explore`);
+    await p.eval(`localStorage.setItem('osd-demo-language','en')`);
+    try {
+      await p.eval('location.reload()');
+      await p.sleep(300);
+      await p.until("document.querySelector('#status')?.dataset.state === 'ready'", {timeout: 40000, what: 'model ready'});
+      await p.eval(`document.querySelector('.simulation-details').open=true`);
+      // Every visible text, the room list included, is English (the device map's Thai room names are translated).
+      const thai = await p.eval(`(()=>{const out=new Set();const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){const t=n.textContent.trim(),el=n.parentElement;if(/[\u0E00-\u0E7F]/.test(t)&&el&&(el.offsetParent!==null||el.tagName==='OPTION'))out.add(t.slice(0,40));}
+        for(const el of document.querySelectorAll('[aria-label]'))if(/[\u0E00-\u0E7F]/.test(el.getAttribute('aria-label')))out.add('aria: '+el.getAttribute('aria-label').slice(0,40));return [...out].join(' | ')})()`);
+      expect(!thai, `no Thai on the English explore page (found: ${thai})`);
+    } finally { await p.eval(`localStorage.setItem('osd-demo-language','th')`); }
+  }},
+
+  {name: 'static building still moves where it should: exploded floors and swinging door leaves', async run(p, expect) {
+    // The building's matrices are composed once at load (main.js); floors and door hinges must still move on screen.
+    await p.goto(`?explore=1&${FAST}#explore`);
+    await p.until("document.querySelector('#status')?.dataset.state === 'ready'", {timeout: 40000, what: 'model ready'});
+    const floorY = `(()=>{let m;__scene.getObjectByName('Floor_3').traverse(o=>{if(!m&&o.isMesh)m=o});return m.matrixWorld.elements[13]})()`;
+    const y0 = await p.eval(floorY);
+    await p.click('#explode'); await p.sleep(300);
+    const y1 = await p.eval(floorY);
+    expect(Math.abs(y1 - y0 - 5) < .01, `floor 3 drawn 5 m higher when exploded (moved ${(y1 - y0).toFixed(2)} m)`);
+    await p.click('#explode'); await p.sleep(300);
+    const leaf = `(()=>{let l;__scene.traverse(o=>{if(!l&&o.isMesh&&o.parent?.userData.doorId)l=o});return l.matrixWorld.elements.slice(0,3).map(v=>v.toFixed(3)).join()})()`;
+    const before = await p.eval(leaf);
+    await p.eval(`(()=>{let h;__scene.traverse(o=>{if(!h&&o.isMesh&&o.parent?.userData.doorId)h=o.parent});h.rotation.y+=1;__controls.dispatchEvent({type:'change'})})()`); // ask for a frame: nothing else may be drawing
+    await p.sleep(300);
+    expect(await p.eval(leaf) !== before, 'a door leaf turns with its hinge');
+  }},
+
+  {name: 'approval follow-ups (ATOM sync, ticket email) are dropped after a revoke or a reset', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    const due = 1600 / SPEED + 400; // the follow-ups come ~1.6 s of demo time after the approval
+    const kinds = await p.eval(`(async()=>{const s=__parking.sim,q=s.state.requests.find(q=>q.status==='pending');s.approve(q.id);s.revoke(q.id);
+      await new Promise(r=>setTimeout(r,${due}));return s.state.emails.filter(m=>m.requestId===q.id).map(m=>m.kind).join()})()`);
+    expect(kinds === 'revoked', `a revoked request gets only the revoke email (${kinds})`);
+    const late = await p.eval(`(()=>{const q=__parking.sim.state.requests.find(q=>q.status==='revoked');return q.history.map(h=>h.key).join()+' | listed: '+__parking.sim.state.vehicles.some(v=>v.requestId===q.id)})()`);
+    expect(!late.includes('h.atom') && late.endsWith('listed: false'), `no ATOM confirmation after the revoke, plate withdrawn (${late})`);
+    await p.eval(`(()=>{const s=__parking.sim;s.reset();const q=s.state.requests.find(q=>q.status==='pending');s.approve(q.id);s.reset()})()`);
+    await p.sleep(due);
+    expect(await p.eval('__parking.sim.state.emails.length') === 0, `no email from before the reset (${await p.eval('__parking.sim.state.emails.length')})`);
+  }},
+
+  {name: 'story started during a free-play photo read submits the story plate', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.click('[data-bar="phone"]');
+    await p.click('[data-ph="photo"]'); // free play: reads a sample plate after ~1.5 s
+    await p.click('[data-bar="play"]');
+    await p.until(`__parking.sim.state.requests.some(q=>q.visitor.name===${JSON.stringify(VISITOR)})`, {timeout: 40000, what: 'story request submitted'});
+    const plate = await p.eval(`__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)}).plate`);
+    expect(plate === STORY_PLATE, `story request has the story plate (${plate})`);
+  }},
+
+  {name: 'the room-colour bar shows at the meeting room and the pond only', async run(p, expect) {
+    await p.goto(`?${FAST}`);
+    await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
+    const shown = () => p.eval(`(()=>{const b=document.querySelector('.insight-toolbar');return !b.hidden&&b.getBoundingClientRect().height>0})()`);
+    // Record any moment the bar shows while the camera is still flying (the panel is inert then): it must wait to land.
+    await p.eval(`(()=>{window.__barInFlight=false;const bar=document.querySelector('.insight-toolbar'),panel=document.querySelector('#dashboard-content');
+      new MutationObserver(()=>{if(!bar.hidden&&panel.inert)window.__barInFlight=true;}).observe(bar,{attributes:true,attributeFilter:['hidden']})})()`);
+    const seen = {};
+    for (const stop of ['overview', 'meeting', 'parking', 'pond']) { // ends at the pond for the colour check
+      await p.click(`[data-destination="${stop}"]`);
+      await p.sleep(3500 / SPEED + 300);
+      seen[stop] = await shown();
+    }
+    expect(seen.meeting && seen.pond && !seen.overview && !seen.parking, `bar visible per stop ${JSON.stringify(seen)}`);
+    expect(!(await p.eval('window.__barInFlight')), 'bar hidden until the camera lands');
+    await p.click('[data-layer="temperature"]'); await p.sleep(200);
+    expect(await p.eval(`__scene.getObjectByName('Floor_1').getObjectsByProperty('visible',true).some(o=>o.name.startsWith('Insight_floor_'))`), 'pond rooms coloured');
+    await p.click('[data-layer="none"]');
+    // Reset view flies the camera too: the bar must not be clickable on the way.
+    await p.eval(`(()=>{window.__barInReset=null;const v=document.querySelector('#viewport'),bar=document.querySelector('.insight-toolbar');
+      new MutationObserver(()=>{if(v.classList.contains('flying'))window.__barInReset=getComputedStyle(bar).visibility;}).observe(v,{attributes:true,attributeFilter:['class']})})()`);
+    await p.click('#view-zoom-out'); await p.sleep(400);
+    await p.click('#view-reset');
+    await p.until('window.__barInReset!==null', {timeout: 5000, what: 'reset flight'});
+    expect(await p.eval('window.__barInReset') === 'hidden', `bar hidden during the Reset view flight (${await p.eval('window.__barInReset')})`);
+  }},
+
+  {name: 'a photo tap early in the story (step 1) does not change the story plate', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.click('[data-bar="play"]');
+    await p.until(`!!document.querySelector('[data-ph="photo"]')`, {timeout: 20000, what: 'phone form open'});
+    await p.click('[data-ph="photo"]'); // free play: fills the sample plate while the story is still typing
+    await p.until(`__parking.sim.state.requests.some(q=>q.visitor.name===${JSON.stringify(VISITOR)})`, {timeout: 40000, what: 'story request submitted'});
+    const plate = await p.eval(`__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)}).plate`);
+    expect(plate === STORY_PLATE, `story request has the story plate (${plate})`);
+  }},
+
+  {name: 'tapping the cued photo button in the story still reads the story plate', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    // The presenter taps the photo button the moment the story cues it (before the story starts its own read).
+    // Also watch the phone's car photo: the free-play sample plate must never show in it, not even briefly.
+    await p.eval(`(()=>{window.__flash=false;const o=new MutationObserver(()=>{if(document.querySelector('.ph-photo')?.textContent.includes('6กม'))window.__flash=true;
+      const b=!window.__tapped&&document.querySelector('[data-ph="photo"][data-cue="true"]');if(b){window.__tapped=true;b.click();}});o.observe(document.body,{subtree:true,childList:true,attributes:true})})()`);
+    await p.click('[data-bar="play"]');
+    await p.until('window.__tapped', {timeout: 40000, what: 'photo cue tapped'});
+    await p.until(`__parking.sim.state.requests.some(q=>q.visitor.name===${JSON.stringify(VISITOR)})`, {timeout: 40000, what: 'story request submitted'});
+    const plate = await p.eval(`__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)}).plate`);
+    expect(plate === STORY_PLATE, `story request has the story plate (${plate})`);
+    expect(!(await p.eval('window.__flash')), 'the free-play sample plate never flashed in the phone photo');
+  }},
+
+  {name: 'pressing the phone photo button during the story read does not stall the story', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    // Press the photo button the moment the story's read starts (it lasts 1.5 s of demo time).
+    await p.eval(`(()=>{const o=new MutationObserver(()=>{if(document.querySelector('.ph-photo-state.reading')){o.disconnect();window.__pressed=true;document.querySelector('[data-ph="photo"]').click();}});o.observe(document.body,{subtree:true,childList:true})})()`);
+    await p.click('[data-bar="play"]');
+    await p.until('window.__pressed', {timeout: 40000, what: 'photo pressed during the story read'});
+    await p.until(`__parking.sim.state.requests.some(q=>q.visitor.name===${JSON.stringify(VISITOR)})`, {timeout: 40000, what: 'story went on and submitted its request'});
+    const plate = await p.eval(`__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)}).plate`);
+    expect(plate === STORY_PLATE, `story request keeps the story plate (${plate})`);
+  }},
+
+  {name: 'leaving the story during its photo read keeps what the visitor types next', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    // Leave the story the moment its photo read starts, then type a plate of our own.
+    await p.eval(`(()=>{const o=new MutationObserver(()=>{if(document.querySelector('.ph-photo-state.reading')){o.disconnect();document.querySelector('[data-bar="free"]').click();window.__left=true;}});o.observe(document.body,{subtree:true,childList:true})})()`);
+    await p.click('[data-bar="play"]');
+    await p.until('window.__left', {timeout: 40000, what: 'story left during its photo read'});
+    await p.eval(`(()=>{const i=document.querySelector('input[name="plate"]');i.value='9ขข 1234';i.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+    await p.sleep(1500 / SPEED + 500);
+    const plate = await p.eval(`document.querySelector('input[name="plate"]').value`);
+    expect(plate === '9ขข 1234', `typed plate kept after the cancelled read (${plate})`);
+    expect(await p.eval(`!document.querySelector('.ph-photo-state.reading')`), 'no "reading plate" left on the phone');
+    // Free play: a photo read survives an Auto-advance toggle (only a stopping story cancels reads).
+    await p.click('[data-ph="photo"]');
+    await p.eval(`document.querySelector('[data-bar="auto"]').click()`);
+    await p.until(`!!document.querySelector('.ph-photo-state.done')`, {timeout: 5000, what: 'free-play read finished'});
+  }},
+
+  {name: 'Free play at the photo cue leaves the photo button working', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`(()=>{const o=new MutationObserver(()=>{if(document.querySelector('[data-ph="photo"][data-cue="true"]')){o.disconnect();document.querySelector('[data-bar="free"]').click();window.__left=true;}});o.observe(document.body,{subtree:true,childList:true,attributes:true})})()`);
+    await p.click('[data-bar="play"]');
+    await p.until('window.__left', {timeout: 40000, what: 'story left at the photo cue'});
+    expect(await p.eval(`!document.querySelector('[data-ph="photo"][data-cue="true"]')`), 'photo button no longer highlighted');
+    await p.click('[data-ph="photo"]');
+    await p.until(`!!document.querySelector('.ph-photo-state')`, {timeout: 5000, what: 'free-play photo read after leaving the story'});
+    expect(true, 'photo tap reads a plate in free play');
+  }},
+  {name: 'typing during the tour\'s photo read keeps every keystroke', async run(p, expect) {
+    await p.goto(`?${FAST}`);
+    await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000});
+    // The first keystroke lands the moment the story's read starts (the read lasts only 50 ms at test speed) and ends
+    // the tour and its story; the second is typed after it.
+    await p.eval(`(()=>{const o=new MutationObserver(()=>{if(document.querySelector('.ph-photo-state.reading')){o.disconnect();const i=document.querySelector('input[name="plate"]');i.focus();i.value='9';i.setSelectionRange(1,1);i.dispatchEvent(new Event('input',{bubbles:true}));window.__typed=true;}});o.observe(document.body,{subtree:true,childList:true})})()`);
+    await p.click('#tour-play');
+    await p.until('window.__typed', {timeout: 60000, what: 'a keystroke during the story photo read in the tour'});
+    await p.cdp('Input.insertText', {text: '8'});
+    await p.sleep(1500 / SPEED + 500);
+    const r = JSON.parse(await p.eval(`JSON.stringify({value:document.querySelector('input[name="plate"]').value,story:__parking.story.running})`));
+    expect(!r.story, 'typing ended the story');
+    expect(r.value === '98', `both keystrokes kept in the plate field (${JSON.stringify(r.value)})`);
+  }},
+  {name: 'New request during a photo read starts a fresh read', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    // A complete form is sent while its photo is still being read; the next request's photo must be its own read.
+    await p.click('[data-bar="phone"]');
+    await p.eval(`(()=>{const set=(n,v)=>{const e=document.querySelector('#pk-phone [name="'+n+'"]');if(e.type==='checkbox')e.checked=v;else e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}))};
+      for(const [n,v] of Object.entries({name:'ทดสอบ หนึ่ง',email:'one@example.com',contact:'สมศรี',phone:'0800000000',plate:'1ขค 2345',province:'กรุงเทพมหานคร',consent:true}))set(n,v)})()`);
+    // All in one page task: at test speed a read lasts only 50 ms, which a round trip per tap could outlast.
+    const reading = await p.eval(`(()=>{const tap=s=>document.querySelector('#pk-phone [data-ph="'+s+'"]').click();tap('photo');tap('submit');tap('new');tap('photo');return !!document.querySelector('.ph-photo-state.reading')})()`);
+    expect(reading, 'the new form shows its own "reading plate"');
+    await p.until(`!!document.querySelector('.ph-photo-state.done')`, {timeout: 5000, what: 'new photo read done'});
+    expect(await p.eval(`document.querySelector('#pk-phone [name="plate"]').value === '6กม 3195'`), 'the new read fills the new form');
+  }},
+  {name: 'room-colour bar waits for a real landing (also after R); narrow views keep the title during Reset view', async run(p, expect) {
+    await p.cdp('Emulation.setDeviceMetricsOverride', {width: 760, height: 900, deviceScaleFactor: 1, mobile: false});
+    try {
+      // Real speed: the final approach then lasts ~1.5 s, so the drag below reliably lands inside it.
+      await p.goto('?debug=1');
+      await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
+      // A drag during the final approach (the stop already switched) stops the camera short: no bar until it lands.
+      await p.eval(`(()=>{const o=new MutationObserver(()=>{if(document.body.dataset.tourDestination==='meeting'){o.disconnect();__controls.dispatchEvent({type:'start'});__controls.dispatchEvent({type:'end'});window.__dragged=true;}});o.observe(document.body,{attributes:true,attributeFilter:['data-tour-destination']})})()`);
+      await p.click('[data-destination="meeting"]');
+      await p.until('window.__dragged', {timeout: 10000, what: 'drag during the approach'});
+      await p.sleep(500);
+      expect(await p.eval(`document.querySelector('.insight-toolbar').hidden`), 'bar hidden after the flight was cut short');
+      // Reset view lands on the stop: the bar shows; during that flight the (narrow) view keeps its title.
+      await p.eval(`(()=>{window.__titleInReset=null;const v=document.querySelector('#viewport'),t=document.querySelector('.scene-title');
+        new MutationObserver(()=>{if(v.classList.contains('flying'))window.__titleInReset=getComputedStyle(t).display;}).observe(v,{attributes:true,attributeFilter:['class']})})()`);
+      await p.click('#view-reset');
+      await p.until(`!document.querySelector('.insight-toolbar').hidden`, {timeout: 10000, what: 'bar after Reset view lands'});
+      expect(await p.eval('window.__titleInReset') !== 'none', `title shown during the Reset view flight (${await p.eval('window.__titleInReset')})`);
+      // A Reset view cut short by a drag leaves the camera short of the stop: the bar stays hidden.
+      await p.click('#view-zoom-out'); await p.sleep(400);
+      await p.eval(`(()=>{const v=document.querySelector('#viewport'),o=new MutationObserver(()=>{if(v.classList.contains('flying')){o.disconnect();setTimeout(()=>{__controls.dispatchEvent({type:'start'});__controls.dispatchEvent({type:'end'});window.__resetCut=true;},300);}});o.observe(v,{attributes:true,attributeFilter:['class']})})()`);
+      await p.click('#view-reset');
+      await p.until('window.__resetCut', {timeout: 5000, what: 'drag during Reset view'});
+      await p.sleep(500);
+      expect(await p.eval(`document.querySelector('.insight-toolbar').hidden`), 'bar hidden after Reset view was cut short');
+      // The R key on the 3D view is Reset view too: it lands, the bar comes back.
+      await p.eval(`__renderer.domElement.dispatchEvent(new KeyboardEvent('keydown',{key:'r',bubbles:true}))`);
+      await p.until(`!document.querySelector('.insight-toolbar').hidden`, {timeout: 10000, what: 'bar after R (Reset view) lands'});
+    } finally { await p.cdp('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false}); }
+  }},
+
+  {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
+    await p.goto(`?dest=pond&${FAST}`);
+    await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
+    await p.sleep(3000 / SPEED + 500);
+    expect(await p.eval(`__scene.getObjectByName('Courtyard_water_reflection').visible`), 'pond mirror visible after the start-up warm-up');
   }},
 
   {name: 'kiosk loop runs the parking story; a touch pauses it', async run(p, expect) {
@@ -263,11 +494,22 @@ export const scenarios = [
     await p.until(ready, {timeout: 40000});
     await p.sleep(3000);
     const key = await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');window.__exitCar=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__parking.sim.state.presence.get(k).plate);void __parking.traffic.leave(k);return k})()`);
-    await p.until(`Math.abs(window.__exitCar.position.z-16.6)<.05&&Math.abs(window.__exitCar.position.x+20.2)<.05`, {timeout: 15000, what: 'car at the exit barrier'});
-    const t0 = Date.now();
-    await p.until(`__parking.sim.state.gate !== 'closed' || !__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 15000, what: 'barrier opening'});
-    const waited = (Date.now() - t0) * 10 / 1000;
-    expect(waited < 8, `barrier opens within 8 s of demo time, plate read included (waited ${waited.toFixed(1)} s)`);
+    // Timed in the page on every frame with the demo clock: from this car stopping at the barrier to it driving
+    // through (z past the barrier line), so an arm raised for another car does not end the wait early.
+    // Whether another car holds the barrier is read on the frame before this one stops there: once stopped, this car
+    // takes the barrier itself within the same frame when it is free.
+    await p.eval(`(()=>{const s=__parking.sim,c=window.__exitCar,e=window.__exit={};let busy=false;(function watch(){
+      if(e.t0==null&&Math.abs(c.position.z-16.6)<.05&&Math.abs(c.position.x+20.2)<.05){e.t0=s.now();e.busy=busy;}
+      if(e.t0==null)busy=__parking.traffic.gateHolders>0||s.state.alerts.some(a=>a.status==='open');
+      if(e.t0!=null&&c.position.z>19.8)e.t1=s.now();
+      if(e.t1==null)requestAnimationFrame(watch);})()})()`);
+    await p.until('window.__exit.t1!=null', {timeout: 30000, what: 'the leaving car through the barrier'});
+    // The barrier is shared: a car entering meanwhile goes first, as on site, and an unknown car holds it while staff
+    // decide (its alert). Either makes the wait longer; otherwise it must be short.
+    // A car already holding the barrier when this one arrives (e.busy) counts as well.
+    const {waited, others} = await p.eval(`(()=>{const e=window.__exit;return {waited:(e.t1-e.t0)/1000,others:(e.busy?1:0)+__parking.sim.state.events.filter(v=>v.at>=e.t0&&v.at<=e.t1&&['entry','manual','denied','unknown'].includes(v.kind)).length}})()`);
+    const limit = others ? 20 : 8;
+    expect(waited < limit, `leaving car through the barrier within ${limit} s of demo time, plate read included (waited ${waited.toFixed(1)} s, ${others} other car(s) at the gate meanwhile)`);
   }},
   {name: 'camera card labels fit and the alert never covers it (narrow window, English)', async run(p, expect) {
     await p.cdp('Emulation.setDeviceMetricsOverride', {width: 1200, height: 900, deviceScaleFactor: 1, mobile: false});

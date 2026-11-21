@@ -143,3 +143,12 @@ html[data-night=true] .showcase-page:not([data-tour-destination="overview"]) .sc
 .showcase-page .layer-controls button[aria-pressed=true]:not(:disabled):hover{background:#d9e4ff;color:#244bc0}
 .showcase-page[data-replaying=true] .panel-action{display:none}
 .showcase-page[data-replaying=true] .local-controls button:disabled{opacity:1;background:#f1f4f7;color:#52627a}
+/* The room-colour bar floats under the floor label at the meeting-room and pond stops, clear of the stop title (at most
+   ~350 px from the left edge); its buttons wrap rather than run under the title. In a view too narrow for both, the
+   title steps aside while the bar shows. */
+.showcase-page #viewport{container:scene/inline-size}
+.showcase-page .scene-top-right{max-width:calc(100% - 380px)}
+.scene-top-right .insight-toolbar{box-shadow:0 3px 12px #2030480b}
+#viewport.flying .insight-toolbar{visibility:hidden} /* any camera flight (Reset view too): a click would stop it midway */
+.scene-top-right .layer-controls,.scene-top-right .layer-controls>div{flex-wrap:wrap;justify-content:flex-end}
+@container scene (max-width:760px){.showcase-page .scene-top-right{max-width:calc(100% - 28px)}#viewport:not(.flying):has(.insight-toolbar:not([hidden])) .scene-title{display:none}}

@@ -232,7 +232,10 @@ export function createLot({scene, stalls, schedule}) {
   const ledGeo = new THREE.SphereGeometry(.13, 10, 8), postGeo = new THREE.CylinderGeometry(.035, .035, 1.1, 6);
   owned.push(ledGeo, postGeo);
   const ledMat = new THREE.MeshBasicMaterial({color: '#ffffff', toneMapped: false}); materials.push(ledMat);
-  const leds = new THREE.InstancedMesh(ledGeo, ledMat, stalls.length), posts = new THREE.InstancedMesh(postGeo, poleMat, stalls.length);
+  // The posts look like the poles but need their own material: one shared by instanced and plain meshes is re-checked
+  // for a different shader on every draw.
+  const postMat = mat({color: '#59636b', metalness: .4, roughness: .5});
+  const leds = new THREE.InstancedMesh(ledGeo, ledMat, stalls.length), posts = new THREE.InstancedMesh(postGeo, postMat, stalls.length);
   stalls.forEach((s, i) => {
     const hx = s.x + s.nose * 2.62;
     posts.setMatrixAt(i, m4.makeTranslation(hx, s.y + .55, s.z));

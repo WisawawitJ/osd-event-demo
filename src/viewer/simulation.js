@@ -1,5 +1,23 @@
 // This module is deliberately local: device state never leaves this page.
 // spotLights / shadowSpots: the night room light pool and how many of it cast shadows.
+import {getLang} from 'osd/parking/i18n.js';
+
+// Texts follow the saved TH/EN choice. The device map names rooms in Thai; English names are kept here by room id.
+const L = (th, en) => getLang() === 'en' ? en : th;
+const ROOM_EN = {
+  f1_meeting_1: 'Small meeting room 1', f1_meeting_2: 'Small meeting room 2', f1_guest: 'Guest lounge', f1_lobby: 'Waiting lobby', f1_billing: 'Billing and cheques',
+  f2_admin_manager: 'Admin manager', f2_admin: 'Administration', f2_sales: 'Sales', f2_sales_manager_1: 'Sales manager 1', f2_sales_manager_2: 'Sales manager 2',
+  f2_customer: 'Customer relations', f2_executive_1: 'Executive office 1', f2_executive_2: 'Executive office 2', f2_guest_meeting: 'Guest and small meetings',
+  f2_documents: 'Document store', f2_secretary: 'Secretary', f3_rnd: 'R&D', f3_monitor: 'Monitor room', f3_server: 'Server room', f3_engineering: 'Engineering',
+  f3_tech_manager_1: 'Engineering manager 1', f3_tech_manager_2: 'Engineering manager 2', f3_lab: 'Equipment test lab', f3_tech_manager_3: 'Engineering manager 3',
+  f3_director: 'Director, floor 3', f3_meeting: 'Meeting room, floor 3', f4_seminar: 'Seminar room', f4_accounting: 'Accounting',
+  f4_accounting_manager_2: 'Accounting manager 2', f4_accounting_manager_1: 'Accounting manager 1', f4_director: 'Director, floor 4', f4_meeting_2: 'Meeting room 2',
+  f4_recreation: 'Recreation area', f4_kids: "Children's room", roof_stair: 'Stair hall', roof_gym: 'Gym',
+};
+const roomName = room => L(room.label, ROOM_EN[room.id] || room.label);
+const deviceName = {light: () => L('ไฟ', 'Light'), climate: () => L('แอร์', 'AC'), door: () => L('ประตู', 'Door')};
+const nightText = night => night ? L('กลางคืน · เปิดอยู่', 'Night · on') : L('กลางคืน', 'Night');
+
 export async function createSimulation({ THREE, scene, model, floorRoots, renderer, camera, schedule,
   onSelectFloor = () => {}, onNightChange = () => {}, spotLights = 8, shadowSpots = 2 }) {
   const response = await fetch("./model/device-map.json");
@@ -46,18 +64,18 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
 
   const panel = document.createElement('section');
   panel.className = 'simulation';
-  panel.setAttribute('aria-label', 'ทดลองควบคุมอุปกรณ์');
+  panel.setAttribute('aria-label', L('ทดลองควบคุมอุปกรณ์', 'Try the devices'));
   panel.innerHTML = `
     <div class="simulation-bar">
-      <p class="simulation-mode">จำลอง · ไม่เชื่อมต่อ Home Assistant</p>
-      <button type="button" class="simulation-night" aria-pressed="false">กลางคืน</button>
+      <p class="simulation-mode">${L('จำลอง · ไม่เชื่อมต่อ Home Assistant', 'Simulated · not connected to Home Assistant')}</p>
+      <button type="button" class="simulation-night" aria-pressed="false">${nightText(false)}</button>
     </div>
     <details class="simulation-details">
-      <summary>ทดลองอุปกรณ์ <span class="simulation-room-summary"></span></summary>
+      <summary>${L('ทดลองอุปกรณ์', 'Try the devices')} <span class="simulation-room-summary"></span></summary>
       <div class="simulation-content">
-        <label class="simulation-room-label">ห้อง / พื้นที่<select class="simulation-room"></select></label>
-        <div class="simulation-devices" role="group" aria-label="อุปกรณ์จำลอง"></div>
-        <p class="simulation-hint">คลิกโคมไฟ แอร์ หรือบานประตูในโมเดลเพื่อทดลอง · สถานะจะเริ่มใหม่เมื่อโหลดหน้า</p>
+        <label class="simulation-room-label">${L('ห้อง / พื้นที่', 'Room / area')}<select class="simulation-room"></select></label>
+        <div class="simulation-devices" role="group" aria-label="${L('อุปกรณ์จำลอง', 'Simulated devices')}"></div>
+        <p class="simulation-hint">${L('คลิกโคมไฟ แอร์ หรือบานประตูในโมเดลเพื่อทดลอง · สถานะจะเริ่มใหม่เมื่อโหลดหน้า', 'Click a lamp, an AC unit or a door in the model to try it · everything resets when the page reloads')}</p>
         <p class="simulation-feedback" role="status" aria-live="polite"></p>
       </div>
     </details>`;
@@ -69,11 +87,11 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   const summary = panel.querySelector('.simulation-room-summary');
   const feedback = panel.querySelector('.simulation-feedback');
   const nightButton = panel.querySelector('.simulation-night');
-  const floorLabel = floor => String(floor) === '5' ? 'ดาดฟ้า' : `ชั้น ${floor}`;
+  const floorLabel = floor => String(floor) === '5' ? L('ดาดฟ้า', 'Rooftop') : L(`ชั้น ${floor}`, `Floor ${floor}`);
   for (const room of rooms) {
     const option = document.createElement('option');
     option.value = room.id;
-    option.textContent = `${floorLabel(room.floor)} · ${room.label}`;
+    option.textContent = `${floorLabel(room.floor)} · ${roomName(room)}`;
     roomSelect.append(option);
   }
 
@@ -183,7 +201,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   function renderControls() {
     const room = byId.get(selectedId), state = states.get(selectedId);
     roomSelect.value = selectedId;
-    summary.textContent = `${room.label} · ${floorLabel(room.floor)}`;
+    summary.textContent = `${roomName(room)} · ${floorLabel(room.floor)}`;
     devices.replaceChildren();
     const add = (kind, label, enabled, id) => {
       const button = document.createElement('button');
@@ -192,17 +210,17 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       button.dataset.device = kind;
       if (id) button.dataset.door = id;
       button.setAttribute('aria-pressed', String(enabled));
-      button.setAttribute('aria-label', `${label} ${enabled ? 'เปิดอยู่' : 'ปิดอยู่'}`);
+      button.setAttribute('aria-label', `${label} ${enabled ? L('เปิดอยู่', 'on') : L('ปิดอยู่', 'off')}`);
       const title = document.createElement('span');
       title.textContent = label;
       const value = document.createElement('strong');
-      value.textContent = enabled ? 'เปิด' : 'ปิด';
+      value.textContent = enabled ? L('เปิด', 'On') : L('ปิด', 'Off');
       button.append(title, value);
       devices.append(button);
     };
-    if (room.capabilities?.light !== false) add('light', 'ไฟ', state.light);
-    if (room.capabilities?.climate !== false) add('climate', 'แอร์', state.climate);
-    if (room.capabilities?.door !== false) (room.doorIds || []).forEach((id, index, all) => add('door', all.length > 1 ? `ประตู ${index + 1}` : 'ประตู', state.doors[id], id));
+    if (room.capabilities?.light !== false) add('light', deviceName.light(), state.light);
+    if (room.capabilities?.climate !== false) add('climate', deviceName.climate(), state.climate);
+    if (room.capabilities?.door !== false) (room.doorIds || []).forEach((id, index, all) => add('door', all.length > 1 ? `${deviceName.door()} ${index + 1}` : deviceName.door(), state.doors[id], id));
   }
   function toggle(kind, doorId) {
     const state = states.get(selectedId), room = byId.get(selectedId);
@@ -217,7 +235,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     else return;
     renderControls();
     updateModel();
-    feedback.textContent = `${room.label} · ${kind === 'light' ? 'ไฟ' : kind === 'climate' ? 'แอร์' : 'ประตู'}${enabled ? 'เปิด' : 'ปิด'}แล้ว (จำลอง)`;
+    feedback.textContent = L(`${room.label} · ${deviceName[kind]()}${enabled ? 'เปิด' : 'ปิด'}แล้ว (จำลอง)`, `${roomName(room)} · ${deviceName[kind]()} turned ${enabled ? 'on' : 'off'} (simulated)`);
   }
   listen(devices, 'click', event => {
     const button = event.target.closest('button[data-device]');
@@ -237,7 +255,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   listen(nightButton, 'click', () => {
     night = !night;
     nightButton.setAttribute('aria-pressed', String(night));
-    nightButton.textContent = night ? 'กลางคืน · เปิดอยู่' : 'กลางคืน';
+    nightButton.textContent = nightText(night);
     onNightChange(night);
     updateModel();
   });
@@ -303,7 +321,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
         for(const [door,value] of Object.entries(patch.doors||{}))if(typeof value==='boolean'&&Object.hasOwn(state.doors,door))for(const other of states.values())if(Object.hasOwn(other.doors,door))other.doors[door]=value;
       }
       if(byId.has(snapshot.selectedRoom))selectedId=snapshot.selectedRoom;
-      if(typeof snapshot.night==='boolean'&&night!==snapshot.night){night=snapshot.night;nightButton.setAttribute('aria-pressed',String(night));nightButton.textContent=night?'กลางคืน · เปิดอยู่':'กลางคืน';onNightChange(night);}
+      if(typeof snapshot.night==='boolean'&&night!==snapshot.night){night=snapshot.night;nightButton.setAttribute('aria-pressed',String(night));nightButton.textContent=nightText(night);onNightChange(night);}
       renderControls();updateModel();
     },
     selectRoom(id){if(!byId.has(id))return;selectedId=id;renderControls();},
@@ -315,7 +333,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     },
     // The lit rooms (a Set of room ids), e.g. the kiosk's night set; null puts back every room with a light.
     setLitRooms(ids){for(const room of rooms)states.get(room.id).light=room.capabilities?.light!==false&&(!ids||ids.has(room.id));renderControls();updateModel();},
-    setNight(value){night=Boolean(value);nightButton.setAttribute('aria-pressed',String(night));nightButton.textContent=night?'กลางคืน · เปิดอยู่':'กลางคืน';onNightChange(night);updateModel();},
+    setNight(value){night=Boolean(value);nightButton.setAttribute('aria-pressed',String(night));nightButton.textContent=nightText(night);onNightChange(night);updateModel();},
     setView(next) {
       if (disposed) return;
       view = { ...view, ...next, currentFloor: String(next.currentFloor ?? view.currentFloor) };

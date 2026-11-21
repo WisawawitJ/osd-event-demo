@@ -4,7 +4,7 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
  const groups={},owned=[],materials=[];let current='overview';
  const root=n=>model.getObjectByName(`Floor_${n}`);
  const group=(id,n)=>{const g=new T.Group();g.name=`Demo_${id}`;g.userData={simulation:true};root(n).add(g);groups[id]=g;return g;};
- const mat=(color,opacity=1)=>{const m=new T.MeshBasicMaterial({color,transparent:opacity<1,opacity,depthWrite:opacity===1,side:T.DoubleSide});materials.push(m);return m;};
+ const mat=(color,opacity=1)=>{const m=new T.MeshBasicMaterial({color,transparent:opacity<1,opacity,depthWrite:opacity===1,side:T.DoubleSide,forceSinglePass:true});materials.push(m);return m;};
  const mesh=(g,geometry,material,position)=>{const o=new T.Mesh(geometry,material);if(position)o.position.set(...position);g.add(o);owned.push(geometry);return o;};
  const meeting=group('meeting',meetingRoom.floor),teal=mat('#299c94',.85),room=[meetingRoom.center[0],meetingRoom.center[2]];
  const people=[];
@@ -43,7 +43,7 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
   const fade=document.createElement('canvas');fade.width=4;fade.height=64;
   const f=fade.getContext('2d'),v=f.createLinearGradient(0,0,0,64);v.addColorStop(0,'#fff');v.addColorStop(1,'#000');f.fillStyle=v;f.fillRect(0,0,4,64);
   const fadeMap=new T.CanvasTexture(fade);
-  const beamMaterial=new T.MeshBasicMaterial({color:'#ffd88a',alphaMap:fadeMap,transparent:true,opacity:.22,depthWrite:false,side:T.DoubleSide,blending:T.AdditiveBlending});materials.push(beamMaterial);
+  const beamMaterial=new T.MeshBasicMaterial({color:'#ffd88a',alphaMap:fadeMap,transparent:true,opacity:.22,depthWrite:false,side:T.DoubleSide,forceSinglePass:true,blending:T.AdditiveBlending});materials.push(beamMaterial);
   beamMaterial.userData.glowMap=fadeMap;
   const beam=mesh(meeting,new T.CylinderGeometry(.45,1.7,ly-.1,32,1,true),beamMaterial,[lx,(ly-.1)/2+.05,lz]);lamp.push(beam);
  }

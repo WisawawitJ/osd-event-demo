@@ -40,7 +40,7 @@ export function createPhone({root, sim, actions}) {
     <div class="ph-two">${dateField('arrival', t('req.arrival'))}${dateField('departure', t('req.departure'))}</div>
     <div class="ph-card">
       <button type="button" class="ph-photo-btn" data-ph="photo"${cue('photo')}>${icon('camera')}${t('ph.photo')}</button>
-      ${f.photo !== 'idle' ? `<div class="ph-photo-wrap">${carPhoto(f.photo === 'idle' ? '' : (ui.photoPlate || f.plate), ui.photoProvince || f.province, f.photo === 'reading')}<span class="ph-photo-state ${f.photo}">${f.photo === 'reading' ? t('ph.photo.reading') : t('ph.photo.done')}</span></div>` : ''}
+      ${f.photo !== 'idle' ? `<div class="ph-photo-wrap">${carPhoto(ui.photoPlate || f.plate, ui.photoProvince || f.province, f.photo === 'reading')}<span class="ph-photo-state ${f.photo}">${f.photo === 'reading' ? t('ph.photo.reading') : t('ph.photo.done')}</span></div>` : ''}
       <div class="ph-two plate">${field('plate', t('req.plate'), {placeholder: '7กข 4821', help: t('ph.plateHelp')})}<label class="ph-field"><span>${t('req.province')} *</span><select name="province" data-focus="ph-province"><option value=""></option>${PROVINCES.map(([th]) => `<option${f.province === th ? ' selected' : ''}>${th}</option>`).join('')}</select></label></div>
     </div>
     <div class="ph-card"><span class="ph-card-title">${t('ph.facePhoto')}</span>
@@ -106,36 +106,43 @@ export function createPhone({root, sim, actions}) {
     if (!b) return;
     actions.interact?.();
     const what = b.dataset.ph;
-    if (what === 'photo') readPhoto();
+    // A tap on the story's cued photo button is the presenter going along: the story reads its own plate next.
+    if (what === 'photo' && ui.cue !== 'photo') readPhoto();
     if (what === 'face') { ui.form.face = true; render(); }
     if (what === 'submit') submit();
     if (what === 'inbox') { ui.screen = 'mail'; ui.banner = null; render(); }
     if (what === 'site') { ui.screen = req() ? 'sent' : 'form'; render(); }
     if (what === 'calendar' && req()) saveFile('parking-visit.ics', visitInvite(req()), 'text/calendar;charset=utf-8');
-    if (what === 'new') { ui.form = blankForm(); ui.screen = 'form'; ui.requestId = null; ui.banner = null; render(); }
+    if (what === 'new') { settleRead?.(); ui.form = blankForm(); ui.screen = 'form'; ui.requestId = null; ui.banner = null; render(); }
   });
   root.addEventListener('input', e => {
     const n = e.target.name;
     if (!n) return;
-    actions.interact?.();
+    // Saved first: a keystroke can end the tour and its story, and the phone redraws from the form when it does.
     ui.form[n] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    actions.interact?.();
     if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') render();
   });
 
-  // The free-play photo picks a made-up plate; the story passes its own.
-  let photoTimer = 0;
+  // The free-play photo picks a made-up plate; the story passes its own. One read at a time: a press during a read
+  // waits for it, and the story's plate wins over a free-play read already running (the presenter tapping the cue).
+  let photoTimer = 0, photoRead = null, settleRead = null, sample = null;
   function readPhoto(plate = null, province = null) {
-    const sample = plate ? {plate, province} : {plate: '6กม 3195', province: 'นนทบุรี'};
+    if (photoRead && !plate) return photoRead;
+    // The story's own plate always lands in the form; a free-play read only fills fields still empty.
+    sample = plate ? {plate, province, own: true} : {plate: '6กม 3195', province: 'นนทบุรี'};
     ui.photoPlate = sample.plate; ui.photoProvince = sample.province;
     ui.form.photo = 'reading'; render();
-    clearTimeout(photoTimer);
-    return new Promise(resolve => {
+    if (photoRead) return photoRead;
+    photoRead = new Promise(resolve => {
+      settleRead = () => { clearTimeout(photoTimer); photoRead = settleRead = null; resolve(); };
       photoTimer = later(() => {
-        if (!ui.form.plate) ui.form.plate = sample.plate;
-        if (!ui.form.province) ui.form.province = sample.province;
-        ui.form.photo = 'done'; render(); resolve();
+        if (sample.own || !ui.form.plate) ui.form.plate = sample.plate;
+        if (sample.own || !ui.form.province) ui.form.province = sample.province;
+        ui.form.photo = 'done'; render(); settleRead();
       }, 1500);
     });
+    return photoRead;
   }
 
   async function typeInto(name, text, {cps = 28, isCancelled = () => false} = {}) {
@@ -158,11 +165,14 @@ export function createPhone({root, sim, actions}) {
     get state() { return ui; },
     get isOpen() { return ui.open; },
     setOpen(v) { ui.open = v; document.body.classList.toggle('phone-open', v); render(); actions.openChanged?.(v); },
-    reset() { Object.assign(ui, {screen: 'form', form: blankForm(), error: '', requestId: null, banner: null, cue: null, typing: null, photoPlate: null, photoProvince: null}); render(); },
+    // A photo still being read belongs to the old form (as with New request): it ends without filling in the new one.
+    reset() { settleRead?.(); Object.assign(ui, {screen: 'form', form: blankForm(), error: '', requestId: null, banner: null, cue: null, typing: null, photoPlate: null, photoProvince: null}); render(); },
     setForm(values) { Object.assign(ui.form, values); render(); },
     setScreen(s) { ui.screen = s; if (s === 'mail') ui.banner = null; render(); },
     setCue(name) { ui.cue = name; render(); },
     setColor(c) { ui.color = c; },
     typeInto, readPhoto, submit,
+    // The story stopped: a read it started ends without touching the form the visitor now owns.
+    cancelRead() { if (!settleRead) return; settleRead(); ui.form.photo = 'idle'; render(); },
   };
 }

@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/serve.mjs 8080",
-    "test": "node test/run.mjs"
+    "test": "node test/run.mjs",
+    "bench": "node test/bench.mjs"
   }
 }

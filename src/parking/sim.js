@@ -40,6 +40,9 @@ export function createParkingSim() {
   let state, clockBase, clockReal;
 
   function emit(kind, payload) { for (const fn of listeners) fn(kind, payload); }
+  // A delayed follow-up (ATOM sync, the ticket email) belongs to the state it was made in. After a reset ids start
+  // again from 1, so a stale one could otherwise land on a new request with the same id.
+  const current = (fn, ms) => { const made = state; later(() => { if (state === made) fn(); }, ms); };
   const now = () => Math.round(clockBase + (performance.now() - clockReal) * SPEED);
   function setNow(ms) { clockBase = ms; clockReal = performance.now(); emit('clock'); }
 
@@ -243,12 +246,14 @@ export function createParkingSim() {
     req.qr = req.ref;
     audit('staff.name', 'a.approve', {target: req.plate});
     emit('request', req);
-    // Simulated ATOM confirms the vehicle and person, then the ticket goes out.
-    later(() => {
+    // Simulated ATOM confirms the vehicle and person, then the ticket goes out (not if revoked in the meantime).
+    current(() => {
+      if (req.status !== 'approved') return; // revoked before ATOM confirmed: the add was withdrawn (see revoke)
       vehicle.sync = 'synced'; req.syncing = false;
       req.history.push({at: now(), key: 'h.atom'});
       emit('vehicle', vehicle);
-      later(() => {
+      current(() => {
+        if (req.status !== 'approved') return;
         req.history.push({at: now(), key: 'h.email'});
         sendEmail(req, 'approved');
         emit('request', req);
@@ -270,7 +275,9 @@ export function createParkingSim() {
     req.status = 'revoked';
     req.history.push({at: now(), key: 'h.revoked', by: 'staff.name'});
     const v = state.vehicles.find(v => v.id === req.vehicleId);
-    if (v) v.enabled = false;
+    // Not yet confirmed by ATOM: the pending add is withdrawn; otherwise the plate stays listed, disabled.
+    if (v && v.sync === 'pending') { state.vehicles.splice(state.vehicles.indexOf(v), 1); req.vehicleId = null; req.syncing = false; }
+    else if (v) v.enabled = false;
     audit('staff.name', 'a.revoke', {target: req.plate});
     sendEmail(req, 'revoked');
     emit('request', req);
@@ -287,7 +294,7 @@ export function createParkingSim() {
     state.vehicles.push(v);
     audit('staff.name', 'a.plateAdd', {target: plate});
     emit('vehicle', v);
-    later(() => { v.sync = 'synced'; emit('vehicle', v); }, 1400);
+    current(() => { v.sync = 'synced'; emit('vehicle', v); }, 1400);
     return v;
   }
   function importCsv() {
@@ -296,7 +303,7 @@ export function createParkingSim() {
     state.vehicles.push(...added);
     audit('staff.name', 'a.import', {target: '3'});
     emit('vehicle');
-    later(() => { for (const v of added) v.sync = 'synced'; emit('vehicle'); }, 1600);
+    current(() => { for (const v of added) v.sync = 'synced'; emit('vehicle'); }, 1600);
   }
   function setEnabled(id, enabled) {
     const v = state.vehicles.find(v => v.id === id);
@@ -311,7 +318,7 @@ export function createParkingSim() {
     v.sync = 'pending'; v.syncError = null;
     audit('staff.name', 'a.retry', {target: v.plate});
     emit('vehicle', v);
-    later(() => { v.sync = 'synced'; emit('vehicle', v); }, 1300);
+    current(() => { v.sync = 'synced'; emit('vehicle', v); }, 1300);
   }
   function setCapacity(n) {
     state.capacity = Math.max(state.presence.size, Math.min(200, Math.round(n)));

@@ -1,29 +1,28 @@
 <header class="header">
     <div class="identity"><h1>OSD</h1><span>THE OFFICE · 3D</span></div>
-    <div class="header-links"><a class="download back-link" href="/" data-en="Back to the showcase"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg><span>กลับหน้าพาชม</span></a>
-    <a class="download" href="./model/osd-building.glb" download="osd-building.glb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/></svg><span>ดาวน์โหลด GLB</span></a></div>
+    <div class="header-links"><a class="download back-link" href="/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg><span data-i18n="x.back">กลับหน้าพาชม</span></a></div>
   </header>
   <main>
     <div class="toolbar">
-      <nav class="floors" aria-label="เลือกชั้น">
-        <button type="button" data-floor="all" aria-pressed="true" disabled>ทั้งอาคาร</button>
-        <button type="button" data-floor="1" aria-pressed="false" disabled>ชั้น 1</button>
-        <button type="button" data-floor="2" aria-pressed="false" disabled>ชั้น 2</button>
-        <button type="button" data-floor="3" aria-pressed="false" disabled>ชั้น 3</button>
-        <button type="button" data-floor="4" aria-pressed="false" disabled>ชั้น 4</button>
-        <button type="button" data-floor="5" aria-pressed="false" disabled>ดาดฟ้า</button>
+      <nav class="floors" aria-label="เลือกชั้น" data-i18n-label="x.floors">
+        <button type="button" data-floor="all" aria-pressed="true" disabled data-i18n="x.all">ทั้งอาคาร</button>
+        <button type="button" data-floor="1" aria-pressed="false" disabled data-i18n="x.f1">ชั้น 1</button>
+        <button type="button" data-floor="2" aria-pressed="false" disabled data-i18n="x.f2">ชั้น 2</button>
+        <button type="button" data-floor="3" aria-pressed="false" disabled data-i18n="x.f3">ชั้น 3</button>
+        <button type="button" data-floor="4" aria-pressed="false" disabled data-i18n="x.f4">ชั้น 4</button>
+        <button type="button" data-floor="5" aria-pressed="false" disabled data-i18n="x.f5">ดาดฟ้า</button>
       </nav>
-      <div class="tools" role="group" aria-label="รูปแบบการดู">
-        <button id="exterior" type="button" aria-pressed="true" disabled>เปลือกอาคารและสวน</button>
-        <button id="explode" type="button" aria-pressed="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 8 9-5 9 5-9 5-9-5Zm0 5 9 5 9-5M3 18l9 5 9-5"/></svg>แยกชั้น</button>
-        <button id="cutaway" type="button" aria-pressed="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10V4h16v6M4 15v5h16v-5M2 12h20"/></svg>ตัดผนัง</button>
-        <button id="reset" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 3v7h7"/></svg>คืนมุมมอง</button>
+      <div class="tools" role="group" aria-label="รูปแบบการดู" data-i18n-label="x.tools">
+        <button id="exterior" type="button" aria-pressed="true" disabled data-i18n="x.exterior">เปลือกอาคารและสวน</button>
+        <button id="explode" type="button" aria-pressed="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 8 9-5 9 5-9 5-9-5Zm0 5 9 5 9-5M3 18l9 5 9-5"/></svg><span data-i18n="x.explode">แยกชั้น</span></button>
+        <button id="cutaway" type="button" aria-pressed="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10V4h16v6M4 15v5h16v-5M2 12h20"/></svg><span data-i18n="x.cutaway">ตัดผนัง</span></button>
+        <button id="reset" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 3v7h7"/></svg><span data-i18n="x.reset">คืนมุมมอง</span></button>
       </div>
     </div>
-    <div class="camera-presets" role="group" aria-label="มุมกล้อง"><span>สำรวจอาคาร</span><button id="camera-front" type="button" disabled>มุมหลัก</button><button id="camera-side" type="button" disabled>อีกมุม</button><button id="lift" type="button" disabled>ดูลิฟต์</button><button id="courtyard" type="button" disabled>บ่อปลา</button><button id="office" type="button" disabled>สำนักงาน</button><button id="arrival" type="button" disabled>ลานวนรถ</button><button id="reception" type="button" disabled>ต้อนรับ</button><button id="services" type="button" disabled>ห้องบริการ</button><button id="parking" type="button" disabled>ที่จอดรถ</button><button id="stairs" type="button" disabled>บันได</button></div>
-    <section id="viewport" aria-label="โมเดลอาคาร OSD">
-      <div class="stage-message"><p id="status" role="status" data-state="loading">กำลังโหลดโมเดลอาคาร…</p><button type="button" id="retry" hidden>ลองโหลดใหม่</button></div>
+    <div class="camera-presets" role="group" aria-label="มุมกล้อง" data-i18n-label="x.cameras"><span data-i18n="x.explore">สำรวจอาคาร</span><button id="camera-front" type="button" disabled data-i18n="x.front">มุมหลัก</button><button id="camera-side" type="button" disabled data-i18n="x.side">อีกมุม</button><button id="lift" type="button" disabled data-i18n="x.lift">ดูลิฟต์</button><button id="courtyard" type="button" disabled data-i18n="x.courtyard">บ่อปลา</button><button id="office" type="button" disabled data-i18n="x.office">สำนักงาน</button><button id="arrival" type="button" disabled data-i18n="x.arrival">ลานวนรถ</button><button id="reception" type="button" disabled data-i18n="x.reception">ต้อนรับ</button><button id="services" type="button" disabled data-i18n="x.services">ห้องบริการ</button><button id="parking" type="button" disabled data-i18n="x.parking">ที่จอดรถ</button><button id="stairs" type="button" disabled data-i18n="x.stairs">บันได</button></div>
+    <section id="viewport" aria-label="โมเดลอาคาร OSD" data-i18n-label="viewport">
+      <div class="stage-message"><p id="status" role="status" data-state="loading" data-i18n-init="x.loading">กำลังโหลดโมเดลอาคาร…</p><button type="button" id="retry" hidden data-i18n="retry">ลองโหลดใหม่</button></div>
     </section>
-    <div class="help"><span>ลากเพื่อหมุน · ลากปุ่มขวาเพื่อเลื่อน · เลื่อนล้อเมาส์หรือใช้สองนิ้วเพื่อซูม</span><span id="view-label">ทั้งอาคาร</span></div>
+    <div class="help"><span data-i18n="x.help">ลากเพื่อหมุน · ลากปุ่มขวาเพื่อเลื่อน · เลื่อนล้อเมาส์หรือใช้สองนิ้วเพื่อซูม</span><span id="view-label" data-i18n-init="x.all">ทั้งอาคาร</span></div>
   </main>
-  <footer><strong>โมเดลสำหรับนำเสนอ</strong><span>อ้างอิงแปลนและภาพถ่าย · วัสดุ เปลือกอาคาร และสวนเป็นภาพจำลอง</span></footer>
+  <footer><strong data-i18n="x.footer">โมเดลสำหรับนำเสนอ</strong><span data-i18n="x.footnote">อ้างอิงแปลนและภาพถ่าย · วัสดุ เปลือกอาคาร และสวนเป็นภาพจำลอง</span></footer>

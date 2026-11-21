@@ -27,13 +27,14 @@ Useful URLs:
 | `/?dest=parking&story=1&auto=0` | Same, but the presenter advances each step with **Next** |
 | `/?speed=3` | Runs the demo's timing 3× faster (max 30), for rehearsals and tests |
 | `/?fps=1` | Adds a frames-per-second counter, to check the event laptop (any page; combine with the others) |
-| `/#explore` | The original free-exploration page, now with the car park, its cars and street traffic (no parking UI) |
+| `/#explore` | The original free-exploration page, now with the car park, its cars and street traffic (no parking UI, no model download) |
 
 ## Testing
 
 ```sh
-npm test                 # all 18 behaviour checks, about 20 s
+npm test                 # all behaviour checks (49), about 50 s
 npm test -- kiosk night  # only checks whose names match
+npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
 
 `test/run.mjs` starts its own server on a free port and drives headless Chromium over the DevTools protocol.
@@ -43,15 +44,8 @@ which runs the simulated clock, cars, story waits and camera flights 30× faster
 `SPEED=n` and `JOBS=n` change either. The `?speed` flag also works by hand for rehearsals, for example
 `/?dest=parking&story=1&speed=3`. Screenshots of failed checks go to `test/out/`.
 
-Measured on this laptop (Intel iGPU, all 14 checks):
-
-| Setting | Time |
-| --- | --- |
-| speed 10, 1 browser | ~55 s |
-| speed 30, 1 browser | ~34 s |
-| speed 30, 3 browsers | ~14 s |
-| speed 30, 4 browsers (default) | ~12 s |
-| Before: software WebGL, real time | many minutes (one story alone took ~2½ min) |
+`test/bench.mjs` reports the median of 3 windows of 3 s per scene (`BENCH_ROUNDS`, `BENCH_SECONDS`); single windows vary by up to
+~25%, so compare medians from back-to-back runs on the same machine.
 
 ## At the booth
 
@@ -60,7 +54,7 @@ Measured on this laptop (Intel iGPU, all 14 checks):
 - On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance** and
   **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
-- **EN / TH** in the header switches the whole showcase page (building and parking) between Thai and English. Names, plates and provinces stay as entered. The `#explore` page stays in Thai.
+- **EN / TH** in the header switches the whole showcase page (building and parking) between Thai and English. Names, plates and provinces stay as entered. The `#explore` page opens in the language last chosen (room names included).
 - **Night** in the header switches the whole scene, car park lamps and headlights included, and turns the page around it dark (showcase and explore).
 - **View controls** at the bottom right of the 3D view: zoom in, zoom out, **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
 
@@ -95,21 +89,26 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
 
 ## Performance
 
-- The 3D view renders at up to 1.5× device pixels and steps down to 1× by itself when the frame rate stays under ~38 fps.
-  It goes back up when the frame rate stays high.
-- Cars are four draw calls each and share all their geometry. Trees, shrubs and bay lights are instanced, and static car-park
-  parts skip per-frame matrix updates.
-- The building's ~110 interior partition walls are merged per floor at load time, with the same picture and cutaway clipping.
+- The 3D view renders at up to 1.5× device pixels and steps down towards 1× by itself when the frame rate stays under
+  ~38 fps. It never steps back up, and every step redraws in the same frame, so the picture never pops.
+- The frame cost is mostly CPU: three.js's work per draw call. So the scene keeps draw calls and per-draw work down:
+  - cars are four draw calls each and share all their geometry; trees, shrubs and bay lights are instanced;
+  - the building's ~110 interior partition walls are merged per floor at load time, with the same cutaway clipping;
+  - flat glass, door leaves and overlays draw in one pass (three.js draws transparent double-sided materials twice and
+    re-checks their shader each time);
+  - the pond mirror renders only the part of the view the pond covers, so culling skips the rest of the building
+    (about half the mirror's draw calls when the pond is small on screen);
+  - the building and the static car-park parts compose their matrices once, not every frame; only floors (exploded view),
+    door hinges and cars update theirs.
 - Shadows behave as if baked: the sun's shadow map is drawn once per view change, never because the camera moved. At night
   the 6 room lights (1 with shadows) are the selected room and its neighbours, so moving the camera never swaps lights or shadows.
-  Plate-camera snapshots no longer force a shadow redraw.
 - The near clipping plane follows the viewing distance, and road paint, bay tints and car shadows use a depth offset,
   so nothing flickers against the surface underneath while the camera moves.
-- The resolution only ever steps down, and redraws in the same frame, so the picture never pops between sharp and soft.
 - Dock switches take about 2 s (1.2 s to the meeting room), with no first-visit stall. At load, every shader is compiled
   both opaque and transparent (the flight's floor fades use transparent copies), textures are uploaded, and one tiny
   off-screen frame is drawn. The meeting-room cutaway moves a permanent clipping plane instead of swapping shaders.
-- Car movement runs in real time at any frame rate. Add `?fps=1` to see the frame rate.
+- The live plate-camera pop-up is one extra render into a scissored corner of the same canvas, only while it shows.
+- Car movement runs in real time at any frame rate. Add `?fps=1` to see the frame rate, or run `npm run bench`.
 
 ## What is real and what is imagined
 
@@ -137,9 +136,11 @@ src/parking/             the parking demo
   overlays.js            plate-camera feed, alert, captions, toasts
   story.js               the guided story
   i18n.js                Thai and English strings, Bangkok-time formatting
-src/styles/              app.css (from the reference) and parking.css
+  clock.js, dom.js       the ?speed time scale; small UI helpers (icons, CSV, calendar file)
+src/styles/              app.css (from the reference), parking.css, night.css (dark page at night)
 model/                   building model and data, extracted from the reference
 vendor/three/            three.js r186 as shipped in the reference
 scripts/serve.mjs        dependency-free static server
+test/                    browser.mjs (headless Chromium driver), run.mjs + scenarios.mjs (checks), bench.mjs
 reference/               the original standalone HTML (not committed)
 ```

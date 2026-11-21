@@ -34,7 +34,7 @@
 #parking-layer > * > *, #parking-layer .pk-phone { pointer-events: auto; }
 #pk-overlays { position: absolute; inset: 0; pointer-events: none; }
 .parking-active .tour-workspace { grid-template-columns: minmax(0, 1fr) 440px; }
-.parking-active .insight-toolbar, .parking-active .day-timeline, .parking-active #dashboard-content, .parking-active .building-incidents, .parking-active #replay-notice { display: none !important; }
+.parking-active .day-timeline, .parking-active #dashboard-content, .parking-active .building-incidents, .parking-active #replay-notice { display: none !important; }
 .parking-active #viewport { height: calc(100dvh - 330px); min-height: 500px; }
 .parking-active .context-panel { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 .parking-active .context-panel .panel-heading { padding: 20px 22px 0; margin-bottom: 12px; }

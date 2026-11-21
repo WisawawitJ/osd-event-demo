@@ -30,21 +30,21 @@ const extraButtons=[servicesButton,parkingButton,arrivalButton,receptionButton,s
 let exteriorEnabled=true, cameraSide=false, renderKit, simulation, surfaceTextures, interiorView=null;
 const ceilings=[],deviceMeshes=[];
 const presentationMeshes=[];
-const labels = { all: 'ทั้งอาคาร', 1: 'ชั้น 1', 2: 'ชั้น 2', 3: 'ชั้น 3', 4: 'ชั้น 4', 5: 'ดาดฟ้า' };
+const floorLabel = floor => floor === 'all' ? L('ทั้งอาคาร', 'Whole building') : floor === '5' ? L('ดาดฟ้า', 'Rooftop') : L(`ชั้น ${floor}`, `Floor ${floor}`);
 const cutTypes = new Set(['wall', 'glass', 'column', 'door', 'stair']);
 const abort = new AbortController();
 let currentFloor = 'all', exploded = false, cutaway = false;
 let renderer, controls, model, resizeObserver, showcase, flight, sceneTransition, securityPreview, parking = null;
 const isShowcase=Boolean(document.querySelector('#showcase'));
-// Status texts follow the TH/EN switch on the showcase page only; #explore stays Thai.
-const L=(th,en)=>isShowcase&&getLang()==='en'?en:th;
+// Texts follow the saved TH/EN choice on both pages (the showcase can also switch while open).
+const L=(th,en)=>getLang()==='en'?en:th;
 let frame = 0, disposed = false;
 const floorRoots = [], basePositions = new Map(), cutMeshes = [], roofs = [];
 const ownedMaterials = new Set();
 
 retry.addEventListener('click', () => location.reload());
-// The showcase's static texts start in the chosen language (Thai unless English was picked before).
-if(isShowcase)translatePage({initial:true});
+// The page's static texts start in the chosen language (Thai unless English was picked before).
+translatePage({initial:true});
 function fail(message) {
   status.dataset.state = 'error';
   status.textContent = message;
@@ -54,6 +54,8 @@ function fail(message) {
 
 try {
   const scene = new THREE.Scene();
+  // The scene never moves. Left on, its matrix update each frame forced every object below it to recompute too.
+  scene.matrixAutoUpdate = false;
   scene.background = new THREE.Color('#dce5e5');
   const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 1000);
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'default' });
@@ -62,7 +64,9 @@ try {
   const maxPixelRatio = Math.min(devicePixelRatio, 1.5), minPixelRatio = Math.min(1, maxPixelRatio);
   let pixelRatio = maxPixelRatio, slowFrames = 0, lastFrameAt = 0;
   let warming = false;
-  const afterRender = new Set(); // extra views drawn into the same canvas after each frame (the live LPR feed) // the startup shader warm-up holds normal frames so its temporary states never show
+  const afterRender = new Set(); // extra views drawn into the same canvas after each frame (the live LPR feed)
+  // ?debug=1 exposes the scene for tests and the benchmark (test/).
+  if (new URLSearchParams(location.search).has('debug')) Object.assign(window, {__renderer: renderer, __scene: scene, __camera: camera});
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -78,10 +82,11 @@ try {
   surfaceTextures=createSurfaceTextures(renderer);
   const canvas = renderer.domElement;
   canvas.tabIndex = 0;
-  canvas.setAttribute('aria-label', 'โมเดลอาคาร OSD ลากเพื่อหมุน ใช้ปุ่มลูกศรเพื่อเลื่อน ปุ่มบวกหรือลบเพื่อซูม และ R เพื่อคืนมุมมอง');
+  canvas.dataset.i18nLabel = 'canvas';
+  canvas.setAttribute('aria-label', pageString('canvas'));
   viewport.prepend(canvas);
-  if(isShowcase){canvas.dataset.i18nLabel='canvas';canvas.setAttribute('aria-label',pageString('canvas'));}
   controls = new OrbitControls(camera, canvas);
+  if (new URLSearchParams(location.search).has('debug')) window.__controls = controls;
   controls.enableDamping = false;
   controls.screenSpacePanning = true;
   controls.zoomToCursor = true;
@@ -185,7 +190,7 @@ try {
   });
   const readPose=()=>({eye:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov});
   const writePose=pose=>{camera.position.fromArray(pose.eye);controls.target.fromArray(pose.target);camera.fov=pose.fov;camera.updateProjectionMatrix();controls.update();schedule();};
-  flight=createCameraFlight({read:readPose,write:writePose,onState(active){const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';setInMotion(active);}});
+  flight=createCameraFlight({read:readPose,write:writePose,onState(active){viewport.classList.toggle('flying',active);const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';setInMotion(active);}});
   // ?speed=N (tests, rehearsals) shortens every camera flight like the rest of the demo's timing.
   if (SPEED !== 1) { const flyPath = flight.flyPath; flight.flyPath = steps => flyPath(steps.map(step => ({...step, duration: (step.duration ?? 1800) / SPEED}))); flight.fly = (to, duration = 1800) => flight.flyPath([{to, duration}]); }
   if(isShowcase){scene.background.set('#e6ecee');renderKit.ground.material.color.set('#e6ecee');}
@@ -246,6 +251,7 @@ try {
       root.visible = currentFloor === 'all' || currentFloor === String(index + 1);
       root.position.copy(basePositions.get(root));
       if (exploded && currentFloor === 'all') root.position.y += index * 2.5;
+      root.updateMatrix(); // floors do not update their own matrix (see loadModel)
     }
     model.updateWorldMatrix(true, true);
     // Cutaway only moves each floor's clipping plane (far above the model when off). Swapping planes in and
@@ -266,7 +272,7 @@ try {
     explodeButton.disabled = currentFloor !== 'all';
     explodeButton.setAttribute('aria-pressed', String(exploded && currentFloor === 'all'));
     cutButton.setAttribute('aria-pressed', String(cutaway));
-    document.querySelector('#view-label').textContent = labels[currentFloor];
+    document.querySelector('#view-label').textContent = floorLabel(currentFloor);
     if(reframe)frameVisible();
     simulation?.setView({currentFloor,cutaway,exploded});
   }
@@ -287,7 +293,7 @@ try {
     camera.fov=50;camera.updateProjectionMatrix();
     controls.target.copy(target);camera.position.copy(target).add(new THREE.Vector3(.1,.4,3.1));
     controls.minDistance=.5;controls.update();schedule();
-    document.querySelector('#view-label').textContent=`ลิฟต์ · ${labels[currentFloor]}`;
+    document.querySelector('#view-label').textContent=`${L('ลิฟต์','Lift')} · ${floorLabel(currentFloor)}`;
   });
   function interiorCamera(kind){
     interiorView=kind;currentFloor=['office','stairs'].includes(kind)?'2':'1';exploded=false;cutaway=kind==='office';updateView();
@@ -298,7 +304,7 @@ try {
     camera.fov=58;camera.position.copy(root.localToWorld(new THREE.Vector3(...eye)));
     controls.target.copy(root.localToWorld(new THREE.Vector3(...target)));controls.minDistance=.4;
     camera.updateProjectionMatrix();controls.update();simulation?.setView({currentFloor,cutaway,exploded});schedule();
-    document.querySelector('#view-label').textContent={services:'ห้องบริการ · ชั้น 1',parking:`ที่จอดรถ · ${root.userData.parking?.count||6} คัน`,courtyard:'บ่อปลา · ชั้น 1',office:'สำนักงาน · ชั้น 2',arrival:'ลานวนรถ · ชั้น 1',reception:'ต้อนรับ · ชั้น 1',stairs:'บันได · ชั้น 2'}[kind];
+    document.querySelector('#view-label').textContent={services:L('ห้องบริการ','Service rooms'),parking:L(`ที่จอดรถ · ${root.userData.parking?.count||6} คัน`,`Parking · ${root.userData.parking?.count||6} spaces`),courtyard:L('บ่อปลา','Fish pond'),office:L('สำนักงาน','Offices'),arrival:L('ลานวนรถ','Drop-off'),reception:L('ต้อนรับ','Reception'),stairs:L('บันได','Stairs')}[kind]+(kind==='parking'?'':` · ${floorLabel(currentFloor)}`);
   }
   courtyardButton.addEventListener('click',()=>interiorCamera('courtyard'));
   officeButton.addEventListener('click',()=>interiorCamera('office'));
@@ -432,6 +438,9 @@ try {
         }
         const materials = [].concat(object.material || []);
         materials.forEach(material => ownedMaterials.add(material));
+        // Glass panes and door leaves are flat: one pass draws them the same. three.js otherwise draws transparent
+        // double-sided materials twice, flagging a shader re-check each time (~70 extra lookups per frame).
+        for (const material of materials) if (material.transparent && material.side === THREE.DoubleSide) material.forceSinglePass = true;
         if (cutTypes.has(object.userData.type)) {
           let cut = cutMeshes.find(entry => entry.root === root);
           if (!cut) { cut = { root, plane: new THREE.Plane(new THREE.Vector3(0, -1, 0), 1e5) }; cutMeshes.push(cut); }
@@ -443,6 +452,10 @@ try {
         if (object.userData.type === 'ceiling') ceilings.push(object);
         if(object.userData.type==='device')deviceMeshes.push(object);
       });
+      // Static building: compose its ~900 matrices once here instead of every frame. Only the floors move (exploded
+      // view; updateView recomposes them) and the door hinges swing; objects added later keep three.js's default update.
+      model.updateMatrixWorld(true);
+      model.traverse(object => { object.matrixAutoUpdate = object.userData.deviceKind === 'door' && Boolean(object.userData.doorId) && !object.isMesh; });
       scene.add(model);
       renderKit.addPondReflections(model);
       // Night room lighting: a pool of 6 spot lights, 1 casting shadows, to stay light on laptop GPUs.
@@ -467,7 +480,7 @@ try {
        sceneTransition=createSceneTransition({model,schedule,onFinish:()=>{renderer.shadowMap.needsUpdate=true;}});
        const buildingBounds=new THREE.Box3().setFromObject(model),buildingCenter=buildingBounds.getCenter(new THREE.Vector3());
        let navigation=0,lastDestination='overview',stopPoses=null;
-       const markerMaterial=new THREE.MeshBasicMaterial({color:'#27a8b3',transparent:true,opacity:.6,depthTest:false,depthWrite:false,side:THREE.DoubleSide});
+       const markerMaterial=new THREE.MeshBasicMaterial({color:'#27a8b3',transparent:true,opacity:.6,depthTest:false,depthWrite:false,side:THREE.DoubleSide,forceSinglePass:true});
        const marker=new THREE.Mesh(new THREE.RingGeometry(1.05,1.2,48),markerMaterial);marker.rotation.x=-Math.PI/2;marker.renderOrder=100;marker.visible=false;scene.add(marker);
        abort.signal.addEventListener('abort',()=>{marker.removeFromParent();marker.geometry.dispose();markerMaterial.dispose();},{once:true});
        function contextPose(direction=new THREE.Vector3(.72,.55,1.6)){
@@ -486,7 +499,7 @@ try {
        const parkingModule=await import('osd/parking/index.js');
        parking=parkingModule.createParking({scene,schedule,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
        parking.lot.root.visible=renderKit.ground.visible;
-       if(new URLSearchParams(location.search).has('debug')){window.__parking=parking;window.__renderer=renderer;window.__scene=scene;window.__camera=camera;window.__controls=controls;}
+       if(new URLSearchParams(location.search).has('debug'))window.__parking=parking;
        simulation.subscribe(()=>parking.setNight(simulation.getState().night));
        // Camera poses aimed at the real objects: the pond, the roof's solar panels and the entrance barrier. The
        // original hard-coded targets sat 4–5 m off them; the viewing angles and distances are kept.
@@ -509,7 +522,9 @@ try {
        }
        showcase=createShowcase({model,simulation,schedule,parking,
         cancelFlight:()=>{navigation++;flight.stop();marker.visible=false;schedule();},
-        onUserOrbit:callback=>{controls.addEventListener('start',callback);canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','r','R','+','=','-'].includes(e.key))callback();},{signal:abort.signal});},
+        onUserOrbit:callback=>{controls.addEventListener('start',callback);
+         // Capture: runs before the canvas's own key handler, so R (Reset view) starts its flight after this has cancelled the old one, as the button does.
+         canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','r','R','+','=','-'].includes(e.key))callback();},{capture:true,signal:abort.signal});},
         snapshot:securityCamera=>securityPreview.capture(securityCamera),
         async navigate(id,{instant=false,onPhase=()=>{},onApproach=()=>{}}={}){
           flight.stop();const ticket=++navigation,start=readPose();marker.visible=false;markerMaterial.opacity=.6;
@@ -558,21 +573,26 @@ try {
         renderer.render(scene,camera);
         warming=true;
         status.dataset.state='loading';status.textContent=L('กำลังเตรียมอาคาร…','Preparing the building…');
-        scene.traverse(object=>{if(!object.visible&&!object.isLight){hidden.push(object);object.visible=true;}});
+        // Hidden objects are drawn too, so their shaders compile: they read as visible only inside the warm-up's own
+        // compile and draw calls (where writes, such as the pond mirror hiding itself for its pass, stay inside too).
+        // Everywhere else the app reads and sets their real visibility, which a ?dest= stop may change meanwhile.
+        let forcing=0;const forced=fn=>{forcing++;try{return fn();}finally{forcing--;}};
+        scene.traverse(object=>{if(object.visible||object.isLight)return;const state={wanted:false,forced:true};hidden.push([object,state]);
+         Object.defineProperty(object,'visible',{configurable:true,enumerable:true,get:()=>forcing?state.forced:state.wanted,set:value=>{if(forcing)state.forced=value;else state.wanted=value;}});});
         const target=new THREE.WebGLRenderTarget(16,16);
-        const drawOffscreen=()=>{const previous=renderer.getRenderTarget();renderer.shadowMap.needsUpdate=true;renderer.setRenderTarget(target);renderer.render(scene,camera);renderer.setRenderTarget(previous);};
+        const drawOffscreen=()=>forced(()=>{const previous=renderer.getRenderTarget();renderer.shadowMap.needsUpdate=true;renderer.setRenderTarget(target);renderer.render(scene,camera);renderer.setRenderTarget(previous);});
         const setTransparent=value=>{for(const material of opaque){material.transparent=value;material.needsUpdate=true;}};
         (async()=>{
-         await renderer.compileAsync(scene,camera);
+         await forced(()=>renderer.compileAsync(scene,camera));
          scene.traverse(object=>{for(const material of [].concat(object.material||[]))for(const value of Object.values(material))if(value?.isTexture)renderer.initTexture(value);});
          drawOffscreen();
          model.traverse(object=>{for(const material of [].concat(object.material||[]))if(!material.transparent&&!opaque.includes(material))opaque.push(material);});
          setTransparent(true);
-         await renderer.compileAsync(scene,camera);
+         await forced(()=>renderer.compileAsync(scene,camera));
          drawOffscreen();
         })().catch(()=>{}).finally(()=>{
          setTransparent(false);
-         for(const object of hidden)object.visible=false;
+         for(const [object,state] of hidden)Object.defineProperty(object,'visible',{configurable:true,enumerable:true,writable:true,value:state.wanted});
          warming=false;
          status.dataset.state='ready';status.textContent=L('โมเดลพร้อมแสดง','Model ready');
          target.dispose();renderer.shadowMap.needsUpdate=true;document.documentElement.dataset.warm='done';schedule();

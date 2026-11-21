@@ -178,7 +178,10 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
       await sleep(50);
     },
   });
-  story.subscribe(() => { quietAmbient = story.running; renderBar(); });
+  // Only when the story stops (not on every story update, e.g. Auto-advance in free play) are its phone cue and
+  // photo read cleared: a cue left on would keep the photo button doing nothing in free play.
+  let storyWasRunning = false;
+  story.subscribe(() => { quietAmbient = story.running; if (storyWasRunning && !story.running) { phone.setCue(null); phone.cancelRead(); } storyWasRunning = story.running; renderBar(); });
 
   // Story bar below the viewport -----------------------------------------
   function renderBar() {

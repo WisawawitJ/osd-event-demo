@@ -38,7 +38,16 @@ const pageText={
  'replay.notice':['กำลังดูย้อนหลัง · กลับโหมดทดลองเพื่อปรับอุปกรณ์','Viewing a replay · go back to hands-on to adjust devices'],'panel.loading':['กำลังเตรียมข้อมูลจำลอง…','Preparing simulated data…'],
  'view.group':['ควบคุมมุมมอง','View controls'],'view.zoomIn':['ซูมเข้า','Zoom in'],'view.zoomOut':['ซูมออก','Zoom out'],'view.reset':['มุมเริ่มต้น','Reset view'],'view.orbit':['หมุนเมื่อว่าง','Idle orbit'],'view.orbit.title':['หมุนมุมกล้องช้า ๆ เมื่อไม่มีการใช้งาน','Slowly circle the view when nobody is using it'],
  'tour.play':['เริ่มพาชม','Start tour'],'tour.reset':['เริ่มใหม่','Start over'],'tour.progress':['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around'],
- kiosk:()=>pt('story.kiosk'),disclosure:()=>pt('sim.disclosure')
+ kiosk:()=>pt('story.kiosk'),disclosure:()=>pt('sim.disclosure'),
+ // The exploration page (src/pages/explore.html).
+ 'x.back':['กลับหน้าพาชม','Back to the showcase'],'x.floors':['เลือกชั้น','Choose a floor'],'x.all':['ทั้งอาคาร','Whole building'],
+ 'x.f1':['ชั้น 1','Floor 1'],'x.f2':['ชั้น 2','Floor 2'],'x.f3':['ชั้น 3','Floor 3'],'x.f4':['ชั้น 4','Floor 4'],'x.f5':['ดาดฟ้า','Rooftop'],
+ 'x.tools':['รูปแบบการดู','View options'],'x.exterior':['เปลือกอาคารและสวน','Facade and garden'],'x.explode':['แยกชั้น','Split floors'],'x.cutaway':['ตัดผนัง','Cut walls'],'x.reset':['คืนมุมมอง','Reset view'],
+ 'x.cameras':['มุมกล้อง','Camera views'],'x.explore':['สำรวจอาคาร','Explore'],'x.front':['มุมหลัก','Front'],'x.side':['อีกมุม','Side'],'x.lift':['ดูลิฟต์','Lift'],
+ 'x.courtyard':['บ่อปลา','Fish pond'],'x.office':['สำนักงาน','Offices'],'x.arrival':['ลานวนรถ','Drop-off'],'x.reception':['ต้อนรับ','Reception'],'x.services':['ห้องบริการ','Service rooms'],
+ 'x.parking':['ที่จอดรถ','Parking'],'x.stairs':['บันได','Stairs'],'x.loading':['กำลังโหลดโมเดลอาคาร…','Loading the building model…'],
+ 'x.help':['ลากเพื่อหมุน · ลากปุ่มขวาเพื่อเลื่อน · เลื่อนล้อเมาส์หรือใช้สองนิ้วเพื่อซูม','Drag to rotate · right-drag to pan · scroll or pinch to zoom'],
+ 'x.footer':['โมเดลสำหรับนำเสนอ','Presentation model'],'x.footnote':['อ้างอิงแปลนและภาพถ่าย · วัสดุ เปลือกอาคาร และสวนเป็นภาพจำลอง','Based on plans and photos · materials, facade and garden are illustrative'],
 };
 export const pageString=key=>{const text=pageText[key];return typeof text==='function'?text():L(...text);};
 export function translatePage({initial=false}={}){
@@ -56,7 +65,8 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  const gateCamera=parking?parking.lot.cameras.in:effects.securityCamera;
  const $=s=>document.querySelector(s),content=$('#dashboard-content'),play=$('#tour-play');
  let tourGeneration=0,insights=null,gatePulsed=false;
- let traveling=false,pendingDestination=null;
+ // landed: the camera reached the current stop's view (a flight cut short leaves it false until a stop or Reset view lands).
+ let traveling=false,pendingDestination=null,landed=false;
  let destination='overview',state=initial(),tourTimer=0,scenarioFrame=0,scenarioStart=0,touring=false,disposed=false,sequence=0,cameraImage='',lastPreview=0,lastTick=0;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
  const listen=(el,event,fn)=>el.addEventListener(event,fn,{signal});
@@ -90,7 +100,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   content.inert=traveling;content.setAttribute('aria-busy',String(traveling));$('#tour-night').disabled=traveling||replaying;
   if(traveling)$('#panel-status').textContent=L('กำลังเดินทาง','On the way');
   if(!traveling)$('#scene-chip').textContent=replaying?`${d.floor} · ${d.panel} · ${insights.timeLabel()}`:d.chip;
-  insights?.update({destination,traveling,state,sim});
+  insights?.update({destination,traveling,landed,state,sim});
  }
  function stopScenario(){cancelAnimationFrame(scenarioFrame);scenarioFrame=0;if(state.scenario==='access'){state.barrierAngle=0;state.accessStep=0;}state.scenario=null;}
  // The footer message is kept as [th,en] (or a function) so a language switch can redraw it.
@@ -104,7 +114,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   // The car park changes the page layout: switch it before the flight, so the view is its final size while the
   // camera moves instead of jumping at the end.
   if(id==='parking'&&!parking?.active)parking?.enter();
-  traveling=true;pendingDestination=id;effects.select(null);render();
+  traveling=true;landed=false;pendingDestination=id;effects.select(null);render();
   document.querySelectorAll('[data-destination]').forEach(b=>{b.setAttribute('aria-busy',String(b.dataset.destination===id));b.setAttribute('aria-pressed',String(b.dataset.destination===id));});
   // The stop's title, panel and scene state arrive as the final approach begins, not after the camera settles.
   let committed=false;
@@ -119,7 +129,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   };
   const arrived=await navigate(id,{instant,onApproach:commit,onPhase(phase){if(ticket===sequence){$('#scene-chip').textContent=`${phase} → ${d.floor} · ${d.panel}`;$('#flight-status').textContent=L(`กำลังไป ${d.floor} · ${d.panel}`,`Heading to ${d.floor} · ${d.panel}`);}}});
   if(disposed||ticket!==sequence)return false;
-  traveling=false;pendingDestination=null;document.querySelectorAll('[data-destination]').forEach(b=>{b.removeAttribute('aria-busy');b.setAttribute('aria-pressed',String(b.dataset.destination===(arrived||committed?id:destination)));});
+  traveling=false;landed=Boolean(arrived);pendingDestination=null;document.querySelectorAll('[data-destination]').forEach(b=>{b.removeAttribute('aria-busy');b.setAttribute('aria-pressed',String(b.dataset.destination===(arrived||committed?id:destination)));});
   if(!arrived&&!committed){
    $('#scene-chip').textContent=L('หยุดการบินแล้ว · หมุนสำรวจหรือเลือกจุดต่อไป','Flight stopped · orbit to explore or pick the next spot');effects.select(destination);
    if(destination==='parking'&&!parking?.active)parking?.enter();
@@ -193,6 +203,6 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  if(new URLSearchParams(location.search).get('kiosk')==='1')setTimeout(()=>setKiosk(true),600);
  else{const params=new URLSearchParams(location.search),dest=params.get('dest');if(dest&&destinations[dest])setTimeout(async()=>{const arrived=await select(dest);if(arrived&&dest==='parking'&&params.get('story')==='1')void parking?.playStory({auto:params.get('auto')!=='0'});},300);}
  // Back to the current stop's own camera pose (the view controls and the R key use this).
- function resetView(){if(disposed||traveling)return;cancelFlight();void navigate(destination,{});}
+ function resetView(){if(disposed||traveling)return;cancelFlight();landed=false;render();void navigate(destination,{}).then(arrived=>{if(arrived&&!disposed&&!traveling){landed=true;render();}});}
  return {resetView,dispose(){disposed=true;sequence++;insights?.dispose();stopTour();stopScenario();unsubscribe();simulation.setInteractionFilter(()=>true);abort.abort();effects.dispose();},getState(){return{insights:insights?.getState(),destination,traveling,pendingDestination,touring,scenario:state.scenario,...state};}};
 }

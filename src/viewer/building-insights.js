@@ -44,11 +44,14 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
   }void step(0);
  }
  function update(context){
-  lastContext=context;const {destination,traveling,state,sim}=context;paint();
+  lastContext=context;const {destination,traveling,landed,state,sim}=context;paint();
   const roomData=state.roomData||daySnapshot(810,simulation.rooms).telemetry.roomData;
   // The meeting room also supports manual local experiments.
   const data={...roomData,'f4_meeting_2':{temp:state.temp,people:state.occupied?6:0}};
+  // Room colours belong to the stops that look into rooms: the meeting room (floor 4) and the pond's floor-1 rooms.
+  // Their bar (in the view's corner) shows only there, once the camera has landed (a click mid-flight stopped it).
   const floor=destination==='meeting'?'4':destination==='pond'?'1':null;
+  $('.insight-toolbar').hidden=!floor||traveling||!landed;
   layers.update({layer,roomData:data,states:sim.rooms,floor,hidden:traveling||floor!==sim.view.currentFloor});
   const incidents=incidentsFor(state,sim.rooms);
   $('#incident-count').textContent=String(incidents.length);
@@ -61,7 +64,7 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
  listen($('#day-play'),'click',()=>void playDay());listen($('#day-current'),'click',()=>returnCurrent());
  listen(events,'click',e=>{const button=e.target.closest('[data-day-event]');if(button)void visit(dayEvents[Number(button.dataset.dayEvent)]);});
  listen(incidentList,'click',e=>{const b=e.target.closest('[data-incident]');if(!b)return;pause();stopActivity();setLayer(b.dataset.insightLayer);void navigate(b.dataset.target);});
- document.querySelectorAll('[data-layer]').forEach(b=>{b.disabled=false;listen(b,'click',()=>{pause();stopActivity();setLayer(b.dataset.layer);if(layer!=='none'&&lastContext?.destination!=='meeting'&&lastContext?.destination!=='pond')void navigate('meeting');});});
+ document.querySelectorAll('[data-layer]').forEach(b=>{b.disabled=false;listen(b,'click',()=>{pause();stopActivity();setLayer(b.dataset.layer);});});
  for(const selector of ['#day-play','#day-time'])$(selector).disabled=false;
  paint();
  return {update,pause,returnCurrent,isReplaying:()=>replaying,history:key=>replaying?dayHistory(minute,simulation.rooms,key):null,timeLabel:()=>replaying?L(`ข้อมูลจำลอง ณ เวลา ${formatTime(minute)}`,`Simulated data at ${formatTime(minute)}`):null,relabel,

@@ -15,6 +15,33 @@ export function createRenderKit(renderer, scene) {
  for(const [x,y] of [[16,16],[48,48]]){h.beginPath();h.arc(x,y,13,0,Math.PI*2);h.fill();}
  const perforation=new THREE.CanvasTexture(holes);perforation.wrapS=perforation.wrapT=THREE.RepeatWrapping;perforation.repeat.set(5,5);perforation.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),4);
  const reflections=[];let reflectionsPaused=false;
+ // The Reflector draws the mirrored scene through the whole view, though only the pond's few pixels show it. Handing it
+ // a projection cropped to the pond's rectangle (in the mirrored camera) keeps its texture mapping consistent (it is
+ // built from that projection) and lets frustum culling drop everything the pond cannot show: most of the building.
+ const savedProjection=new THREE.Matrix4(),cropMatrix=new THREE.Matrix4(),mirror=new THREE.PerspectiveCamera();
+ const mirrorNormal=new THREE.Vector3(),mirrorPoint=new THREE.Vector3(),eye=new THREE.Vector3(),look=new THREE.Vector3(),rotation=new THREE.Matrix4(),corner=new THREE.Vector3();
+ function pondCrop(reflection,camera){
+  // Same mirrored camera as Reflector.onBeforeRender.
+  reflection.updateWorldMatrix(true,false);
+  mirrorPoint.setFromMatrixPosition(reflection.matrixWorld);eye.setFromMatrixPosition(camera.matrixWorld);
+  rotation.extractRotation(reflection.matrixWorld);mirrorNormal.set(0,0,1).applyMatrix4(rotation);
+  if(look.subVectors(mirrorPoint,eye).dot(mirrorNormal)>0)return null;
+  mirror.position.copy(look.reflect(mirrorNormal).negate().add(mirrorPoint));
+  rotation.extractRotation(camera.matrixWorld);look.set(0,0,-1).applyMatrix4(rotation).add(eye);
+  const target=look.subVectors(mirrorPoint,look).reflect(mirrorNormal).negate().add(mirrorPoint);
+  mirror.up.set(0,1,0).applyMatrix4(rotation).reflect(mirrorNormal);mirror.lookAt(target);mirror.updateMatrixWorld();
+  const box=reflection.geometry.boundingBox;let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+  for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y]){
+   corner.set(x,y,0).applyMatrix4(reflection.matrixWorld).applyMatrix4(mirror.matrixWorldInverse);
+   if(corner.z>-camera.near)return null; // a corner behind the eye: keep the full view
+   corner.applyMatrix4(camera.projectionMatrix);
+   x0=Math.min(x0,corner.x);x1=Math.max(x1,corner.x);y0=Math.min(y0,corner.y);y1=Math.max(y1,corner.y);
+  }
+  const m=.04;x0=Math.max(-1,x0-m);x1=Math.min(1,x1+m);y0=Math.max(-1,y0-m);y1=Math.min(1,y1+m); // ripples shift samples slightly
+  if(x1<=x0||y1<=y0||(x1-x0)*(y1-y0)>3.2)return null; // off screen, or most of it: nothing to gain
+  const sx=2/(x1-x0),sy=2/(y1-y0);
+  return cropMatrix.set(sx,0,0,-(x1+x0)/(x1-x0), 0,sy,0,-(y1+y0)/(y1-y0), 0,0,1,0, 0,0,0,1);
+ }
  function addPondReflections(model){
   const ponds=[];model.traverse(o=>{if(o.isMesh&&o.name.includes('_koi_pond_'))ponds.push(o);});
   for(const pond of ponds){
@@ -26,7 +53,15 @@ export function createRenderKit(renderer, scene) {
    reflection.name='Courtyard_water_reflection';reflection.rotation.x=-Math.PI/2;reflection.position.y=-.078;
    reflection.material.transparent=true;reflection.material.depthWrite=false;reflection.userData={type:'water',interiorFeature:true};
    // The mirror re-renders the scene every frame; during camera flights it keeps its last image instead.
-   const update=reflection.onBeforeRender;reflection.onBeforeRender=function(...args){if(!reflectionsPaused)update.apply(this,args);};
+   // Its camera is cropped to the pond's patch of the screen, so culling skips everything else (see pondCrop).
+   geometry.computeBoundingBox();
+   const update=reflection.onBeforeRender;reflection.onBeforeRender=function(renderer,scene,camera,...rest){
+    if(reflectionsPaused)return;
+    const crop=camera.isPerspectiveCamera?pondCrop(reflection,camera):null;
+    if(!crop)return update.call(this,renderer,scene,camera,...rest);
+    savedProjection.copy(camera.projectionMatrix);camera.projectionMatrix.premultiply(crop);
+    try{update.call(this,renderer,scene,camera,...rest);}finally{camera.projectionMatrix.copy(savedProjection);}
+   };
    pond.parent.add(reflection);reflections.push(reflection);
   }
  }
