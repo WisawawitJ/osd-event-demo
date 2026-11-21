@@ -14,7 +14,7 @@ export function createRenderKit(renderer, scene) {
  const h=holes.getContext('2d');h.fillStyle='white';h.fillRect(0,0,64,64);h.fillStyle='black';
  for(const [x,y] of [[16,16],[48,48]]){h.beginPath();h.arc(x,y,13,0,Math.PI*2);h.fill();}
  const perforation=new THREE.CanvasTexture(holes);perforation.wrapS=perforation.wrapT=THREE.RepeatWrapping;perforation.repeat.set(5,5);perforation.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),4);
- const reflections=[];let reflectionsPaused=false;
+ const reflections=[],STILL_MS=100;let reflectionsPaused=false;
  // The Reflector draws the mirrored scene through the whole view, though only the pond's few pixels show it. Handing it
  // a projection cropped to the pond's rectangle (in the mirrored camera) keeps its texture mapping consistent (it is
  // built from that projection) and lets frustum culling drop everything the pond cannot show: most of the building.
@@ -58,11 +58,19 @@ export function createRenderKit(renderer, scene) {
    // was off screen: the water went dark flying in), so meanwhile the pond shows its plain water colour, and the
    // reflection returns on the first still frame.
    // Its camera is cropped to the pond's patch of the screen, so culling skips everything else (see pondCrop).
+   // With the camera still, the mirror's picture barely changes, while the view may redraw every frame for cars driving
+   // past: it is then redrawn at most every STILL_MS (lights, doors), every frame only while the camera moves. Each
+   // mirror pass also costs the main pass, as every material drawn in both swaps shader twice (the mirror's target
+   // has another colour space and no tone mapping): at the pond that was about half the frame's CPU time.
    geometry.computeBoundingBox();
+   const seen={camera:null,view:new THREE.Matrix4(),projection:new THREE.Matrix4(),at:-Infinity};
    const update=reflection.onBeforeRender;reflection.onBeforeRender=function(renderer,scene,camera,...rest){
     const mix=this.material.uniforms.reflectionMix;
-    if(reflectionsPaused){mix.value=0;return;}
+    if(reflectionsPaused){mix.value=0;seen.camera=null;return;}
     mix.value=1;
+    const now=performance.now();
+    if(camera===seen.camera&&now-seen.at<STILL_MS&&seen.view.equals(camera.matrixWorld)&&seen.projection.equals(camera.projectionMatrix))return;
+    seen.camera=camera;seen.view.copy(camera.matrixWorld);seen.projection.copy(camera.projectionMatrix);seen.at=now;
     const crop=camera.isPerspectiveCamera?pondCrop(reflection,camera):null;
     if(!crop)return update.call(this,renderer,scene,camera,...rest);
     savedProjection.copy(camera.projectionMatrix);camera.projectionMatrix.premultiply(crop);

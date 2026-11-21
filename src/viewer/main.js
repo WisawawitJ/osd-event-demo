@@ -2,7 +2,7 @@ import {createCameraFlight} from 'osd/viewer/camera-flight.js';
 import {createSecurityPreview} from 'osd/viewer/security-preview.js';
 import {createSceneTransition} from 'osd/viewer/scene-transition.js';
 import {createShowcase,translatePage,pageString} from 'osd/viewer/showcase.js';
-import {getLang} from 'osd/parking/i18n.js';
+import {L} from 'osd/parking/i18n.js';
 import {SPEED, world, isPaused} from 'osd/parking/clock.js';
 import {applySky, isDark} from 'osd/viewer/daylight.js';
 import {createRoomSchedule} from 'osd/viewer/building-day.js';
@@ -39,6 +39,8 @@ const abort = new AbortController();
 let currentFloor = 'all', exploded = false, cutaway = false;
 let renderer, controls, model, resizeObserver, showcase, flight, sceneTransition, securityPreview, parking = null;
 const isShowcase=Boolean(document.querySelector('#showcase'));
+// ?debug=1 (tests, the benchmark: test/) exposes the scene and the demo's parts on window.
+const params=new URLSearchParams(location.search),debug=params.has('debug');
 // The page's night look (night.css) switches in one go and cross-fades as a whole (a view transition). Fading each
 // element's text and background colours instead took both through the same grey halfway, so text blinked out.
 let pageNight=null; // the look the page has or is switching to (the switch applies it a frame or two later)
@@ -57,8 +59,6 @@ function setPageNight(night){
   // goes in without it rather than late.
   setTimeout(()=>{if(!applied)transition.skipTransition();},250);
 }
-// Texts follow the saved TH/EN choice on both pages (the showcase can also switch while open).
-const L=(th,en)=>getLang()==='en'?en:th;
 let frame = 0, disposed = false;
 const floorRoots = [], basePositions = new Map(), cutMeshes = [], roofs = [];
 const ownedMaterials = new Set();
@@ -81,7 +81,7 @@ try {
   const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 1000);
   // ?render=0.5 (the test harness sets it): the 3D view at that fraction of its resolution, without antialiasing and
   // with smaller shadow maps, so software WebGL keeps up (test/browser.mjs). The booth never sets it.
-  const renderScale = Math.min(1, Math.max(.25, Number(new URLSearchParams(location.search).get('render')) || 1));
+  const renderScale = Math.min(1, Math.max(.25, Number(params.get('render')) || 1));
   renderer = new THREE.WebGLRenderer({ antialias: renderScale === 1, powerPreference: 'default' });
   // Resolution adapts to the machine: start at up to 1.5x device pixels (2x only cost frames on laptops)
   // and step down (never back up) towards 1x while continuous rendering stays under ~38 fps.
@@ -89,8 +89,7 @@ try {
   let pixelRatio = maxPixelRatio, slowFrames = 0, lastFrameAt = 0;
   let warming = false;
   const afterRender = new Set(); // extra views drawn into the same canvas after each frame (the live LPR feed)
-  // ?debug=1 exposes the scene for tests and the benchmark (test/).
-  if (new URLSearchParams(location.search).has('debug')) Object.assign(window, {__renderer: renderer, __scene: scene, __camera: camera, __world: world});
+  if (debug) Object.assign(window, {__renderer: renderer, __scene: scene, __camera: camera, __world: world});
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -98,7 +97,7 @@ try {
   renderer.localClippingEnabled = true;
   // Shader error checks read every program's link log on first use, which blocks on the GPU: with them on,
   // a stop's first visit stalled ~0.4 s. Keep them for ?debug (tests), skip them for visitors.
-  renderer.debug.checkShaderErrors = new URLSearchParams(location.search).has('debug');
+  renderer.debug.checkShaderErrors = debug;
   renderer.shadowMap.enabled=true;
   renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   renderer.shadowMap.autoUpdate=false;
@@ -110,7 +109,7 @@ try {
   canvas.setAttribute('aria-label', pageString('canvas'));
   viewport.prepend(canvas);
   controls = new OrbitControls(camera, canvas);
-  if (new URLSearchParams(location.search).has('debug')) window.__controls = controls;
+  if (debug) window.__controls = controls;
   controls.enableDamping = false;
   controls.screenSpacePanning = true;
   controls.zoomToCursor = true;
@@ -157,7 +156,7 @@ try {
   scene.add(fill);
 
   // ?fps=1 shows how many frames per second the 3D view actually draws (for checking the event laptop).
-  const fpsMeter = new URLSearchParams(location.search).has('fps') ? (() => {
+  const fpsMeter = params.has('fps') ? (() => {
     const el = Object.assign(document.createElement('div'), {style: 'position:fixed;left:8px;bottom:8px;z-index:99;padding:4px 8px;border-radius:6px;background:#0f1720cc;color:#9ff0b5;font:12px/1.4 ui-monospace,monospace;pointer-events:none'});
     document.body.append(el);
     let frames = 0, since = performance.now();
@@ -178,9 +177,8 @@ try {
       adaptResolution(time);
     });
   }
-  // While the camera flies, floors fade with transparent copies (heavy overdraw) and the pond mirror re-renders the
-  // scene: draw at ~70% resolution and keep the mirror's last image until the camera stops. Motion hides the
-  // softness; full sharpness comes back on the last frame.
+  // While the camera flies, draw at ~70% resolution and pause the pond mirror (it would re-render the scene every
+  // frame) until the camera stops. Motion hides the softness; full sharpness comes back on the last frame.
   let inMotion = false;
   function applyPixelRatio() {
     renderer.setPixelRatio(inMotion ? Math.max(.6 * renderScale, pixelRatio * .7) : pixelRatio);
@@ -483,7 +481,7 @@ try {
       scene.add(model);
       renderKit.addPondReflections(model);
       const koi=createKoi({model,camera,schedule});abort.signal.addEventListener('abort',()=>koi.dispose(),{once:true});
-      if(new URLSearchParams(location.search).has('debug'))window.__koi=koi;
+      if(debug)window.__koi=koi;
       // Night room lighting: a pool of 6 spot lights, 1 casting shadows, to stay light on laptop GPUs.
       simulation=await createSimulation({THREE,scene,model,floorRoots,renderer,camera,schedule,spotLights:6,shadowSpots:1,
         onSelectFloor(n){if(currentFloor!==String(n)){currentFloor=String(n);interiorView=null;updateView();}},
@@ -501,7 +499,7 @@ try {
         setPageNight(isDark(minute));
       };
       followClock();
-      if(new URLSearchParams(location.search).has('debug'))window.__simulation=()=>simulation.getState();
+      if(debug)window.__simulation=()=>simulation.getState();
       const offClock=world.subscribe(kind=>{if(kind!=='wrap')followClock();});abort.signal.addEventListener('abort',offClock,{once:true});
       status.dataset.state = 'ready';
       status.textContent = L('โมเดลพร้อมแสดง','Model ready');
@@ -512,6 +510,7 @@ try {
        const meetingRoom=simulation.rooms.find(r=>r.id==='f4_meeting_2'),meetingRoot=model.getObjectByName(`Floor_${meetingRoom.floor}`);
        const meetingTarget=meetingRoot.localToWorld(new THREE.Vector3(meetingRoom.center[0],.8,meetingRoom.center[2]));
        sceneTransition=createSceneTransition({model,schedule,onFinish:()=>{renderer.shadowMap.needsUpdate=true;}});
+       if(debug)window.__transition=sceneTransition;
        const buildingBounds=new THREE.Box3().setFromObject(model),buildingCenter=buildingBounds.getCenter(new THREE.Vector3());
        let navigation=0,lastDestination='overview',stopPoses=null;
        const markerMaterial=new THREE.MeshBasicMaterial({color:'#27a8b3',transparent:true,opacity:.6,depthTest:false,depthWrite:false,side:THREE.DoubleSide,forceSinglePass:true});
@@ -533,7 +532,7 @@ try {
        const parkingModule=await import('osd/parking/index.js');
        parking=parkingModule.createParking({scene,schedule,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
        parking.lot.root.visible=renderKit.ground.visible;
-       if(new URLSearchParams(location.search).has('debug'))window.__parking=parking;
+       if(debug)window.__parking=parking;
        parking.setNight(simulation.getState().night);simulation.subscribe(()=>parking.setNight(simulation.getState().night));
        // Camera poses aimed at the real objects: the pond, the roof's solar panels and the entrance barrier. The
        // original hard-coded targets sat 4–5 m off them; the viewing angles and distances are kept.
@@ -597,7 +596,7 @@ try {
            marker.position.set(to.target[0],id==='energy'?15.8:id==='meeting'?meetingTarget.y-.6:.2,to.target[2]);marker.visible=id!=='overview';
            const SPLIT=.45;let approached=false;
            // The stop's title and panel arrive as the camera starts its descent onto it, with its floors' fade.
-           const approach=()=>{approached=true;sceneTransition.finish();onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));onApproach();};
+           const approach=()=>{approached=true;sceneTransition.finish({settled:false});onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));onApproach();};
            phases.push({to,via,duration:Math.round(THREE.MathUtils.clamp(1100+span*12,1300,1900)),
             onStart(){onPhase(L('กำลังเดินทาง','On the way'));sceneTransition.begin(()=>applyDestination('overview'));},
             onUpdate(t){
@@ -613,12 +612,12 @@ try {
           return arrived;
         }
        });
-       // Warm-up: a stop's first visit stalled 0.3–0.7 s. The flight's scene transition fades floors with
-       // transparent copies of their materials, and a transparent material needs its own shader variant, which
-       // this GPU driver compiled and linked on the spot. Compile every material both ways at load, draw one tiny
-       // off-screen frame each way (shadows included), and upload every texture, before anyone clicks.
+       // Warm-up: a stop's first visit stalled 0.3–0.7 s, compiling and linking shader variants on the spot: the flight's
+       // floor change cuts geometry with one more clipping plane (scene-transition.js), and the night's lights change
+       // the number of lights. Compile every material each way at load, draw one tiny off-screen frame each way
+       // (shadows included), and upload every texture, before anyone clicks.
        {
-        const hidden=[],opaque=[];
+        const hidden=[];
         // Show the building once, then keep the loading message up while the warm-up runs (about 2 s).
         renderer.render(scene,camera);
         warming=true;
@@ -636,33 +635,27 @@ try {
         scene.traverse(object=>{if(!object.isSpotLight||!/^(Simulation_spot_|Demo_headlight_beam_)/.test(object.name))return;const state={wanted:object.visible,forced:object.visible};nightLights.push([object,state]);
          Object.defineProperty(object,'visible',{configurable:true,enumerable:true,get:()=>forcing?state.forced:state.wanted,set:value=>{if(forcing)state.forced=value;else state.wanted=value;}});});
         const target=new THREE.WebGLRenderTarget(16,16);
+        const drawPixel=()=>forced(()=>{renderer.shadowMap.needsUpdate=true;renderer.setScissorTest(true);renderer.setScissor(0,0,1,1);try{renderer.render(scene,camera);}finally{renderer.setScissorTest(false);}});
         const drawOffscreen=()=>forced(()=>{const previous=renderer.getRenderTarget();renderer.shadowMap.needsUpdate=true;renderer.setRenderTarget(target);renderer.render(scene,camera);renderer.setRenderTarget(previous);});
-        const setTransparent=value=>{for(const material of opaque){material.transparent=value;material.needsUpdate=true;}};
         (async()=>{
          await forced(()=>renderer.compileAsync(scene,camera));
          scene.traverse(object=>{for(const material of [].concat(object.material||[]))for(const value of Object.values(material))if(value?.isTexture)renderer.initTexture(value);});
          drawOffscreen();
-         model.traverse(object=>{for(const material of [].concat(object.material||[]))if(!material.transparent&&!opaque.includes(material))opaque.push(material);});
-         setTransparent(true);
-         await forced(()=>renderer.compileAsync(scene,camera));
-         drawOffscreen();
-         setTransparent(false);
-         // The flight's floor change slices geometry with a level cut, which is one more clipping plane (another
-         // shader variant): compile that too.
-         const cut=new THREE.Plane(new THREE.Vector3(0,-1,0),1e4),planes=new Map();
-         model.traverse(object=>{for(const material of [].concat(object.material||[]))planes.set(material,material.clippingPlanes);});
-         for(const material of planes.keys()){material.clippingPlanes=[...(material.clippingPlanes||[]),cut];material.needsUpdate=true;}
-         try{await forced(()=>renderer.compileAsync(scene,camera));drawOffscreen();}
-         finally{for(const [material,value] of planes){material.clippingPlanes=value;material.needsUpdate=true;}}
+         // The flight's floor change draws copies of the building's materials with one more clipping plane: make them
+         // now and set them up for the canvas (compiled, then first used in a one-pixel frame, as below), by day and by
+         // night (the first night flight to the meeting room froze for 0.2 s).
+         const prepareCopies=()=>sceneTransition.prepare(async()=>{await forced(()=>renderer.compileAsync(scene,camera));drawPixel();});
+         await prepareCopies();
+         securityPreview.prepare();
          for(const [,state] of nightLights)state.forced=!state.wanted;
          await forced(()=>renderer.compileAsync(scene,camera));
          drawOffscreen();
+         await prepareCopies();
          // Off-screen frames use other shader variants (linear colour, no tone mapping) than the canvas: the canvas's
          // own are first used, and finish linking, in one frame drawn to the screen clipped to a single pixel, which
          // the next real frame covers.
-         forced(()=>{renderer.shadowMap.needsUpdate=true;renderer.setScissorTest(true);renderer.setScissor(0,0,1,1);try{renderer.render(scene,camera);}finally{renderer.setScissorTest(false);}});
+         drawPixel();
         })().catch(()=>{}).finally(()=>{
-         setTransparent(false);
          for(const [object,state] of [...hidden,...nightLights])Object.defineProperty(object,'visible',{configurable:true,enumerable:true,writable:true,value:state.wanted});
          warming=false;
          status.dataset.state='ready';status.textContent=L('โมเดลพร้อมแสดง','Model ready');

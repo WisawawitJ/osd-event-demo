@@ -397,22 +397,62 @@ export const scenarios = [
     expect(JSON.stringify(await p.eval('[...__mixes]')) === '[0]', `during the flight the pond shows plain water (mix ${JSON.stringify(await p.eval('[...__mixes]'))})`);
     expect(await p.eval(mix) === 1, 'landed: the live reflection is back');
   }},
-  {name: 'flying between stops: one continuous move (no stop at the overview on the way)', async run(p, expect) {
+  {name: 'flying between stops: one continuous move that speeds up and slows down once, the car park included', async run(p, expect) {
     await p.goto('?debug=1');
     const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
     await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
-    await p.click('[data-destination="meeting"]'); await p.until(`${idle} && document.body.dataset.tourDestination==='meeting'`, {timeout: 20000, what: 'landed at the meeting room'});
-    // The camera's speed on every frame of the flight to the pond. The old route (back out to the overview, turn,
-    // then in) came to a near standstill between its legs; one flight only slows down at its two ends.
-    await p.eval(`(()=>{window.__speeds=[];const c=__controls.object,last={p:c.position.clone(),t:performance.now()};
-      const step=t=>{if(!document.querySelector('#viewport').classList.contains('flying')&&__speeds.length)return;
-        if(t>last.t){__speeds.push(c.position.distanceTo(last.p)/(t-last.t));last.p.copy(c.position);last.t=t;}requestAnimationFrame(step);};requestAnimationFrame(step);})()`);
-    await p.click('[data-destination="pond"]');
-    await p.until(`${idle} && document.body.dataset.tourDestination==='pond'`, {timeout: 20000, what: 'landed at the pond'});
-    const speeds = (await p.eval('__speeds')).filter((v, i, a) => i > a.findIndex(x => x > 0) - 1);
-    const middle = speeds.slice(Math.floor(speeds.length * .2), Math.ceil(speeds.length * .8)), top = Math.max(...speeds);
-    expect(speeds.length > 10, `frames sampled (${speeds.length})`);
-    expect(Math.min(...middle) > top * .15, `no standstill mid-flight (slowest ${Math.min(...middle).toFixed(4)} vs top ${top.toFixed(4)} per ms)`);
+    // The camera's speed on every frame of each flight. The old route (back out to the overview, turn, then in) came
+    // to a near standstill between its legs; a curve run at its own uneven pace crept, then rushed, or lurched halfway.
+    // One flight's speed rises to a single peak and falls from it (frame-to-frame jitter of a few % aside).
+    for (const [from, to] of [['overview', 'parking'], ['parking', 'meeting'], ['meeting', 'pond'], ['pond', 'parking'], ['parking', 'energy']]) {
+      // Each camera move with the time of the frame it was made for (the flight places the camera by that time):
+      // sampled on a separate frame callback instead, a late frame could pair one frame's move with another's time.
+      await p.eval(`(()=>{window.__speeds=[];const c=__controls.object,last={p:c.position.clone(),t:null};__controls.removeEventListener('change',window.__onMove||(()=>{}));
+        window.__onMove=()=>{const t=document.timeline.currentTime;if(last.t!==null&&t>last.t)__speeds.push([c.position.distanceTo(last.p),t-last.t]);if(last.t===null||t>last.t){last.p.copy(c.position);last.t=t;}};
+        __controls.addEventListener('change',__onMove);})()`);
+      await p.click(`[data-destination="${to}"]`);
+      await p.until(`${idle} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
+      await p.eval(`__controls.removeEventListener('change',__onMove)`);
+      const raw = await p.eval('__speeds'), steps = raw.slice(raw.findIndex(([d]) => d > 0)), speeds = steps.map(([d, dt]) => d / dt);
+      // Distance over time across three frames: around a frame drawn late, one sample can catch the camera half a step
+      // behind and the next a step and a half ahead, which is not a change of pace.
+      const smooth = steps.map((_, i) => { const w = steps.slice(Math.max(0, i - 1), i + 2); return w.reduce((n, [d]) => n + d, 0) / w.reduce((n, [, dt]) => n + dt, 0); });
+      const top = Math.max(...smooth), peak = smooth.indexOf(top);
+      // How far the speed sank below its best so far on the way up, and rose above its lowest since the peak on the way down.
+      let dip = 0, bump = 0, high = 0, low = top;
+      smooth.forEach((v, i) => { if (i <= peak) { high = Math.max(high, v); dip = Math.max(dip, high - v); } else { low = Math.min(low, v); bump = Math.max(bump, v - low); } });
+      expect(speeds.length > 10, `${from} → ${to}: frames sampled (${speeds.length})`);
+      expect(dip < top * .08 && bump < top * .08, `${from} → ${to}: one rise and one fall (largest dip on the way up ${(dip / top * 100).toFixed(0)}%, rise on the way down ${(bump / top * 100).toFixed(0)}% of top speed)`);
+    }
+  }},
+  {name: 'no shader is built mid-flight, by day or night: the loading screen prepared them all', async run(p, expect) {
+    // A shader built on the spot froze the view mid-flight: 30 ms for the first cut copies of the building's materials,
+    // 0.1–0.2 s at night when hiding the car park (its headlight beams) or a floor (its room lights) changed the
+    // number of lights.
+    for (const time of ['10:00', '20:30']) {
+      await p.goto(`?debug=1&time=${time}`);
+      const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
+      await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+      const before = await p.eval('__renderer.info.programs.length');
+      for (const to of ['parking', 'meeting', 'pond', 'energy', 'access', 'overview']) {
+        await p.click(`[data-destination="${to}"]`);
+        await p.until(`${idle} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
+      }
+      const built = await p.eval(`__renderer.info.programs.slice(${before}).map(x=>x.name)`);
+      expect(!built.length, `${time}: no shader built during the flights (${built.join(', ') || 'none'})`);
+    }
+  }},
+  {name: 'the car park layout changes as one animation (a view transition), not in a single frame', async run(p, expect) {
+    await p.goto('?debug=1');
+    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
+    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    const watch = `(()=>{window.__vt=new Set();const t0=performance.now();const f=()=>{for(const a of document.getAnimations())if(a.effect?.pseudoElement?.startsWith('::view-transition-group'))__vt.add(a.effect.pseudoElement);if(performance.now()-t0<600)requestAnimationFrame(f);};requestAnimationFrame(f);})()`;
+    for (const to of ['parking', 'pond']) {
+      await p.eval(watch); await p.click(`[data-destination="${to}"]`); await p.sleep(700);
+      const groups = await p.eval('[...__vt]');
+      expect(['tour-view', 'tour-dock', 'tour-panel'].every(n => groups.includes(`::view-transition-group(${n})`)), `to ${to}: the 3D view, the dock and the panel move to their new place (${groups.join(', ') || 'no transition'})`);
+      await p.until(`${idle} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
+    }
   }},
   {name: 'flying between stops: floors are sliced away and built up solid, never faded see-through', async run(p, expect) {
     await p.goto('?debug=1');
@@ -436,6 +476,37 @@ export const scenarios = [
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
     await p.sleep(3000 / SPEED + 500);
     expect(await p.eval(`__scene.getObjectByName('Courtyard_water_reflection').visible`), 'pond mirror visible after the start-up warm-up');
+  }},
+
+  {name: 'pond mirror: redrawn when the camera moves, at most ~10 times a second while it is still', async run(p, expect) {
+    await p.goto(`?dest=pond&${FAST}`);
+    await p.until(`document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='pond' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the pond'});
+    await p.until(`__scene.getObjectByName('Courtyard_water_reflection').visible`, {what: 'pond mirror on'});
+    // Counts the screen's frames and the mirror's passes (into its own target, through its unnamed camera; the plate
+    // cameras' snapshots of passing cars draw into targets too, through named cameras).
+    await p.eval(`(()=>{const R=__renderer,render=R.render.bind(R);window.__passes={screen:0,mirror:0};R.render=(s,c)=>{if(!R.getRenderTarget())__passes.screen++;else if(c.isPerspectiveCamera&&!c.name)__passes.mirror++;return render(s,c);};})()`);
+    // Still camera, the view kept redrawing (as passing cars do).
+    const redraw = `(()=>{let n=0;const f=()=>{__controls.dispatchEvent({type:'change'});if(++n<60)requestAnimationFrame(f);};requestAnimationFrame(f);})()`;
+    await p.eval('Object.assign(__passes,{screen:0,mirror:0})'); await p.eval(redraw); await p.sleep(1200);
+    const still = await p.eval('({...__passes})');
+    expect(still.screen >= 30 && still.mirror <= Math.ceil(still.screen / 4), `still: the mirror is not redrawn every frame (${still.mirror} mirror passes for ${still.screen} frames)`);
+    // The camera turns a little: the mirror follows on that same frame.
+    await p.eval('Object.assign(__passes,{screen:0,mirror:0})');
+    await p.eval(`(()=>{const c=__controls.object,t=__controls.target;c.position.sub(t).applyAxisAngle({x:0,y:1,z:0,isVector3:true},.02).add(t);__controls.update();})()`);
+    await p.until('__passes.screen >= 1', {what: 'a frame drawn'});
+    const moved = await p.eval('({...__passes})');
+    expect(moved.mirror >= 1, `moved: the mirror is redrawn with the frame (${moved.mirror} mirror passes for ${moved.screen} frames)`);
+  }},
+
+  {name: 'a hidden car park does not redraw the view: cars driving while an upper floor is shown', async run(p, expect) {
+    await p.goto(`?dest=meeting&${FAST}&time=20:00`);
+    await p.until(`document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying') && !__scene.getObjectByName('Demo_parking').visible`, {timeout: 40000, what: 'at the meeting room, car park hidden'});
+    await p.sleep(500); // the air flow (AC off at 20:00) has faded
+    await p.eval(`(()=>{const R=__renderer,render=R.render.bind(R);window.__frames=0;R.render=(s,c)=>{if(!R.getRenderTarget())__frames++;return render(s,c);};})()`);
+    await p.until('__parking.traffic.passBy()', {timeout: 10000, what: 'a car sent down the street'});
+    await p.eval('__frames=0'); await p.sleep(1000);
+    const frames = await p.eval('__frames');
+    expect(frames < 15, `the view is not redrawn for unseen cars (${frames} frames in 1 s)`);
   }},
 
   {name: 'kiosk follows the day: the morning car park plays the story; a touch pauses it', async run(p, expect) {

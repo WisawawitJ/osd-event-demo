@@ -1,12 +1,11 @@
 import {createBuildingInsights} from 'osd/viewer/building-insights.js';
 import {createTourEffects} from 'osd/viewer/tour-effects.js';
-import {t as pt, onLang, getLang} from 'osd/parking/i18n.js';
+import {t as pt, onLang, getLang, L} from 'osd/parking/i18n.js';
 import {SPEED, world, later, cancelLater, demoNow, isPaused} from 'osd/parking/clock.js';
 import {dayEvents,formatTime} from 'osd/viewer/building-day.js';
 const icons={building:'M3 21V5h12v16M15 11h6v10M7 9h4M7 13h4M7 17h4',light:'M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0l-1 2H9Z',air:'M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h5',people:'M4 21v-3a5 5 0 0 1 10 0v3m3-9a4 4 0 0 1 4 4v5M12 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',water:'M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z',solar:'m5 9-2 10h18L19 9ZM8 9l-1 10m9-10 1 10M4 14h16M12 19v3M12 2v3M5 3l2 2m12-2-2 2',door:'M5 21V3h14v18M9 21V5l8 2v14M13 13h.01',arrow:'M4 12h16m-5-5 5 5-5 5',play:'m8 5 11 7-11 7Z',pause:'M8 5v14M16 5v14',check:'m5 12 4 4L19 6'};
 const icon=name=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[name]||icons.building}"/></svg>`;
 // Thai (default) or English, picked when the text is drawn; applyLanguage() redraws on a switch.
-const L=(th,en)=>getLang()==='en'?en:th;
 // Each field is a getter, so a destination's texts follow the TH/EN switch.
 const texts=fields=>Object.defineProperties({},Object.fromEntries(Object.entries(fields).map(([key,[th,en]])=>[key,{get:()=>L(th,en),enumerable:true}])));
 const destinations={
@@ -108,12 +107,22 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  function setProgress(message){progress=message;$('#tour-progress').textContent=typeof message==='function'?message():L(...message);}
  const playLabel=()=>touring?L('หยุดพาชม','Stop tour'):L('เริ่มพาชม','Start tour');
  function stopTour(message=['หยุดพาชมแล้ว · เลือกจุดต่อไปได้เอง','Tour stopped · pick the next spot yourself']){if(touring)parking?.stopStory();tourGeneration++;cancelLater(tourTimer);tourTimer=null;touring=false;play.innerHTML=icon('play')+`<span>${playLabel()}</span>`;setProgress(message);}
+ // The car park's layout (a wider panel, a taller view, no timeline) changes as one short animation, a view transition:
+ // the 3D view, the dock and the panel move to their new size and place while the rest cross-fades. Switched in one
+ // frame, the whole page jumped and the 3D picture zoomed by about 8% just as the camera set off.
+ function switchLayout(change){
+  if(!document.startViewTransition||reduced.matches||document.hidden){change();return;}
+  let done=false;const transition=document.startViewTransition(()=>{done=true;change();});
+  transition.ready.catch(()=>{});transition.finished.catch(()=>{});transition.updateCallbackDone.catch(()=>{});
+  // The animation starts at the browser's next frame; if that is slow to come, the layout changes without it.
+  setTimeout(()=>{if(!done)transition.skipTransition();},250);
+ }
  async function select(id,{guided=false,instant=false}={}){
   if(!destinations[id]||disposed)return false;if(!guided){stopFollowing();stopTour(['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around']);}stopScenario();const ticket=++sequence,d=destinations[id];
-  if(destination==='parking'&&id!=='parking')parking?.exit();
-  // The car park changes the page layout: switch it before the flight, so the view is its final size while the
+  // The car park changes the page layout: switch it as the flight sets off, so the view is its final size while the
   // camera moves instead of jumping at the end.
-  if(id==='parking'&&!parking?.active)parking?.enter();
+  if(parking&&destination==='parking'&&id!=='parking')switchLayout(()=>parking.exit());
+  if(parking&&id==='parking'&&!parking.active)switchLayout(()=>parking.enter());
   traveling=true;landed=false;pendingDestination=id;effects.select(null);render();
   document.querySelectorAll('[data-destination]').forEach(b=>{b.setAttribute('aria-busy',String(b.dataset.destination===id));b.setAttribute('aria-pressed',String(b.dataset.destination===id));});
   // The stop's title, panel and scene state arrive as the final approach begins, not after the camera settles.
@@ -150,7 +159,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   if(kind==='pond'){state.pondAlert=!state.pondAlert;state.water=state.pondAlert?58:82;state.scenario=null;insights?.hold(['pondAlert','water']);render();return;}
   if(kind==='energy'){if(simulation.getState().night){stopScenario();return;}state.solar=state.solar<5?8.4:3.1;}
   // What a scenario changed by hand stays a while before the building's schedule takes it back.
-  insights?.hold({meeting:['temp','occupied'],pond:['pondAlert','water'],energy:['solar']}[kind]||[]);
+  insights?.hold({meeting:['temp','occupied'],energy:['solar']}[kind]||[]);
   if(kind==='access'){state.accessStep=1;state.barrierAngle=0;gatePulsed=false;accessAt=formatTime(world.minute());}
   render();
   function tick(time){if(disposed||document.hidden)return;const elapsed=(demoNow()-scenarioStart)/1000,limit=kind==='meeting'?12:kind==='access'?10:5;
@@ -227,8 +236,9 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  listen($('#lang-toggle'),'click',()=>parking?.toggleLang());
  const offLang=onLang(applyLanguage);signal.addEventListener('abort',offLang,{once:true});applyLanguage();
  void select('overview',{instant:true});
- if(new URLSearchParams(location.search).get('kiosk')==='1')setTimeout(()=>setKiosk(true),600);
- else{const params=new URLSearchParams(location.search),dest=params.get('dest');if(dest&&destinations[dest])setTimeout(async()=>{const arrived=await select(dest);if(arrived&&dest==='parking'&&params.get('story')==='1')void parking?.playStory({auto:params.get('auto')!=='0'});},300);}
+ const params=new URLSearchParams(location.search);
+ if(params.get('kiosk')==='1')setTimeout(()=>setKiosk(true),600);
+ else{const dest=params.get('dest');if(dest&&destinations[dest])setTimeout(async()=>{const arrived=await select(dest);if(arrived&&dest==='parking'&&params.get('story')==='1')void parking?.playStory({auto:params.get('auto')!=='0'});},300);}
  // Back to the current stop's own camera pose (the view controls and the R key use this).
  function resetView(){if(disposed||traveling)return;cancelFlight();landed=false;render();void navigate(destination,{}).then(arrived=>{if(arrived&&!disposed&&!traveling){landed=true;render();}});}
  return {resetView,dispose(){disposed=true;sequence++;insights?.dispose();stopTour();stopScenario();unsubscribe();simulation.setInteractionFilter(()=>true);abort.abort();effects.dispose();},getState(){return{insights:insights?.getState(),destination,traveling,pendingDestination,touring,scenario:state.scenario,...state};}};

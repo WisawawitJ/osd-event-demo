@@ -1,9 +1,8 @@
 // This module is deliberately local: device state never leaves this page.
 // spotLights / shadowSpots: the night room light pool and how many of it cast shadows.
-import {getLang} from 'osd/parking/i18n.js';
+import {L} from 'osd/parking/i18n.js';
 
 // Texts follow the saved TH/EN choice. The device map names rooms in Thai; English names are kept here by room id.
-const L = (th, en) => getLang() === 'en' ? en : th;
 const ROOM_EN = {
   f1_meeting_1: 'Small meeting room 1', f1_meeting_2: 'Small meeting room 2', f1_guest: 'Guest lounge', f1_lobby: 'Waiting lobby', f1_billing: 'Billing and cheques',
   f2_admin_manager: 'Admin manager', f2_admin: 'Administration', f2_sales: 'Sales', f2_sales_manager_1: 'Sales manager 1', f2_sales_manager_2: 'Sales manager 2',
@@ -142,10 +141,13 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       });
     });
     candidates.sort((a, b) => Number(b.room.id === selectedId) - Number(a.room.id === selectedId) || a.distance - b.distance);
+    // At night every spot of the pool is in the scene, unused ones dark at the scene's root: the number of lights stays
+    // the same whatever the view shows (fewer rooms on one floor, a floor hidden), and with it every shader. A change
+    // in that count rebuilt them all, a freeze of 0.1–0.2 s on the first night flight to a stop.
     lights.forEach((light, index) => {
       const emitter = candidates[index];
-      light.visible = Boolean(emitter);
-      if (!emitter) return;
+      light.visible = night;
+      if (!emitter) { if (light.parent !== scene) scene.add(light, light.target); light.intensity = 0; return; }
       const { room, position } = emitter;
       const root = floors.get(String(room.floor));
       root.add(light, light.target);

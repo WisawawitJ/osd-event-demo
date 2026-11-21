@@ -32,5 +32,6 @@ export function createSecurityPreview({renderer,scene,fullVisibility=[],schedule
    if(changed)renderer.shadowMap.needsUpdate=true;schedule();
   }
  }
- return {capture,dispose(){target.dispose();output.dispose();quad.geometry.dispose();outputMaterial.dispose();}};
+ // Compiles the snapshot's colour pass at load (main.js warm-up), not at the first snapshot.
+ return {capture,prepare:()=>renderer.compile(outputScene,outputCamera),dispose(){target.dispose();output.dispose();quad.geometry.dispose();outputMaterial.dispose();}};
 }

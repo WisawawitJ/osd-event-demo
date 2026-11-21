@@ -92,4 +92,3 @@ function createWorldClock() {
   };
 }
 export const world = createWorldClock();
-export const START_TIME = START;

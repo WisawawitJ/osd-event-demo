@@ -1,9 +1,8 @@
-import {getLang} from 'osd/parking/i18n.js';
+import {L} from 'osd/parking/i18n.js';
 import {sunAt} from 'osd/viewer/daylight.js';
 // The building's day on the world clock (src/parking/clock.js): what the rooms, the meeting room, the pond and the
 // solar panels do at each time of day. A deterministic schedule that repeats every day: no real sensors, device
 // calls or random values. Titles and details follow the TH/EN switch (getters), so a re-render picks up the language.
-const L=(th,en)=>getLang()==='en'?en:th;
 const event=(minute,destination,layer,title,detail)=>({minute,destination,layer,get title(){return L(...title);},get detail(){return L(...detail);}});
 // Moments worth a look, in time order: the timeline's buttons, each stop's panel and the "Follow the day" camera.
 export const dayEvents = [

@@ -61,10 +61,11 @@ async function startBrowser(mode, profileRoot) {
     ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((ok, fail) => { ws.addEventListener('open', ok); ws.addEventListener('error', fail); });
     let id = 0;
-    const pending = new Map(), logs = [];
+    const pending = new Map(), logs = [], listeners = new Map();
     ws.addEventListener('message', e => {
       const m = JSON.parse(e.data);
       if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
+      else if (listeners.has(m.method)) for (const fn of listeners.get(m.method)) fn(m.params);
       else if (m.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(m.params.type)) logs.push(`[${m.params.type}] ${m.params.args.map(a => a.value ?? a.description).join(' ')}`);
       else if (m.method === 'Runtime.exceptionThrown') logs.push(`[exception] ${m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text}`);
     });
@@ -77,7 +78,9 @@ async function startBrowser(mode, profileRoot) {
     await send('Runtime.enable');
     await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false});
-    return {send, logs, close, profile};
+    // DevTools events (e.g. Page.screencastFrame); returns the function that stops listening.
+    const on = (method, fn) => { if (!listeners.has(method)) listeners.set(method, new Set()); listeners.get(method).add(fn); return () => listeners.get(method).delete(fn); };
+    return {send, on, logs, close, profile};
   } catch (error) { close(); throw error; } // a browser that started but does not answer is not left running
 }
 
@@ -115,11 +118,12 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
     renderer = await probe();
     renderer = `${gpu}: ${renderer || 'no WebGL'}`;
   } catch (error) { browser?.close(); server.stop(); throw error; }
-  const {send, logs} = browser;
+  const {send, on, logs} = browser;
   let shot = 0;
   const page = {
     renderer, logs, url: server.url, sleep,
     cdp: send, // raw DevTools protocol, e.g. for profiling
+    on, // DevTools events, e.g. a screencast's frames
 
     // Pages open with the world clock at real speed (`day=0`, from 09:00) unless the path sets `day` itself: checks of
     // one scene then see the morning they expect, and only the day-cycle checks run the time-lapse. In software

@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (71), about 60 s
+npm test                 # all behaviour checks (75), about 75 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -147,7 +147,9 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
   - flat glass, door leaves and overlays draw in one pass (three.js draws transparent double-sided materials twice and
     re-checks their shader each time);
   - the pond mirror renders only the part of the view the pond covers, so culling skips the rest of the building
-    (about half the mirror's draw calls when the pond is small on screen);
+    (about half the mirror's draw calls when the pond is small on screen). It redraws every frame only while the camera
+    moves, otherwise at most every 100 ms: each mirror pass also made every material it draws swap shaders twice per
+    frame (the mirror's target has another colour space), half the pond view's CPU time;
   - the building and the static car-park parts compose their matrices once, not every frame; only floors (exploded view),
     door hinges and cars update theirs.
 - Shadows behave as if baked: the sun's shadow map is drawn once per view change or sun step (every 2 world minutes, about
@@ -155,11 +157,18 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
   the 6 room lights (1 with shadows) are the selected room and its neighbours, so moving the camera never swaps lights or shadows.
 - The near clipping plane follows the viewing distance, and road paint, bay tints and car shadows use a depth offset,
   so nothing flickers against the surface underneath while the camera moves.
-- Dock switches are one continuous camera move of 1.3–1.9 s, with no first-visit stall. On the way the current stop's
-  floors are sliced away from the top down and the next stop's build up from the bottom, solid throughout. At load,
-  every shader is compiled opaque, transparent and with that level cut, textures are uploaded, and one tiny
-  off-screen frame is drawn. The meeting-room cutaway moves a permanent clipping plane instead of swapping shaders.
+- Dock switches are one continuous camera move of 1.3–1.9 s that speeds up and slows down once (eased on the distance
+  covered, not on the curve's own uneven parameter), with no first-visit stall, by day or night. On the way the current
+  stop's floors are sliced away from the top down and the next stop's build up from the bottom, solid throughout, using
+  copies of the materials that are kept between flights. The car park's own layout (wider panel, taller view) changes
+  as a 0.35 s view transition instead of in one frame.
+- The loading screen (about 2 s) prepares every shader a visit can need: each material as it is, its cut copies, by
+  day and by night, and the plate snapshot's colour pass. Textures are uploaded and one tiny frame is drawn. At night
+  the number of lights never changes with the view (all 6 room lights and 6 headlight beams stay in the scene, unused
+  ones dark), since a new light count rebuilt every shader. The meeting-room cutaway moves a permanent clipping plane
+  instead of swapping shaders.
 - The live plate-camera pop-up is one extra render into a scissored corner of the same canvas, only while it shows.
+- The view redraws only when something on screen changes: moving cars redraw it only while the car park is shown.
 - Car movement runs in real time at any frame rate. Add `?fps=1` to see the frame rate, or run `npm run bench`.
 
 ## What is real and what is imagined

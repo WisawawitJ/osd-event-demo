@@ -308,6 +308,8 @@ export function t(key, vars) {
 }
 // A pair given inline, for data objects that carry both languages.
 export const tx = pair => (Array.isArray(pair) ? pair[lang === 'en' ? 1 : 0] : pair);
+// The text in the chosen language, from its Thai and English versions.
+export const L = (th, en) => (lang === 'en' ? en : th);
 
 const MONTHS_TH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

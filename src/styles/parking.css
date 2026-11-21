@@ -38,6 +38,14 @@
    the building's moment buttons, to leave the 3D view room above the story bar. */
 .parking-active #dashboard-content, .parking-active .building-incidents, .parking-active .day-events { display: none !important; }
 .parking-active #viewport { height: calc(100dvh - 420px); min-height: 460px; }
+/* Switching to and from this layout is one view transition (showcase.js, switchLayout): the 3D view, the dock and the
+   panel move and resize to their new place, each cross-fading inside its own frame (kept from the top left, not
+   stretched); everything else cross-fades. */
+#viewport { view-transition-name: tour-view; }
+.destination-dock { view-transition-name: tour-dock; }
+.context-panel { view-transition-name: tour-panel; }
+::view-transition-group(tour-view), ::view-transition-group(tour-dock), ::view-transition-group(tour-panel) { animation-duration: .35s; animation-timing-function: cubic-bezier(.4, 0, .2, 1); overflow: clip; }
+::view-transition-old(tour-view), ::view-transition-new(tour-view), ::view-transition-old(tour-panel), ::view-transition-new(tour-panel) { height: 100%; object-fit: cover; object-position: top left; }
 .parking-active .context-panel { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 .parking-active .context-panel .panel-heading { padding: 20px 22px 0; margin-bottom: 12px; }
 .parking-active.phone-open .scene-title, .parking-active.phone-open #scene-chip { opacity: 0; }

@@ -1,8 +1,7 @@
 import {daySnapshot,dayEvents,dayHistory,formatTime,incidentsFor,createRoomSchedule} from 'osd/viewer/building-day.js';
 import {createRoomLayers} from 'osd/viewer/room-layers.js';
-import {getLang} from 'osd/parking/i18n.js';
+import {L} from 'osd/parking/i18n.js';
 import {world} from 'osd/parking/clock.js';
-const L=(th,en)=>getLang()==='en'?en:th;
 const legends={none:()=>'',temperature:()=>L('<i class="legend-cool"></i>ต่ำกว่า 25° <i class="legend-teal"></i>25–27° <i class="legend-warm"></i>27° ขึ้นไป','<i class="legend-cool"></i>Below 25° <i class="legend-teal"></i>25–27° <i class="legend-warm"></i>27° and up'),occupancy:()=>L('<i class="legend-teal"></i>มีคน <i class="legend-muted"></i>ห้องว่าง','<i class="legend-teal"></i>Occupied <i class="legend-muted"></i>Empty'),lights:()=>L('<i class="legend-warm"></i>ไฟเปิด <i class="legend-muted"></i>ไฟปิด','<i class="legend-warm"></i>Lights on <i class="legend-muted"></i>Lights off')};
 // A reading changed by hand (a scenario, or the pond switch) keeps its value until the building's schedule changes
 // that reading itself (the pond's level, a room becoming occupied), as a switch flipped by hand does. Readings the

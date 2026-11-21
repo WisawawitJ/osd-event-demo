@@ -130,14 +130,15 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   // lamps, aimed low and a little inwards so the pools start at the bumper (inside the plate camera's view) and
   // overlap in front of the car. Parked cars are dark. The spot lights are a fixed pool without shadows, in the scene
   // only at night (like the rooms' lights), so the number of lights, and with it the shaders, changes only at dusk and
-  // dawn.
+  // dawn. They hang from the scene, not the car park (whose root sits at the origin): hiding the car park (a view of an
+  // upper floor) would take them out of the count and rebuild every shader, a 0.1 s freeze mid-flight.
   const LIT_CARS = 3, BEAM = {intensity: 34, distance: 16, angle: .42, penumbra: .45, decay: 1.3};
   const live = new Set();
   let night = false;
   const beams = Array.from({length: LIT_CARS * 2}, (_, i) => {
     const s = new THREE.SpotLight(0xffefc8, 0, BEAM.distance, BEAM.angle, BEAM.penumbra, BEAM.decay);
     s.name = `Demo_headlight_beam_${i + 1}`; s.visible = false;
-    lot.root.add(s, s.target);
+    lot.root.parent.add(s, s.target);
     return s;
   });
   // Each lamp (left, right; the car faces +z) and where its beam is aimed on the road.
@@ -403,7 +404,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     }
     for (const m of movers) place(m.agent, sample(m.route, m.s), m.reverse);
     if (night) updateLamps();
-    schedule();
+    // A hidden car park (a view of an upper floor) has nothing to redraw: the cars still move, unseen.
+    if (lot.root.visible) schedule();
     // Chain straight to the next frame: going through kick() reset `last` to now and lost the time spent in this
     // frame, so cars moved only ~75% as fast, and slower still whenever the page was busy (scrolling, zooming out).
     if (active) frame = requestAnimationFrame(tick);
