@@ -34,15 +34,19 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (61), about 60 s
+npm test                 # all behaviour checks (62), about 60 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
 
 `test/run.mjs` starts its own server on a free port and drives headless Chromium over the DevTools protocol.
-There are no npm dependencies. It renders on the GPU through EGL (about 60 fps on this laptop's Intel graphics) and falls
-back to software WebGL only if no GPU works; set `GPU=egl|vulkan|software` to force one. Pages load with `?speed=30`,
-which runs the simulated clock, cars, story waits and camera flights 30× faster, and 4 browsers run checks side by side.
+There are no npm dependencies. **It never uses the Intel iGPU by itself**: on this laptop headless Chromium on the iGPU
+hung it twice (i915 GPU hang, then a failed reset), and since the iGPU drives the display the whole desktop froze.
+By default it renders on the NVIDIA GPU (only NVIDIA's EGL library is loaded; about 64 s for the suite with 4 browsers),
+and closes any hardware browser found holding the iGPU open, falling back to software. Without the NVIDIA driver it
+renders in software (SwiftShader, 3 browsers at low CPU priority, the 3D view at half resolution): about 9½ minutes, and
+some timing-sensitive checks fail at those frame rates. `GPU=nvidia|software|vulkan|egl` forces one (`egl` is the iGPU:
+don't). Pages load with `?speed=30`, which runs the simulated clock, cars, story waits and camera flights 30× faster.
 `SPEED=n` and `JOBS=n` change either. The `?speed` flag also works by hand for rehearsals, for example
 `/?dest=parking&story=1&speed=3`. Pages also load with `?day=0` (the world clock at real speed from 09:00) unless a
 check sets `day` itself, as the day-cycle checks do. Screenshots of failed checks go to `test/out/`.
@@ -58,6 +62,8 @@ morning, noon, dusk and night. On the timeline, **Pause** freezes everything (cl
 scenarios and the idle orbit; the camera can still be moved) until **Resume**, Follow the day, Start tour or the story's
 Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 
+- **Koi** swim slow loops in the pond, each sized to keep the fish in the water, waving their tails. The motion is in
+  the vertex shader (no per-fish CPU work); the pond redraws at 15 fps only while it is in view, and not when paused.
 - **Headlights:** at night cars with the engine on (driving, queuing, at the barrier) have their lamps lit, and the
   four nearest the gate light the road ahead with real spot lights (a fixed pool without shadows, only at night);
   parked cars and their plates are dark. The start-up warm-up prepares the night's shaders too, so the first dusk

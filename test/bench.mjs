@@ -1,5 +1,6 @@
 // Frame-cost benchmark: `npm run bench`, or `npm run bench -- parking night` to run matching scenes.
-// Each scene runs in headless Chromium on this machine's GPU and reports the median of BENCH_ROUNDS (default 3) windows
+// Each scene runs in headless Chromium (on the NVIDIA GPU when present, else software: see browser.mjs, never the
+// Intel iGPU) and reports the median of BENCH_ROUNDS (default 3) windows
 // of BENCH_SECONDS (default 3): frames drawn per second, main-thread busy time, and per drawn frame the CPU and GPU
 // time, draw calls and triangles (main view, pond mirror and any inset together).
 // GPU time needs EXT_disjoint_timer_query_webgl2; it shows "–" where the driver does not offer it.

@@ -1,8 +1,7 @@
 // Headless Chromium driven over the DevTools protocol, with no npm dependencies.
-// It starts its own static server on a free port and prefers the machine's GPU: software WebGL
-// (SwiftShader) draws this scene at 3–5 fps, which made every check slow.
+// It starts its own static server on a free port and renders WebGL in software (SwiftShader) by default.
 import {spawn} from 'node:child_process';
-import {mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync} from 'node:fs';
 import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
@@ -11,11 +10,19 @@ import {fileURLToPath} from 'node:url';
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// GPU back ends to try, best first. `software` is the always-available fallback.
+// WebGL back ends. Never the Intel iGPU unless GPU=egl asks for it outright: on the development laptop, headless
+// Chromium on it hung the GPU twice (i915 "GPU HANG … in chromium", then "GuC failed to reset engine" / "Failed to
+// reset chip"), and as that iGPU also drives the display, the whole desktop froze until a forced restart.
+// The default is the NVIDIA GPU when its driver is installed (it does not drive the display, and is the fastest:
+// a check that took 9 s on the iGPU takes 5 s), otherwise software WebGL (SwiftShader, on the CPU). A hardware
+// browser that turns out to have opened the iGPU anyway is closed at once and the run falls back to software.
 const GPU_MODES = {
+  software: ['--disable-gpu', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
+  // The NVIDIA GPU only (it does not drive the display): EGL through NVIDIA's vendor library alone, so Mesa and with it
+  // the Intel iGPU are never loaded.
+  nvidia: {flags: ['--use-angle=gl-egl', '--ignore-gpu-blocklist'], env: {__EGL_VENDOR_LIBRARY_FILENAMES: '/usr/share/glvnd/egl_vendor.d/10_nvidia.json', __NV_PRIME_RENDER_OFFLOAD: '1', __GLX_VENDOR_LIBRARY_NAME: 'nvidia'}},
   egl: ['--use-angle=gl-egl', '--ignore-gpu-blocklist'],
   vulkan: ['--use-angle=vulkan', '--enable-features=Vulkan,DefaultANGLEVulkan,VulkanFromANGLE', '--ignore-gpu-blocklist'],
-  software: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
 };
 
 function freePort() {
@@ -38,10 +45,12 @@ const running = new Set();
 process.on('exit', () => { for (const chrome of running) chrome.kill('SIGKILL'); });
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => process.exit(130));
 
-async function startBrowser(flags, profileRoot) {
+async function startBrowser(mode, profileRoot) {
+  const {flags, env = {}} = Array.isArray(mode) ? {flags: mode} : mode;
   const port = await freePort();
   const profile = mkdtempSync(join(profileRoot, 'chrome-'));
-  const chrome = spawn(process.env.CHROMIUM || 'chromium', ['--headless=new', '--no-sandbox', '--hide-scrollbars', '--window-size=1600,1000', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, ...flags, 'about:blank'], {stdio: 'ignore'});
+  // At low CPU priority: software rendering is CPU work, and the desktop around it should stay responsive.
+  const chrome = spawn('nice', ['-n', '10', process.env.CHROMIUM || 'chromium', '--headless=new', '--no-sandbox', '--hide-scrollbars', '--window-size=1600,1000', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, ...flags, 'about:blank'], {stdio: 'ignore', env: {...process.env, ...env}});
   running.add(chrome);
   let ws = null;
   const close = () => { ws?.close(); chrome.kill('SIGKILL'); running.delete(chrome); try { rmSync(profile, {recursive: true, force: true}); } catch {} };
@@ -68,28 +77,43 @@ async function startBrowser(flags, profileRoot) {
     await send('Runtime.enable');
     await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false});
-    return {send, logs, close};
+    return {send, logs, close, profile};
   } catch (error) { close(); throw error; } // a browser that started but does not answer is not left running
 }
 
-// Opens a browser and server. `gpu` is a GPU_MODES key or 'auto' (first mode that gives hardware WebGL).
-export async function open({gpu = process.env.GPU || 'auto', shots = join(root, 'test/out')} = {}) {
+const NVIDIA_EGL = '/usr/share/glvnd/egl_vendor.d/10_nvidia.json';
+export const DEFAULT_GPU = existsSync('/dev/nvidia0') && existsSync(NVIDIA_EGL) ? 'nvidia' : 'software';
+// The iGPU's device nodes (vendor 8086), and whether any process of the browser using `profile` has one open.
+const IGPU = (() => { try { return readdirSync('/sys/class/drm').filter(n => /^(card|renderD)\d+$/.test(n) && readFileSync(`/sys/class/drm/${n}/device/vendor`, 'utf8').trim() === '0x8086').map(n => `/dev/dri/${n}`); } catch { return []; } })();
+function usesIgpu(profile) {
+  for (const pid of readdirSync('/proc').filter(n => /^\d+$/.test(n))) {
+    try {
+      if (!readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes(profile)) continue;
+      for (const fd of readdirSync(`/proc/${pid}/fd`)) { try { if (IGPU.includes(readlinkSync(`/proc/${pid}/fd/${fd}`))) return true; } catch {} }
+    } catch {}
+  }
+  return false;
+}
+
+// Opens a browser and server. `gpu` is a GPU_MODES key: DEFAULT_GPU unless GPU= says otherwise (see GPU_MODES).
+export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(root, 'test/out')} = {}) {
+  if (!GPU_MODES[gpu]) throw new Error(`GPU=${gpu}: use software (default), or nvidia / vulkan / egl to opt in to hardware`);
   const profileRoot = join(process.env.TEST_TMP || tmpdir(), 'osd-demo-test');
   mkdirSync(profileRoot, {recursive: true});
   mkdirSync(shots, {recursive: true});
   const server = await startServer();
-  const modes = gpu === 'auto' ? Object.keys(GPU_MODES) : [gpu];
-  let browser, renderer = '';
+  let browser = null, renderer = '';
   // A browser that fails to start or answer leaves nothing running behind the error.
   try {
-    for (const mode of modes) {
-      browser = null;
-      browser = await startBrowser(GPU_MODES[mode], profileRoot);
-      renderer = (await browser.send('Runtime.evaluate', {expression: `(()=>{const g=document.createElement('canvas').getContext('webgl2');const d=g&&g.getExtension('WEBGL_debug_renderer_info');return g?(d?g.getParameter(d.UNMASKED_RENDERER_WEBGL):'webgl2'):''})()`, returnByValue: true})).result?.result?.value || '';
-      const hardware = renderer && !/swiftshader|llvmpipe|software/i.test(renderer);
-      if (hardware || mode === 'software' || gpu !== 'auto') { renderer = `${mode}: ${renderer || 'no WebGL'}`; break; }
-      browser.close();
+    browser = await startBrowser(GPU_MODES[gpu], profileRoot);
+    // A hardware browser that opened the iGPU (once WebGL is up, below) is closed before it draws a frame there.
+    const probe = async () => (await browser.send('Runtime.evaluate', {expression: `(()=>{const g=document.createElement('canvas').getContext('webgl2');const d=g&&g.getExtension('WEBGL_debug_renderer_info');return g?(d?g.getParameter(d.UNMASKED_RENDERER_WEBGL):'webgl2'):''})()`, returnByValue: true})).result?.result?.value || '';
+    if (gpu !== 'software' && gpu !== 'egl') {
+      await probe();
+      if (usesIgpu(browser.profile)) { console.error(`GPU=${gpu} opened the Intel iGPU: closed it, using software rendering`); browser.close(); gpu = 'software'; browser = await startBrowser(GPU_MODES.software, profileRoot); }
     }
+    renderer = await probe();
+    renderer = `${gpu}: ${renderer || 'no WebGL'}`;
   } catch (error) { browser?.close(); server.stop(); throw error; }
   const {send, logs} = browser;
   let shot = 0;
@@ -98,11 +122,14 @@ export async function open({gpu = process.env.GPU || 'auto', shots = join(root, 
     cdp: send, // raw DevTools protocol, e.g. for profiling
 
     // Pages open with the world clock at real speed (`day=0`, from 09:00) unless the path sets `day` itself: checks of
-    // one scene then see the morning they expect, and only the day-cycle checks run the time-lapse.
+    // one scene then see the morning they expect, and only the day-cycle checks run the time-lapse. In software
+    // rendering they also draw the 3D view at half resolution (`render=0.5`), the bulk of the CPU's work.
     async goto(path) {
       logs.length = 0;
       let url = path.replace(/^\//, '');
-      if (!/[?&]day=/.test(url)) { const [before, hash = ''] = url.split('#'); url = `${before}${before.includes('?') ? '&' : '?'}day=0${hash ? '#' + hash : ''}`; }
+      const add = (name, value) => { if (new RegExp(`[?&]${name}=`).test(url)) return; const [before, hash = ''] = url.split('#'); url = `${before}${before.includes('?') ? '&' : '?'}${name}=${value}${hash ? '#' + hash : ''}`; };
+      add('day', 0);
+      if (gpu === 'software') add('render', .5);
       await send('Page.navigate', {url: server.url + url}); await sleep(300);
     },
     async eval(expression) {

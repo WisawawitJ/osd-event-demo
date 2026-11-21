@@ -368,6 +368,19 @@ export const scenarios = [
     } finally { await p.cdp('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false}); }
   }},
 
+  {name: 'koi swim (in the shader, inside the water) and stand still when paused', async run(p, expect) {
+    await p.goto(`?dest=pond&${FAST}`);
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='pond'`, {timeout: 40000});
+    const loops = JSON.parse(await p.eval(`JSON.stringify(['Floor_1_koi_ochre','Floor_1_koi_cream'].map(n=>{const a=__scene.getObjectByName(n).geometry.attributes.koiLoop;const r=[];for(let i=0;i<a.count;i+=52)r.push(a.getX(i));return r}).flat())`));
+    expect(loops.length === 22 && loops.filter(r => r > 0).length >= 15, `fish with room to swim a loop: ${loops.filter(r => r > 0).length} of ${loops.length}`);
+    const a = await p.eval('__koi.time'); await p.sleep(400); const b = await p.eval('__koi.time');
+    expect(b > a, 'the fish move');
+    await p.eval('__world.setPaused(true)');
+    await p.sleep(200);
+    const c = await p.eval('__koi.time'); await p.sleep(400); const d = await p.eval('__koi.time');
+    expect(c === d, 'paused: the fish stand still');
+    await p.eval('__world.setPaused(false)');
+  }},
   {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
     await p.goto(`?dest=pond&${FAST}`);
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});

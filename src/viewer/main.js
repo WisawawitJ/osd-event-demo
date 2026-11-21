@@ -5,6 +5,7 @@ import {createShowcase,translatePage,pageString} from 'osd/viewer/showcase.js';
 import {getLang} from 'osd/parking/i18n.js';
 import {SPEED, world, isPaused} from 'osd/parking/clock.js';
 import {applySky, isDark} from 'osd/viewer/daylight.js';
+import {createKoi} from 'osd/viewer/koi.js';
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import { OrbitControls } from 'osd/node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'osd/node_modules/three/examples/jsm/loaders/GLTFLoader.js';
@@ -77,10 +78,13 @@ try {
   scene.matrixAutoUpdate = false;
   scene.background = new THREE.Color('#dce5e5');
   const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 1000);
-  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'default' });
+  // ?render=0.5 (the test harness sets it): the 3D view at that fraction of its resolution, without antialiasing and
+  // with smaller shadow maps, so software WebGL keeps up (test/browser.mjs). The booth never sets it.
+  const renderScale = Math.min(1, Math.max(.25, Number(new URLSearchParams(location.search).get('render')) || 1));
+  renderer = new THREE.WebGLRenderer({ antialias: renderScale === 1, powerPreference: 'default' });
   // Resolution adapts to the machine: start at up to 1.5x device pixels (2x only cost frames on laptops)
   // and step down (never back up) towards 1x while continuous rendering stays under ~38 fps.
-  const maxPixelRatio = Math.min(devicePixelRatio, 1.5), minPixelRatio = Math.min(1, maxPixelRatio);
+  const maxPixelRatio = Math.min(devicePixelRatio, 1.5) * renderScale, minPixelRatio = Math.min(renderScale, maxPixelRatio);
   let pixelRatio = maxPixelRatio, slowFrames = 0, lastFrameAt = 0;
   let warming = false;
   const afterRender = new Set(); // extra views drawn into the same canvas after each frame (the live LPR feed)
@@ -142,7 +146,7 @@ try {
   const key = new THREE.DirectionalLight(0xffe7ba, 3.2);
   key.position.set(-18, 35, 28);
   key.castShadow=true;
-  const shadowSize=innerWidth<700?1024:2048;
+  const shadowSize=(innerWidth<700?1024:2048)*(renderScale<1?.5:1);
   key.shadow.mapSize.set(shadowSize,shadowSize);
   Object.assign(key.shadow.camera,{left:-42,right:42,top:38,bottom:-38,near:.5,far:110});
   key.shadow.bias=-.00025;key.shadow.normalBias=.06;key.shadow.radius=3;
@@ -178,7 +182,7 @@ try {
   // softness; full sharpness comes back on the last frame.
   let inMotion = false;
   function applyPixelRatio() {
-    renderer.setPixelRatio(inMotion ? Math.max(.6, pixelRatio * .7) : pixelRatio);
+    renderer.setPixelRatio(inMotion ? Math.max(.6 * renderScale, pixelRatio * .7) : pixelRatio);
     renderer.setSize(Math.max(viewport.clientWidth, 1), Math.max(viewport.clientHeight, 1), false);
     draw(); // resizing clears the canvas: redraw at once so no blank frame shows
   }
@@ -477,6 +481,8 @@ try {
       model.traverse(object => { object.matrixAutoUpdate = object.userData.deviceKind === 'door' && Boolean(object.userData.doorId) && !object.isMesh; });
       scene.add(model);
       renderKit.addPondReflections(model);
+      const koi=createKoi({model,camera,schedule});abort.signal.addEventListener('abort',()=>koi.dispose(),{once:true});
+      if(new URLSearchParams(location.search).has('debug'))window.__koi=koi;
       // Night room lighting: a pool of 6 spot lights, 1 casting shadows, to stay light on laptop GPUs.
       simulation=await createSimulation({THREE,scene,model,floorRoots,renderer,camera,schedule,spotLights:6,shadowSpots:1,
         onSelectFloor(n){if(currentFloor!==String(n)){currentFloor=String(n);interiorView=null;updateView();}},
