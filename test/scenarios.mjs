@@ -594,6 +594,27 @@ export const scenarios = [
     await p.sleep(100);
     expect(await p.eval(dealt) === before, `switching ${other} moved no light between rooms (${before} → ${await p.eval(dealt)})`);
   }},
+  {name: 'night flights: room lights moving between rooms (the floors change) fade out and in, never switch at once', async run(p, expect) {
+    await p.goto('?debug=1&time=19:00');
+    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
+    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.sleep(600);
+    // Each frame: each room spot's brightness as drawn (0 while it or its floor is hidden); a change of more than an
+    // eighth of full in one frame is a light switching at once.
+    await p.eval(`(()=>{const spots=__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.name.startsWith('Simulation_spot'));window.__jumps=[];window.__moves=0;let last=null;
+      const shown=o=>{for(let x=o;x;x=x.parent)if(!x.visible)return false;return true;};
+      const f=()=>{const now=spots.map(l=>({v:shown(l)?l.intensity:0,room:l.userData.roomId}));
+        if(last)now.forEach((n,i)=>{if(n.room!==last[i].room)__moves++;const d=Math.abs(n.v-last[i].v);if(d>13)__jumps.push(Math.round(d)+' '+last[i].room+'→'+n.room);});
+        last=now;requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
+    for (const to of ['meeting', 'pond', 'energy', 'overview']) {
+      await p.click(`[data-destination="${to}"]`);
+      await p.until(`${idle} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
+      await p.sleep(500);
+    }
+    expect(await p.eval('__moves') >= 3, `the lights moved between rooms as the floors changed (${await p.eval('__moves')} moves)`);
+    const jumps = await p.eval('__jumps');
+    expect(!jumps.length, `no light switched at once (${jumps.slice(0, 4).join(', ') || 'none'})`);
+  }},
   {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
     await p.goto(`?dest=pond&${FAST}`);
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});

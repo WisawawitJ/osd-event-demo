@@ -100,7 +100,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   // frame: its fittings' glow and its spot light follow `lightLevel` (0 off … 1 on), which runs toward the switch.
   const lightLevel = new Map(rooms.map(room => [room.id, states.get(room.id).light ? 1 : 0]));
   const LIGHT_FADE_MS = 350;
-  let lightFrame = 0, lightLast = 0;
+  let lightFrame = 0, lightLast = 0, dealLast = 0;
   function paintLights() {
     for (const room of rooms) {
       const level = lightLevel.get(room.id);
@@ -109,7 +109,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
         for (const material of [].concat(object.material)) if (material.emissive) { material.emissive.set(0xffdc9b); material.emissiveIntensity = (night ? 2.1 : .6) * level; }
       }
     }
-    for (const light of lights) if (light.userData.roomId) light.intensity = SPOT_INTENSITY * (lightLevel.get(light.userData.roomId) ?? 0);
+    lights.forEach((light, i) => { const d = dealt[i]; light.intensity = d.at ? SPOT_INTENSITY * lightLevel.get(d.at.room.id) * d.presence : 0; });
     schedule();
   }
   function relight() { updateLighting(); paintLights(); renderer.shadowMap.needsUpdate = true; schedule(); }
@@ -117,6 +117,17 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     lightFrame = 0;
     const d = Math.max(0, time - (lightLast || time)) / LIGHT_FADE_MS; lightLast = time;
     let moving = false;
+    const dd = Math.max(0, time - (dealLast || time)) / DEAL_MS; dealLast = time;
+    lights.forEach((light, i) => {
+      const d = dealt[i];
+      if (d.next !== undefined) {
+        d.presence = Math.max(0, d.presence - dd);
+        if (d.presence === 0) { place(light, d, d.next); d.next = undefined; }
+        moving = true; return;
+      }
+      const to = d.at ? 1 : 0;
+      if (d.presence !== to) { d.presence = to > d.presence ? Math.min(to, d.presence + dd) : Math.max(to, d.presence - dd); if (d.presence !== to) moving = true; }
+    });
     for (const room of rooms) {
       const to = states.get(room.id).light ? 1 : 0, from = lightLevel.get(room.id);
       if (from === to) continue;
@@ -124,11 +135,15 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       if (lightLevel.get(room.id) !== to) moving = true;
     }
     paintLights();
-    if (moving && !disposed) lightFrame = requestAnimationFrame(lightStep); else lightLast = 0;
+    if (moving && !disposed) lightFrame = requestAnimationFrame(lightStep); else lightLast = dealLast = 0;
   }
   function fadeLights() {
     if (disposed) return;
-    if (document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) { for (const room of rooms) lightLevel.set(room.id, states.get(room.id).light ? 1 : 0); paintLights(); return; }
+    if (document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      for (const room of rooms) lightLevel.set(room.id, states.get(room.id).light ? 1 : 0);
+      lights.forEach((light, i) => { const d = dealt[i]; if (d.next !== undefined) { place(light, d, d.next); d.next = undefined; } d.presence = d.at ? 1 : 0; });
+      paintLights(); return;
+    }
     if (!lightFrame) lightFrame = requestAnimationFrame(lightStep);
   }
   const lights = Array.from({ length: spotLights }, (_, index) => {
@@ -147,6 +162,8 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     scene.add(light, light.target);
     return light;
   });
+  const DEAL_MS = 220, dealt = lights.map(() => ({ presence: 0, at: null, next: undefined }));
+  let dealtOnce = false;
   const worldPoint = new THREE.Vector3();
   function isVisible(object) {
     for (let item = object; item; item = item.parent) if (!item.visible) return false;
@@ -179,20 +196,29 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     // At night every spot of the pool is in the scene, unused ones dark at the scene's root: the number of lights stays
     // the same whatever the view shows (fewer rooms on one floor, a floor hidden), and with it every shader. A change
     // in that count rebuilt them all, a freeze of 0.1–0.2 s on the first night flight to a stop.
+    // A spot dealt to another room (the view changed floors, another room was selected) fades out where it is, moves,
+    // and fades in at its new room (DEAL_MS each way): moved at once, rooms lit up and went dark in one frame.
     lights.forEach((light, index) => {
-      const emitter = candidates[index];
+      const emitter = candidates[index] || null, d = dealt[index];
       light.visible = night;
-      if (!emitter) { if (light.parent !== scene) scene.add(light, light.target); light.intensity = 0; light.userData.roomId = null; return; }
-      const { room, position } = emitter;
-      const root = floors.get(String(room.floor));
-      root.add(light, light.target);
-      light.position.fromArray(position);
-      light.position.y -= .12; // Emit below the modeled diffuser, without self-occlusion.
-      light.angle = Math.min(1.16, Math.max(.68, Math.atan((room.lightRadius || 3.7) / Math.max(light.position.y, 1))));
-      light.target.position.set(position[0], .05, position[2]);
-      light.userData.roomId = room.id;
-      light.intensity = SPOT_INTENSITY * lightLevel.get(room.id);
+      const same = d.at === emitter || (d.at && emitter && d.at.room === emitter.room && d.at.position.every((v, k) => v === emitter.position[k]));
+      if (same) { d.next = undefined; return; }
+      d.next = emitter;
+      if (d.presence === 0 || !dealtOnce || !night) { place(light, d, emitter); d.next = undefined; d.presence = dealtOnce && night ? 0 : emitter ? 1 : 0; }
     });
+    dealtOnce = true;
+    paintLights(); fadeLights();
+  }
+  function place(light, d, emitter) {
+    d.at = emitter;
+    if (!emitter) { if (light.parent !== scene) scene.add(light, light.target); light.userData.roomId = null; return; }
+    const { room, position } = emitter;
+    floors.get(String(room.floor)).add(light, light.target);
+    light.position.fromArray(position);
+    light.position.y -= .12; // Emit below the modeled diffuser, without self-occlusion.
+    light.angle = Math.min(1.16, Math.max(.68, Math.atan((room.lightRadius || 3.7) / Math.max(light.position.y, 1))));
+    light.target.position.set(position[0], .05, position[2]);
+    light.userData.roomId = room.id;
   }
   // Doors swing to their new angle over ~0.6 s (eased) instead of snapping; shadows follow when they settle.
   const swinging = new Map();
