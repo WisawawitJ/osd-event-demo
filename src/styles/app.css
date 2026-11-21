@@ -11,9 +11,7 @@ button[aria-pressed="true"]:not(:disabled):hover { background:var(--accent); }
 button, .download { min-height:44px; border-radius:8px; padding:9px 13px; line-height:1.5; }
 svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
 .header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 28px; border-bottom:1px solid var(--line); }
-.identity { display:flex; align-items:baseline; gap:16px; }
 h1 { margin:0; font-family:"Avenir Next",Avenir,"Segoe UI",sans-serif; font-size:32px; font-weight:650; letter-spacing:-.03em; line-height:1.2; }
-.identity span { font-size:15px; color:var(--muted); }
 .download { display:inline-flex; align-items:center; gap:8px; text-decoration:none; color:var(--accent); font-size:14px; }
 main { padding:0 28px; }
 .toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:14px 0; }
@@ -34,8 +32,7 @@ footer strong { font-weight:600; white-space:nowrap; }
 ::selection { background:var(--active); color:var(--ink); }
 @media(max-width:680px) {
  .header { padding:15px 16px; gap:8px; }
- .identity { gap:10px; } h1 { font-size:28px; }
- .identity span { font-size:13px; }
+ h1 { font-size:28px; }
  .download { padding:8px; font-size:12px; gap:5px; }
  main { padding:0 12px; }
  .toolbar { gap:10px; padding:12px 0; }
@@ -67,7 +64,6 @@ footer strong { font-weight:600; white-space:nowrap; }
  .camera-presets { justify-content:center; font-size:12px; margin:0 0 10px; }
  .camera-presets>span { display:none; }
  #viewport { height:calc(100dvh - 380px); min-height:340px; }
- .identity span { font-size:11px; letter-spacing:.03em; }
 }
 
 .camera-presets{flex-wrap:wrap}#viewport{height:calc(100dvh - 390px)}
@@ -158,3 +154,8 @@ html[data-night=true] .showcase-page:not([data-tour-destination="overview"]) .sc
 .showcase-page .header-actions button,.showcase-page .explore-link{min-height:34px;padding:5px 10px;border-radius:8px;line-height:1.4}
 .showcase-page .insight-toolbar{padding:3px 4px 3px 12px}
 .showcase-page .layer-controls button{min-height:30px;padding:4px 10px}
+/* The explore page's header matches the showcase's: the same brand (logo, OSD, tagline) at the same height. */
+.header{height:84px;padding:0 32px;box-sizing:border-box;background:#fff}
+.page-brand{margin:0;font:inherit;letter-spacing:normal}
+@media(max-width:1100px){.header{height:74px;padding:0 20px}}
+@media(max-width:760px){.header{height:66px;padding:0 14px}}

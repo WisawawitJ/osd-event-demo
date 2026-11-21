@@ -14,7 +14,7 @@ html.theme-switch, html.theme-switch * { transition: none !important; }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .35s; }
 
 /* Surfaces */
-html[data-night=true] .tour-header, html[data-night=true] .context-panel, html[data-night=true] .destination-dock,
+html[data-night=true] .tour-header, html[data-night=true] .header, html[data-night=true] .context-panel, html[data-night=true] .destination-dock,
 html[data-night=true] .day-timeline, html[data-night=true] .insight-toolbar, html[data-night=true] .parking-bar,
 html[data-night=true] .pk-caption, html[data-night=true] .pk-alert-pop, html[data-night=true] .view-controls,
 html[data-night=true] #scene-floor, html[data-night=true] #scene-chip,
