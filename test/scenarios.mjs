@@ -414,6 +414,17 @@ export const scenarios = [
     const r = JSON.parse(await p.eval(`JSON.stringify({story:__parking.story.running,active:__parking.active,dest:document.body.dataset.tourDestination})`));
     expect(r.story && r.active && r.dest === 'parking', `story still playing at the car park (story ${r.story}, car park ${r.active}, stop ${r.dest})`);
   }},
+  {name: 'the view controls step aside while the story shows a caption', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    const shown = `getComputedStyle(document.querySelector('.view-controls')).visibility==='visible'`;
+    expect(await p.eval(shown), 'view controls shown in free play');
+    await p.click('[data-bar="play"]');
+    await p.until(`!!document.querySelector('.has-caption') && !(${shown})`, {timeout: 20000, what: 'view controls hidden under the story caption'});
+    await p.click('[data-bar="free"]');
+    await p.until(shown, {timeout: 5000, what: 'view controls back after the story'});
+    expect(true, 'hidden during the story, back after it');
+  }},
   {name: 'kiosk recovers from an idle guided story', async run(p, expect) {
     // speed 5, not 30: the 60 s idle timeout becomes 12 s, room for the setup taps and the story's first step under load.
     await p.goto('?kiosk=1&debug=1&speed=5');

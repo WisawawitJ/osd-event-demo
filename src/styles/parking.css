@@ -40,6 +40,9 @@
 .parking-active .context-panel .panel-heading { padding: 20px 22px 0; margin-bottom: 12px; }
 .parking-active.phone-open .scene-title, .parking-active.phone-open #scene-chip { opacity: 0; }
 .parking-active #viewport:has(.has-caption) .scene-bottom { opacity: 0; }
+/* While the story shows a caption it drives the camera: the view controls step aside (they sat over the caption). */
+.view-controls { transition: opacity .25s, visibility .25s; }
+.parking-active #viewport:has(.has-caption) .view-controls { opacity: 0; visibility: hidden; }
 .scene-title, .scene-bottom { transition: opacity .25s; }
 
 /* Story bar */
