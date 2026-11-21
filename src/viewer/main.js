@@ -503,7 +503,7 @@ try {
         setPageNight(isDark(minute));
       };
       followClock();
-      if(debug)window.__simulation=()=>simulation.getState();
+      if(debug)Object.assign(window,{__simulation:()=>simulation.getState(),__simulationApi:simulation});
       const offClock=world.subscribe(kind=>{if(kind!=='wrap')followClock();});abort.signal.addEventListener('abort',offClock,{once:true});
       status.dataset.state = 'ready';
       status.textContent = L('โมเดลพร้อมแสดง','Model ready');

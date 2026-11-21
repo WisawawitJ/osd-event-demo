@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (82), about 75 s
+npm test                 # all behaviour checks (84), about 75 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -155,7 +155,8 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
     door hinges and cars update theirs.
 - Shadows behave as if baked: the sun's shadow map is drawn once per view change or sun step (every 2 world minutes, about
   once a second), never because the camera moved. At night
-  the 6 room lights (1 with shadows) are the selected room and its neighbours, so moving the camera never swaps lights or shadows.
+  the 6 room lights (1 with shadows) are the selected room and its neighbours (dealt again as soon as another room is
+  selected), so moving the camera never swaps lights or shadows. Every room's light fades on and off (~0.35 s).
 - The near clipping plane follows the viewing distance, and road paint, bay tints and car shadows use a depth offset,
   so nothing flickers against the surface underneath while the camera moves.
 - Dock switches are one continuous camera move of 1.3–1.9 s that speeds up and slows down once (eased on the distance

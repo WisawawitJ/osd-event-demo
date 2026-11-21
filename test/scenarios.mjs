@@ -562,6 +562,38 @@ export const scenarios = [
     expect(top > .15 && c.at(-1) === 0, `the cone showed at the meeting room (${top.toFixed(2)}) and is gone at the pond`);
     expect(step < top * .25, `it faded in and out (largest change in one frame ${(step / top * 100).toFixed(0)}% of full)`);
   }},
+  {name: 'room lights fade on and off, every room alike (not only the meeting room)', async run(p, expect) {
+    await p.goto('?debug=1&dest=meeting&time=20:30');
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the meeting room at night'});
+    await p.sleep(600);
+    // A room other than the meeting room with one of the night's spot lights: its light is switched on, then off.
+    const room = await p.eval(`(()=>{const s=__scene.getObjectsByProperty('isSpotLight',true).find(l=>l.visible&&l.userData.roomId&&l.userData.roomId!=='f4_meeting_2');return s?.userData.roomId||null;})()`);
+    expect(room, `a neighbour room with a spot light at night (${room})`);
+    if (!room) return;
+    const trace = async on => {
+      // Its light fittings' glow (the spot lights can be dealt to other rooms when one is switched; the fittings stay).
+      await p.eval(`(()=>{window.__fade=[];let fitting=null;__scene.traverse(o=>{if(!fitting&&o.isMesh&&o.userData.roomId==='${room}'&&o.userData.deviceKind==='light'&&o.material.emissive)fitting=o;});
+        const f=()=>{__fade.push(fitting.material.emissiveIntensity);if(__fade.length<40)requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
+      await p.eval(`__simulationApi.setRoom('${room}',{light:${on}})`);
+      await p.sleep(900);
+      return p.eval('__fade');
+    };
+    for (const on of [true, false]) {
+      const f = await trace(on), top = Math.max(...f), mid = f.filter(v => v > top * .1 && v < top * .9).length;
+      expect(top > 0 && f.at(-1) === (on ? top : 0) && mid >= 5, `switched ${on ? 'on' : 'off'}: the light ${on ? 'rose' : 'fell'} over ${mid} frames, not in one`);
+    }
+  }},
+  {name: 'night: the room lights are dealt around the selected room as soon as it is selected, not at the next switch', async run(p, expect) {
+    await p.goto('?debug=1&dest=meeting&time=20:30');
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the meeting room at night'});
+    await p.sleep(400);
+    const dealt = `JSON.stringify(__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.name.startsWith('Simulation_spot')).map(l=>l.userData.roomId))`;
+    const before = await p.eval(dealt);
+    const other = JSON.parse(before).find(id => id && id !== 'f4_meeting_2');
+    await p.eval(`__simulationApi.setRoom('${other}',{light:true})`);
+    await p.sleep(100);
+    expect(await p.eval(dealt) === before, `switching ${other} moved no light between rooms (${before} → ${await p.eval(dealt)})`);
+  }},
   {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
     await p.goto(`?dest=pond&${FAST}`);
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
@@ -770,10 +802,11 @@ export const scenarios = [
     await p.until("document.body.dataset.tourDestination === 'meeting' && !document.querySelector('#tour-night').disabled", {timeout: 20000});
     await p.click('#tour-night');
     await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 10000});
+    await p.sleep(600); // the rooms' lights fade (~0.35 s) to the night's schedule
     const spots = `JSON.stringify(__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.visible&&l.name.startsWith('Simulation_spot')).map(l=>[l.userData.roomId,l.position.x.toFixed(1),l.position.z.toFixed(1),l.intensity]))`;
     const before = JSON.parse(await p.eval(spots));
     await p.click('[data-control="light"]');
-    await p.sleep(300);
+    await p.sleep(600);
     const after = JSON.parse(await p.eval(spots));
     const same = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
     expect(after.length === before.length && after.every((s, i) => same(s, before[i])), 'the same spots stay assigned to the same rooms');
