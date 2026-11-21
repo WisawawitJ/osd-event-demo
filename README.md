@@ -28,13 +28,14 @@ Useful URLs:
 | `/?day=10` | Real minutes one simulated day takes (default 20); `?day=0` runs the clock at real speed (tests use this) |
 | `/?time=17:00` | Where the world clock starts (default 09:00), e.g. to rehearse the evening rush or the night |
 | `/?speed=3` | Runs the demo's timing 3× faster (max 30), for rehearsals and tests |
+| `/?warm=0` | Skips the loading screen's shader warm-up (about a second per load); the first flights may then stutter. For tests |
 | `/?fps=1` | Adds a frames-per-second counter, to check the event laptop (any page; combine with the others) |
 | `/#explore` | The original free-exploration page, now with the car park, its cars and street traffic (no parking UI, no model download) |
 
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (88), about 75 s
+npm test                 # all behaviour checks (88), about 60 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -42,14 +43,17 @@ npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, d
 `test/run.mjs` starts its own server on a free port and drives headless Chromium over the DevTools protocol.
 There are no npm dependencies. **It never uses the Intel iGPU by itself**: on this laptop headless Chromium on the iGPU
 hung it twice (i915 GPU hang, then a failed reset), and since the iGPU drives the display the whole desktop froze.
-By default it renders on the NVIDIA GPU (only NVIDIA's EGL library is loaded; about 64 s for the suite with 4 browsers),
+By default it renders on the NVIDIA GPU (only NVIDIA's EGL library is loaded; about 60 s for the suite with 8 browsers; more overload the machine and
+timing checks fail),
 and closes any hardware browser found holding the iGPU open, falling back to software. Without the NVIDIA driver it
 renders in software (SwiftShader, 3 browsers at low CPU priority, the 3D view at half resolution): about 9½ minutes, and
 some timing-sensitive checks fail at those frame rates. `GPU=nvidia|software|vulkan|egl` forces one (`egl` is the iGPU:
 don't). Pages load with `?speed=30`, which runs the simulated clock, cars, story waits and camera flights 30× faster.
 `SPEED=n` and `JOBS=n` change either. The `?speed` flag also works by hand for rehearsals, for example
 `/?dest=parking&story=1&speed=3`. Pages also load with `?day=0` (the world clock at real speed from 09:00) unless a
-check sets `day` itself, as the day-cycle checks do. Screenshots of failed checks go to `test/out/`.
+check sets `day` itself, as the day-cycle checks do. Checks that do not measure smoothness also skip the shader
+warm-up (`?warm=0`). The slowest checks start first, from the times of the last run (`test/out/times.json`).
+Screenshots of failed checks go to `test/out/`.
 
 `test/bench.mjs` reports the median of 3 windows of 3 s per scene (`BENCH_ROUNDS`, `BENCH_SECONDS`); single windows vary by up to
 ~25%, so compare medians from back-to-back runs on the same machine.

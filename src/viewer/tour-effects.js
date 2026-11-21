@@ -135,10 +135,12 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
   if(current==='meeting'&&(airLevel>0||airTarget>0)&&!document.hidden)airFrame=requestAnimationFrame(airStep);else airLast=0;
  }
  function fadeAir(on){airTarget=on?1:0;if(!airFrame&&current==='meeting')airFrame=requestAnimationFrame(airStep);if(current!=='meeting'){airLevel=airTarget;setAir();}}
- // A level (0 … 1) that runs toward on or off over `ms` instead of snapping, drawn by `draw` on each step.
+ // A level (0 … 1) that runs toward on or off over `ms` instead of snapping, drawn by `draw` on each step. A step
+ // covers at most 50 ms: the frame a switch lands in can be slow (the panel, the room and its shadows all change), and
+ // the fade then went most of the way in that one frame.
  function fader(ms,draw){
   let level=1,target=1,frame=0,last=0;
-  const step=time=>{const d=Math.max(0,time-last)/ms;last=time;level=target>level?Math.min(target,level+d):Math.max(target,level-d);draw(level);frame=level===target?0:requestAnimationFrame(step);};
+  const step=time=>{const d=Math.min(50,Math.max(0,time-last))/ms;last=time;level=target>level?Math.min(target,level+d):Math.max(target,level-d);draw(level);frame=level===target?0:requestAnimationFrame(step);};
   return {set(on){target=on?1:0;if(frame||level===target)return;last=performance.now();frame=requestAnimationFrame(step);},stop(){cancelAnimationFrame(frame);frame=0;}};
  }
  // The room light's pool and beam, and the seat markers (the meeting ending or starting), fade in and out (~0.35 s).

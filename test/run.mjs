@@ -1,13 +1,20 @@
 // Runs the behaviour checks in headless Chromium: `npm test`, or `npm test -- kiosk night` to run matching ones.
 // WebGL renders on the NVIDIA GPU when present, else in software; never on the Intel iGPU (see browser.mjs for why).
-// JOBS=n runs n browsers side by side (default 4 on NVIDIA, 3 in software, which is CPU work); SPEED=n sets the demo
+// JOBS=n runs n browsers side by side (default 8 on NVIDIA, 3 in software, which is CPU work); SPEED=n sets the demo
 // time scale (default 30).
+import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {open, DEFAULT_GPU} from './browser.mjs';
 import {scenarios} from './scenarios.mjs';
 
 const filters = process.argv.slice(2).map(f => f.toLowerCase());
 const chosen = scenarios.filter(s => !filters.length || filters.some(f => s.name.toLowerCase().includes(f)));
-const jobs = Math.max(1, Math.min(Number(process.env.JOBS) || ((process.env.GPU || DEFAULT_GPU) === 'software' ? 3 : 4), chosen.length));
+// The slowest checks start first (times from earlier runs, kept in test/out): the run then ends on short ones instead
+// of one long check left running alone. A check without a time yet counts as an average one.
+const TIMES = new URL('out/times.json', import.meta.url);
+let times = {};
+try { times = JSON.parse(readFileSync(TIMES, 'utf8')); } catch {}
+chosen.sort((a, b) => (times[b.name] ?? 6) - (times[a.name] ?? 6));
+const jobs = Math.max(1, Math.min(Number(process.env.JOBS) || ((process.env.GPU || DEFAULT_GPU) === 'software' ? 3 : 8), chosen.length));
 // Rendering noise the demo cannot avoid; anything else in the console fails the check.
 // (SwiftShader has no parallel shader compiling; three.js warns and compiles normally.)
 const NOISE = /GL_INVALID_OPERATION|PCFSoftShadowMap|UniformsUtils: Textures of render targets|KHR_parallel_shader_compile extension not supported/;
@@ -33,6 +40,8 @@ async function worker() {
 }
 await Promise.all(Array.from({length: jobs}, worker));
 const failed = results.filter(r => r.problems.length).length;
+for (const r of results) times[r.name] = r.time;
+try { mkdirSync(new URL('out/', import.meta.url), {recursive: true}); writeFileSync(TIMES, JSON.stringify(times, null, 1)); } catch {}
 console.log(`\nWebGL: ${renderer} · ${jobs} browser${jobs > 1 ? 's' : ''} · speed ${Number(process.env.SPEED) || 30}`);
 console.log(`${chosen.length - failed}/${chosen.length} passed in ${((Date.now() - started) / 1000).toFixed(1)} s`);
 process.exit(failed ? 1 : 0);

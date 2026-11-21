@@ -619,8 +619,10 @@ try {
        // Warm-up: a stop's first visit stalled 0.3–0.7 s, compiling and linking shader variants on the spot: the flight's
        // floor change cuts geometry with one more clipping plane (scene-transition.js), and the night's lights change
        // the number of lights. Compile every material each way at load, draw one tiny off-screen frame each way
-       // (shadows included), and upload every texture, before anyone clicks.
-       {
+       // (shadows included), and upload every texture, before anyone clicks. `?warm=0` skips it (tests that do not
+       // measure smoothness; it takes over a second of each page load).
+       if(params.get('warm')==='0')document.documentElement.dataset.warm='done';
+       else{
         const hidden=[];
         // Show the building once, then keep the loading message up while the warm-up runs (about 2 s).
         renderer.render(scene,camera);

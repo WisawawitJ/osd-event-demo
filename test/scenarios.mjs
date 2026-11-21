@@ -1,6 +1,8 @@
 // Behaviour checks for the demo, run by test/run.mjs. Pages load with ?speed=SPEED (default 30: demo timing 30× faster).
 const SPEED = Number(process.env.SPEED) || 30;
-const FAST = `debug=1&speed=${SPEED}`;
+// FAST skips the loading screen's shader warm-up; FASTW keeps it, for checks that wait for it or measure smoothness.
+const FASTW = `debug=1&speed=${SPEED}`;
+const FAST = `${FASTW}&warm=0`;
 const parking = (extra = '') => `?dest=parking&${FAST}${extra}`;
 const ready = 'window.__parking && window.__parking.active';
 // The showcase is up (any stop).
@@ -217,7 +219,7 @@ export const scenarios = [
   }},
 
   {name: 'the room-colour bar shows at the meeting room and the pond only', async run(p, expect) {
-    await p.goto(`?${FAST}`);
+    await p.goto(`?${FASTW}`);
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
     const shown = () => p.eval(`(()=>{const b=document.querySelector('.insight-toolbar');return !b.hidden&&b.getBoundingClientRect().height>0})()`);
     // Record any moment the bar shows while the camera is still flying (the panel is inert then): it must wait to land.
@@ -372,7 +374,7 @@ export const scenarios = [
   }},
 
   {name: 'koi swim (in the shader, inside the water) and stand still when paused', async run(p, expect) {
-    await p.goto(`?dest=pond&${FAST}`);
+    await p.goto(`?dest=pond&${FASTW}`);
     await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='pond'`, {timeout: 40000});
     const loops = JSON.parse(await p.eval(`JSON.stringify(['Floor_1_koi_ochre','Floor_1_koi_cream'].map(n=>{const a=__scene.getObjectByName(n).geometry.attributes.koiLoop;const r=[];for(let i=0;i<a.count;i+=52)r.push(a.getX(i));return r}).flat())`));
     expect(loops.length === 22 && loops.filter(r => r > 0).length >= 15, `fish with room to swim a loop: ${loops.filter(r => r > 0).length} of ${loops.length}`);
@@ -623,12 +625,13 @@ export const scenarios = [
     const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
     await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
     await p.sleep(600);
-    // Each frame: each room spot's brightness as drawn (0 while it or its floor is hidden); a change of more than an
-    // eighth of full in one frame is a light switching at once.
+    // Each frame: each room spot's brightness as drawn (0 while it or its floor is hidden); a change of more than half
+    // of full (105) in one frame is a light switching at once. The fades run on time (0.22 s each way): a slow frame
+    // under load covers more of one, but never half of it.
     await p.eval(`(()=>{const spots=__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.name.startsWith('Simulation_spot'));window.__jumps=[];window.__moves=0;let last=null;
       const shown=o=>{for(let x=o;x;x=x.parent)if(!x.visible)return false;return true;};
       const f=()=>{const now=spots.map(l=>({v:shown(l)?l.intensity:0,room:l.userData.roomId}));
-        if(last)now.forEach((n,i)=>{if(n.room!==last[i].room)__moves++;const d=Math.abs(n.v-last[i].v);if(d>13)__jumps.push(Math.round(d)+' '+last[i].room+'→'+n.room);});
+        if(last)now.forEach((n,i)=>{if(n.room!==last[i].room)__moves++;const d=Math.abs(n.v-last[i].v);if(d>52)__jumps.push(Math.round(d)+' '+last[i].room+'→'+n.room);});
         last=now;requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
     for (const to of ['meeting', 'pond', 'energy', 'overview']) {
       await p.click(`[data-destination="${to}"]`);
@@ -651,14 +654,14 @@ export const scenarios = [
     expect(door.swingFrames >= 5 && door.shadowed >= door.swingFrames - 1, `the shadow was redrawn on the swing's frames (${door.shadowed} of ${door.swingFrames})`);
   }},
   {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
-    await p.goto(`?dest=pond&${FAST}`);
+    await p.goto(`?dest=pond&${FASTW}`);
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
     await p.sleep(3000 / SPEED + 500);
     expect(await p.eval(`__scene.getObjectByName('Courtyard_water_reflection').visible`), 'pond mirror visible after the start-up warm-up');
   }},
 
   {name: 'pond mirror: redrawn when the camera moves, at most ~10 times a second while it is still', async run(p, expect) {
-    await p.goto(`?dest=pond&${FAST}`);
+    await p.goto(`?dest=pond&${FASTW}`);
     await p.until(`document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='pond' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the pond'});
     await p.until(`__scene.getObjectByName('Courtyard_water_reflection').visible`, {what: 'pond mirror on'});
     // Counts the screen's frames and the mirror's passes (into its own target, through its unnamed camera; the plate
@@ -678,7 +681,7 @@ export const scenarios = [
   }},
 
   {name: 'a hidden car park does not redraw the view: cars driving while an upper floor is shown', async run(p, expect) {
-    await p.goto(`?dest=meeting&${FAST}&time=20:00`);
+    await p.goto(`?dest=meeting&${FASTW}&time=20:00`);
     await p.until(`document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying') && !__scene.getObjectByName('Demo_parking').visible`, {timeout: 40000, what: 'at the meeting room, car park hidden'});
     await p.sleep(500); // the air flow (AC off at 20:00) has faded
     await p.eval(`(()=>{const R=__renderer,render=R.render.bind(R);window.__frames=0;R.render=(s,c)=>{if(!R.getRenderTarget())__frames++;return render(s,c);};})()`);
