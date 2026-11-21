@@ -3,6 +3,8 @@ const SPEED = Number(process.env.SPEED) || 30;
 const FAST = `debug=1&speed=${SPEED}`;
 const parking = (extra = '') => `?dest=parking&${FAST}${extra}`;
 const ready = 'window.__parking && window.__parking.active';
+// The showcase is up (any stop).
+const UP = "document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking";
 const VISITOR = 'ชูใจ ใฝ่รู้', STORY_PLATE = '7กข 4821';
 
 export const scenarios = [
@@ -372,9 +374,12 @@ export const scenarios = [
     expect(await p.eval(`__scene.getObjectByName('Courtyard_water_reflection').visible`), 'pond mirror visible after the start-up warm-up');
   }},
 
-  {name: 'kiosk loop runs the parking story; a touch pauses it', async run(p, expect) {
-    await p.goto(`?kiosk=1&${FAST}`);
-    await p.until('window.__parking && __parking.story.running', {timeout: 60000, what: 'loop reaches the parking story'});
+  {name: 'kiosk follows the day: the morning car park plays the story; a touch pauses it', async run(p, expect) {
+    await p.goto(`?kiosk=1&${FAST}&time=07:35`);
+    await p.until('window.__parking && __parking.story.running', {timeout: 60000, what: 'the morning car park plays the parking story'});
+    await p.until('__parking.story.index >= 1', {timeout: 20000, what: 'story step 2'});
+    const parked = await p.eval('__parking.sim.state.presence.size');
+    expect(parked >= 25, `the story starts from the 09:00 car park, even when it begins at 07:35 (${parked} cars)`);
     await p.eval(`document.querySelector('#viewport').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`);
     await p.sleep(300);
     expect(!(await p.eval('__parking.story.running')), 'touch stopped the story');
@@ -685,5 +690,84 @@ export const scenarios = [
     await p.click('[data-destination="access"]'); await p.sleep(400);
     await p.click('[data-destination="parking"]'); await p.sleep(600);
     expect(await p.eval('__bare') === 0, `frames with the main view in the pop-up: ${await p.eval('__bare')}`);
+  }},
+
+  // The day cycle: one world clock, running as a time-lapse (`day=10`: a day in 10 real minutes, × SPEED here).
+  {name: 'day cycle: the clock runs by itself; a jump brings the car park to the hour, logged over the skipped time', async run(p, expect) {
+    await p.goto(`?${FAST}&day=10&time=08:00`);
+    await p.until(UP, {timeout: 40000});
+    const m0 = await p.eval('__world.minute()');
+    await p.sleep(1000);
+    const m1 = await p.eval('__world.minute()');
+    expect(m1 - m0 > 20, `world time runs as a time-lapse (${m0.toFixed(0)} → ${m1.toFixed(0)} in 1 s)`);
+    // Evening: the car park empties (it is on screen at the overview, but not watched: made up at once).
+    const night = JSON.parse(await p.eval(`JSON.stringify((()=>{const from=__world.now();__world.jumpTo(20*60);const to=__world.now();return {from,to,parked:__parking.sim.state.presence.size,exits:__parking.sim.state.events.filter(e=>e.kind==='exit'&&e.at>from&&e.at<=to).length}})())`));
+    expect(night.parked <= 6, `car park nearly empty at 20:00 (${night.parked} cars)`);
+    expect(night.exits >= 15, `the evening's exits are logged between the old and new time (${night.exits})`);
+    await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 5000, what: 'night after the jump'});
+    // Next day's noon: past the 03:00 wrap, back on the event date, the car park full again.
+    const noon = JSON.parse(await p.eval(`JSON.stringify((()=>{__world.jumpTo(12*60);const at=__world.now();return {at,parked:__parking.sim.state.presence.size,newest:__parking.sim.state.events[0].at,day:new Date(at+7*3600e3).getUTCDate()}})())`));
+    expect(noon.day === 24, `the day wraps: still 24 Nov after a night (${noon.day} Nov)`);
+    expect(noon.parked >= 28, `car park full again at noon (${noon.parked} cars)`);
+    expect(noon.newest <= noon.at, 'no logged event is in the future after the wrap');
+    await p.until(`document.documentElement.dataset.night === 'false'`, {timeout: 5000, what: 'day after the jump'});
+  }},
+  {name: 'day cycle: Night/Day button, the timeline slider and moments move the world clock', async run(p, expect) {
+    // Real speed (a time-lapse of 2 world minutes a second), so the clock is read close to where the jump left it.
+    await p.goto('?debug=1&day=10&time=09:00');
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.click('#tour-night');
+    await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 5000, what: 'night'});
+    const m = await p.eval('__world.minute()');
+    expect(m >= 20 * 60 && m < 21 * 60, `Night moves the clock on to 20:00 (${m.toFixed(0)})`);
+    await p.click('#tour-night');
+    await p.until(`document.documentElement.dataset.night === 'false'`, {timeout: 5000, what: 'day'});
+    // The slider moves the world to 15:00: the pond's low water shows.
+    await p.eval(`(()=>{const r=document.querySelector('#day-time');r.value='900';r.dispatchEvent(new Event('input',{bubbles:true}));r.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+    await p.until(`!!document.querySelector('[data-incident="pond-low"]')`, {timeout: 5000, what: 'pond alert at 15:00'});
+    // A moment button: 09:00, the meeting starts (the clock goes forward to it) and the camera flies there.
+    await p.eval(`[...document.querySelectorAll('[data-day-event]')].find(b=>b.textContent.includes('09:00')).click()`);
+    await p.until(`document.body.dataset.tourDestination === 'meeting'`, {timeout: 20000, what: 'meeting room after the 09:00 moment'});
+    const at = await p.eval('__world.minute()');
+    expect(at >= 540 && at < 600, `clock at the meeting (${at.toFixed(0)})`);
+  }},
+  {name: 'day cycle: a light switched by hand stays until the schedule changes that room', async run(p, expect) {
+    await p.goto(`?dest=meeting&debug=1&speed=10&day=10&time=10:00`);
+    await p.until(`${UP} && document.body.dataset.tourDestination === 'meeting' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 40000});
+    const light = `__simulation().rooms.f4_meeting_2.light`;
+    expect(await p.eval(light) === true, 'meeting room light on at 10:00 (schedule)');
+    await p.click('[data-control="light"]');
+    await p.sleep(1500); // ~30 world minutes of clock ticks
+    expect(await p.eval(light) === false, 'switched off by hand, it stays off');
+  }},
+  {name: 'day cycle: the story holds the clock at real speed and gives it back', async run(p, expect) {
+    await p.goto(parking('&day=10&time=08:00'));
+    await p.until(ready, {timeout: 40000});
+    await p.click('[data-bar="play"]');
+    await p.until('__parking.story.running && __parking.story.index >= 1', {timeout: 30000, what: 'story step 2'});
+    const a = await p.eval('__world.now()'); await p.sleep(1000); const b = await p.eval('__world.now()');
+    expect((b - a) / 1000 < SPEED * 3, `world clock at real speed during the story (${((b - a) / 1000).toFixed(0)} s in 1 s at speed ${SPEED})`);
+    await p.click('[data-bar="free"]');
+    const c = await p.eval('__world.now()'); await p.sleep(1000); const d = await p.eval('__world.now()');
+    expect((d - c) / 60000 > 20, `time-lapse again after the story (${((d - c) / 60000).toFixed(0)} min in 1 s)`);
+  }},
+  {name: 'day cycle: Follow the day moves the camera to what the day is doing', async run(p, expect) {
+    // Speed 5: about 10 world minutes a second. The clock runs while the page loads, so the test sets 11:50 after.
+    await p.goto('?debug=1&speed=5&day=10');
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.eval('__world.jumpTo(11*60+50)');
+    await p.click('#day-play');
+    expect(await p.eval(`document.querySelector('#day-play').getAttribute('aria-pressed')`) === 'true', 'following');
+    await p.until(`document.body.dataset.tourDestination === 'meeting'`, {timeout: 20000, what: 'meeting room before noon'});
+    await p.until(`document.body.dataset.tourDestination === 'energy'`, {timeout: 20000, what: 'the roof at noon'});
+    // A drag hands the camera back to the visitor.
+    await p.eval(`__controls.dispatchEvent({type:'start'});__controls.dispatchEvent({type:'end'})`);
+    expect(await p.eval(`document.querySelector('#day-play').getAttribute('aria-pressed')`) === 'false', 'a drag stops following');
+  }},
+  {name: 'day cycle: the explore page follows the clock too (night at 20:00)', async run(p, expect) {
+    await p.goto('?debug=1&day=10&time=20:00#explore');
+    await p.until(`document.querySelector('#status')?.dataset.state === 'ready'`, {timeout: 40000});
+    await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 5000, what: 'night on the explore page'});
+    expect(true, 'explore page is dark at 20:00');
   }},
 ];

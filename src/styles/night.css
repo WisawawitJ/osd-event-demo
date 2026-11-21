@@ -34,7 +34,7 @@ html[data-night=true] .demo-label, html[data-night=true] .layer-controls > span,
 html[data-night=true] .day-events time, html[data-night=true] .timeline-labels, html[data-night=true] .scene-title p { color: var(--muted); }
 html[data-night=true] .day-events span, html[data-night=true] #insight-room { color: var(--ink); }
 html[data-night=true] .day-events button { border-left-color: #2c3c4d; }
-html[data-night=true] .day-events [aria-current=true], html[data-night=true] #day-current { background: #1d2a45; }
+html[data-night=true] .day-events [aria-current=true] { background: #1d2a45; }
 
 /* Building panel */
 html[data-night=true] .data-row { border-bottom-color: var(--line); }
@@ -51,7 +51,6 @@ html[data-night=true] .water-level i { background: #1e3331; }
 html[data-night=true] .event-row { border-left-color: var(--line); }
 html[data-night=true] .incident-item { background: #2c2416; border-color: #4a3a1f; }
 html[data-night=true] .incident-item small { color: #d1b58c; }
-html[data-night=true] #replay-notice { background: #16303f; color: #8fcbf2; }
 html[data-night=true] .chart .chart-grid { stroke: #24323f; }
 html[data-night=true] .chart text { fill: #8c9db0; }
 html[data-night=true] .chart path[fill="#e9effd"] { fill: #1b2740; }

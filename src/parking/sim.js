@@ -2,10 +2,9 @@
 // alerts, audit and outbox. Nothing here talks to ATOM, Keycloak, mail or cameras.
 import {buildStalls} from './layout.js';
 import {bkk, parts} from './i18n.js';
-import {SPEED, later} from './clock.js';
+import {later, world} from './clock.js';
 
 const DAY_START = bkk(2026, 11, 24, 0, 0);
-const START_TIME = bkk(2026, 11, 24, 9, 0);
 
 // Reasons a member of staff can give for opening the barrier by hand.
 export const GATE_REASONS = ['gate.reason.misread', 'gate.reason.delivery', 'gate.reason.guest', 'gate.reason.other'];
@@ -37,14 +36,34 @@ const uid = prefix => `${prefix}${(idCounter++).toString(36)}`;
 
 export function createParkingSim() {
   const listeners = new Set();
-  let state, clockBase, clockReal;
+  let state;
 
   function emit(kind, payload) { for (const fn of listeners) fn(kind, payload); }
   // A delayed follow-up (ATOM sync, the ticket email) belongs to the state it was made in. After a reset ids start
   // again from 1, so a stale one could otherwise land on a new request with the same id.
   const current = (fn, ms) => { const made = state; later(() => { if (state === made) fn(); }, ms); };
-  const now = () => Math.round(clockBase + (performance.now() - clockReal) * SPEED);
-  function setNow(ms) { clockBase = ms; clockReal = performance.now(); emit('clock'); }
+  // Time is the world clock's (src/parking/clock.js), shared with the building and the sky.
+  const now = () => world.now();
+  const setNow = ms => world.set(ms);
+  world.subscribe((kind, payload) => {
+    if (kind === 'wrap') shiftDay(payload);
+    if (kind !== 'tick') emit('clock', {kind, ...payload});
+  });
+  // The day wraps (03:00 on the 25th becomes 03:00 on the 24th): every logged time moves back with it, so the night's
+  // events read as yesterday's. Pass and visit dates stay, so passes for the 24th keep working every day. Logs older
+  // than two days are dropped, which keeps an all-day kiosk's memory flat.
+  function shiftDay(delta) {
+    const keepFrom = DAY_START - 2 * 864e5;
+    const move = list => list.filter(x => (x.at += delta) >= keepFrom);
+    state.events = move(state.events); state.audit = move(state.audit); state.emails = move(state.emails);
+    for (const a of state.alerts) { a.at += delta; if (a.resolvedAt) a.resolvedAt += delta; }
+    state.alerts = state.alerts.filter(a => a.status === 'open' || a.at >= keepFrom);
+    for (const p of state.presence.values()) p.since += delta;
+    for (const q of state.requests) {
+      q.createdAt += delta; if (q.decidedAt) q.decidedAt += delta;
+      for (const h of q.history) h.at += delta;
+    }
+  }
 
   function seed() {
     const r = rng(2411);
@@ -134,10 +153,17 @@ export function createParkingSim() {
     return {stalls, vehicles, requests, events, audit, presence, alerts: [], emails: [], capacity: 50, gate: 'closed', yesterday: {entries: 41, exits: 40, peak: 37, peakAt: '10:40', received: 5, approved: 4, rejected: 1, unknown: 3, manual: 2, syncFailed: 1, byType: {staff: 34, vip: 3, guest: 3, unknown: 1}}};
   }
 
+  // The seeded morning is the car park at 09:00. Started at another time of day, whatever lies in its future is left
+  // out (the traffic then brings the car park to the level for that hour).
   function reset() {
     idCounter = 1;
     state = seed();
-    setNow(START_TIME);
+    const at = now();
+    if (at < bkk(2026, 11, 24, 9, 0)) {
+      state.events = state.events.filter(e => e.at <= at);
+      state.audit = state.audit.filter(a => a.at <= at);
+      for (const [k, p] of state.presence) if (p.since > at) { state.presence.delete(k); state.stalls.find(s => s.id === p.stallId).occupant = null; }
+    }
     emit('reset');
   }
 
@@ -169,29 +195,31 @@ export function createParkingSim() {
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
-  function recordEntry({plate, province, type, stallId, color, manual = null, confidence = .97}) {
+  // `at` is for the car park catching up on time it did not show (a jump, or while off screen); calls go oldest first.
+  function recordEntry({plate, province, type, stallId, color, manual = null, confidence = .97, at = now()}) {
     const k = key(plate, province);
     const stall = state.stalls.find(s => s.id === stallId);
     if (stall) stall.occupant = k;
     const vehicle = findVehicle(plate, province)[0];
-    state.presence.set(k, {plate, province, type, stallId, since: now(), color, vehicleId: vehicle?.id});
-    const event = {id: uid('e'), at: now(), kind: manual ? 'manual' : 'entry', plate, province, type, camera: 'LPR-IN', confidence, ...(manual || {})};
+    state.presence.set(k, {plate, province, type, stallId, since: at, color, vehicleId: vehicle?.id});
+    const event = {id: uid('e'), at, kind: manual ? 'manual' : 'entry', plate, province, type, camera: 'LPR-IN', confidence, ...(manual || {})};
     state.events.unshift(event);
     emit('entry', event);
     return event;
   }
-  function recordExit({plate, province}) {
+  function recordExit({plate, province, at = now()}) {
     const k = key(plate, province);
     const p = state.presence.get(k);
     if (p) { state.presence.delete(k); const s = state.stalls.find(s => s.id === p.stallId); if (s) s.occupant = null; }
-    const event = {id: uid('e'), at: now(), kind: p ? 'exit' : 'exitNoEntry', plate, province, type: p?.type || findVehicle(plate, province)[0]?.type || 'unknown', camera: 'LPR-OUT', confidence: .96};
+    const event = {id: uid('e'), at, kind: p ? 'exit' : 'exitNoEntry', plate, province, type: p?.type || findVehicle(plate, province)[0]?.type || 'unknown', camera: 'LPR-OUT', confidence: .96};
     state.events.unshift(event);
     emit('exit', event);
     return event;
   }
 
   function raiseAlert({plate, province, snapshot, color, ambient = false}) {
-    const alert = {id: uid('a'), at: now(), plate, province, snapshot, color, status: 'open', ambient};
+    // `raised` is real time (performance.now): how long a car has waited is not world-clock time, which may run fast.
+    const alert = {id: uid('a'), at: now(), raised: performance.now(), plate, province, snapshot, color, status: 'open', ambient};
     state.alerts.unshift(alert);
     state.events.unshift({id: uid('e'), at: now(), kind: 'unknown', plate, province, type: 'unknown', camera: 'LPR-IN', confidence: .91, alertId: alert.id});
     emit('alert', alert);

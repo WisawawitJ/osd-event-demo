@@ -19,7 +19,7 @@ const deviceName = {light: () => L('ไฟ', 'Light'), climate: () => L('แอ�
 const nightText = night => night ? L('กลางคืน · เปิดอยู่', 'Night · on') : L('กลางคืน', 'Night');
 
 export async function createSimulation({ THREE, scene, model, floorRoots, renderer, camera, schedule,
-  onSelectFloor = () => {}, onNightChange = () => {}, spotLights = 8, shadowSpots = 2 }) {
+  onSelectFloor = () => {}, onNightChange = () => {}, onNightRequest = null, spotLights = 8, shadowSpots = 2 }) {
   const response = await fetch("./model/device-map.json");
   if (!response.ok) throw new Error('Simulation map unavailable');
   const map = await response.json();
@@ -252,7 +252,9 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     onSelectFloor(byId.get(selectedId).floor);
     updateModel();
   });
+  // With a clock to follow (onNightRequest), the button asks it for night or day; night then follows the clock.
   listen(nightButton, 'click', () => {
+    if (onNightRequest) { onNightRequest(!night); return; }
     night = !night;
     nightButton.setAttribute('aria-pressed', String(night));
     nightButton.textContent = nightText(night);

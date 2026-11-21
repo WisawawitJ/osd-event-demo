@@ -97,7 +97,14 @@ export async function open({gpu = process.env.GPU || 'auto', shots = join(root, 
     renderer, logs, url: server.url, sleep,
     cdp: send, // raw DevTools protocol, e.g. for profiling
 
-    async goto(path) { logs.length = 0; await send('Page.navigate', {url: server.url + path.replace(/^\//, '')}); await sleep(300); },
+    // Pages open with the world clock at real speed (`day=0`, from 09:00) unless the path sets `day` itself: checks of
+    // one scene then see the morning they expect, and only the day-cycle checks run the time-lapse.
+    async goto(path) {
+      logs.length = 0;
+      let url = path.replace(/^\//, '');
+      if (!/[?&]day=/.test(url)) { const [before, hash = ''] = url.split('#'); url = `${before}${before.includes('?') ? '&' : '?'}day=0${hash ? '#' + hash : ''}`; }
+      await send('Page.navigate', {url: server.url + url}); await sleep(300);
+    },
     async eval(expression) {
       const r = await send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true});
       if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text);

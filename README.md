@@ -21,10 +21,12 @@ Useful URLs:
 | URL | What it does |
 | --- | --- |
 | `/` | Guided building showcase, as before, with the Parking destination added to the dock |
-| `/?kiosk=1` | **Unattended loop** for the booth: the tour repeats, and the parking story plays in full at the car-park stop |
+| `/?kiosk=1` | **Unattended** for the booth: the camera follows the day, and the parking story plays in full during the morning arrivals |
 | `/?dest=parking` | Opens straight on the car park, for free play |
 | `/?dest=parking&story=1` | Opens on the car park and plays the parking story with auto-advance |
 | `/?dest=parking&story=1&auto=0` | Same, but the presenter advances each step with **Next** |
+| `/?day=10` | Real minutes one simulated day takes (default 10); `?day=0` runs the clock at real speed (tests use this) |
+| `/?time=17:00` | Where the world clock starts (default 09:00), e.g. to rehearse the evening rush or the night |
 | `/?speed=3` | Runs the demo's timing 3× faster (max 30), for rehearsals and tests |
 | `/?fps=1` | Adds a frames-per-second counter, to check the event laptop (any page; combine with the others) |
 | `/#explore` | The original free-exploration page, now with the car park, its cars and street traffic (no parking UI, no model download) |
@@ -32,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (49), about 50 s
+npm test                 # all behaviour checks (55), about 55 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -42,20 +44,43 @@ There are no npm dependencies. It renders on the GPU through EGL (about 60 fps o
 back to software WebGL only if no GPU works; set `GPU=egl|vulkan|software` to force one. Pages load with `?speed=30`,
 which runs the simulated clock, cars, story waits and camera flights 30× faster, and 4 browsers run checks side by side.
 `SPEED=n` and `JOBS=n` change either. The `?speed` flag also works by hand for rehearsals, for example
-`/?dest=parking&story=1&speed=3`. Screenshots of failed checks go to `test/out/`.
+`/?dest=parking&story=1&speed=3`. Pages also load with `?day=0` (the world clock at real speed from 09:00) unless a
+check sets `day` itself, as the day-cycle checks do. Screenshots of failed checks go to `test/out/`.
 
 `test/bench.mjs` reports the median of 3 windows of 3 s per scene (`BENCH_ROUNDS`, `BENCH_SECONDS`); single windows vary by up to
 ~25%, so compare medians from back-to-back runs on the same machine.
 
+## One day, always running
+
+Everything runs on one world clock (`src/parking/clock.js`) on the event date, 24 Nov 2026: a whole day takes about
+10 real minutes (the night, 21:00–05:00, a little faster) and then starts again, so visitors see the building through
+morning, noon, dusk and night.
+
+- **Sky:** the sun crosses the building, low and warm in the early morning and late afternoon. Room lights, car-park lamps
+  and the dark page come on after sunset (about 18:05) and go off before sunrise.
+- **Building:** rooms' lights and AC, the meeting room (09:00 meeting, 14:30 empty with the AC still on), the pond (low
+  water around 15:00) and the solar panels follow a daily schedule. A switch flipped by hand stays until the schedule next
+  changes that room; a scenario's readings stay for an hour of world time.
+- **Car park:** cars come and go to match the hour: a morning rush in from 07:00, a dip at lunch, an evening rush out
+  from 16:30, two or three cars overnight. On screen they drive through the barrier as fast as its one lane allows; the
+  rest is made up in the bays (with log entries over that time), as it is while the car park is off screen.
+- **Timeline** (under the 3D view): the live time. Drag the slider, or press a moment, to move the world on to that
+  time (always forward: what happened stays in the logs). **Night** in the header moves it on to 20:00, **Day** to 07:30.
+- **Follow the day** (timeline button) moves the camera to what the day is doing: the car park in the rushes, the meeting
+  room, the roof at noon, the pond, the overview at night. The parking story plays once a day during the morning arrivals;
+  while it plays the clock runs at real speed and the story sets its own times (09:02 to 11:30).
+- At 03:00 the day starts again on the 24th: logged times move back a day with it (they read as yesterday's), passes for
+  the 24th stay valid, and logs older than two days are dropped.
+
 ## At the booth
 
-- **Auto loop** (bottom-left checkbox, or `?kiosk=1`) runs the tour on repeat. When a visitor touches the screen
-  the loop pauses and they can explore. After a quiet minute the loop starts again from the beginning.
+- **Auto loop** (bottom-left checkbox, or `?kiosk=1`) follows the day. When a visitor touches the screen it stops and
+  they can explore. After a quiet minute it follows the day again. **Start tour** still plays the fixed tour.
 - On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance** and
   **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
 - **EN / TH** in the header switches the whole showcase page (building and parking) between Thai and English. Names, plates and provinces stay as entered. The `#explore` page opens in the language last chosen (room names included).
-- **Night** in the header switches the whole scene, car park lamps and headlights included, and turns the page around it dark (showcase and explore).
+- **Night** / **Day** in the header moves the world clock on to 20:00 or 07:30 (showcase and explore).
 - **View controls** at the bottom right of the 3D view: zoom in, zoom out, **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
 
 ### The parking story (10 steps, about 2½ minutes on auto)
@@ -84,7 +109,7 @@ In the staff console:
 The visitor's phone form can be filled in by hand. The car photo reads a sample plate. On the emailed ticket,
 **Add to calendar** downloads a simulated `.ics` invite for the visit.
 Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street, and leaving cars wait in their aisle.
-Staff and visitor cars also come and go by themselves while the car park is on screen. Through-traffic drives both lanes of the
+Cars also come and go by themselves, following the hour (see above). Through-traffic drives both lanes of the
 street whenever it is in view; it keeps to one speed per lane and gives way to cars turning in or pulling out.
 
 ## Performance
@@ -100,7 +125,8 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
     (about half the mirror's draw calls when the pond is small on screen);
   - the building and the static car-park parts compose their matrices once, not every frame; only floors (exploded view),
     door hinges and cars update theirs.
-- Shadows behave as if baked: the sun's shadow map is drawn once per view change, never because the camera moved. At night
+- Shadows behave as if baked: the sun's shadow map is drawn once per view change or sun step (every 2 world minutes, about
+  once a second), never because the camera moved. At night
   the 6 room lights (1 with shadows) are the selected room and its neighbours, so moving the camera never swaps lights or shadows.
 - The near clipping plane follows the viewing distance, and road paint, bay tints and car shadows use a depth offset,
   so nothing flickers against the surface underneath while the camera moves.
@@ -125,7 +151,8 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
 index.html               import map and page shell
 src/boot.js              picks the page (#explore or the showcase) and starts the viewer
 src/pages/*.html         page markup (from the reference, plus the parking slots)
-src/viewer/*.js          the building viewer, split out of the reference file (parking wiring in main.js and showcase.js)
+src/viewer/*.js          the building viewer, split out of the reference file (parking wiring in main.js and showcase.js);
+                         daylight.js (sky and sun by time of day), building-day.js (the building's daily schedule)
 src/parking/             the parking demo
   sim.js                 in-memory simulation: allowed list, requests, presence, events, alerts, audit, outbox
   layout.js              car-park geometry in world metres
@@ -136,7 +163,7 @@ src/parking/             the parking demo
   overlays.js            plate-camera feed, alert, captions, toasts
   story.js               the guided story
   i18n.js                Thai and English strings, Bangkok-time formatting
-  clock.js, dom.js       the ?speed time scale; small UI helpers (icons, CSV, calendar file)
+  clock.js, dom.js       the ?speed time scale and the world clock; small UI helpers (icons, CSV, calendar file)
 src/styles/              app.css (from the reference), parking.css, night.css (dark page at night)
 model/                   building model and data, extracted from the reference
 vendor/three/            three.js r186 as shipped in the reference

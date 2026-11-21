@@ -140,16 +140,26 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     boomCommand++;
     arriving.clear(); streetCars.clear();
     lot.setBoom(false); kick();
-    for (const [k, p] of sim.state.presence) {
-      const stall = sim.state.stalls.find(s => s.id === p.stallId);
-      if (!stall) continue;
-      const agent = makeAgent(p);
-      agent.stall = stall; agent.key = k;
-      place(agent, {x: stall.x, z: stall.z, h: stall.nose > 0 ? EAST : WEST});
-      agents.set(k, agent);
-    }
+    for (const k of sim.state.presence.keys()) parkCar(k);
     refreshBays();
     schedule();
+  }
+  function parkCar(k) {
+    const p = sim.state.presence.get(k), stall = p && sim.state.stalls.find(s => s.id === p.stallId);
+    if (!stall || agents.has(k)) return;
+    const agent = makeAgent(p);
+    agent.stall = stall; agent.key = k;
+    place(agent, {x: stall.x, z: stall.z, h: stall.nose > 0 ? EAST : WEST});
+    agents.set(k, agent);
+  }
+  // The car park catching up on time it did not show: a car is simply there in its bay, or gone, without driving.
+  // Only for cars standing in their bays (never one on the move), and without stopping cars on the move.
+  function appear(k) { parkCar(k); refreshBays(); schedule(); }
+  function vanish(k) {
+    const agent = agents.get(k);
+    if (!agent || agent.leaving || movers.has(agent.mover)) return false;
+    removeAgent(agent); agents.delete(k); refreshBays(); schedule();
+    return true;
   }
 
   // One car at a time works the barrier.
@@ -358,6 +368,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     parkedKeys: () => [...agents.entries()].filter(([, a]) => !a.leaving && a.stall).map(([k]) => k),
     get busy() { return movers.size > ambientCars.size; },
     get queued() { return entryPending; },
+    get leaving() { let n = 0; for (const a of agents.values()) if (a.leaving) n++; return n; },
+    appear, vanish,
     get gateHolders() { return gateHolders; },
     isArriving: k => arriving.has(k),
   };

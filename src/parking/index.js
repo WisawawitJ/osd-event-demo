@@ -1,9 +1,9 @@
 // Parking access demo inside the OSD building showcase. Everything is simulated locally.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
-import {t, onLang, getLang, setLang} from './i18n.js';
+import {t, onLang, getLang, setLang, bkk} from './i18n.js';
 import {icon, esc} from './dom.js';
 import {createParkingSim} from './sim.js';
-import {later, sleep} from './clock.js';
+import {SPEED, later, sleep, world} from './clock.js';
 import {createLot} from './lot3d.js';
 import {createTraffic} from './traffic.js';
 import {createPanel} from './panel.js';
@@ -17,17 +17,88 @@ export const PARKING_POSES = {
   gate: {eye: [-10.5, 7.2, 33.5], target: [-22.4, 1, 18.6], fov: 40},
   rowA: {eye: [-14, 13, 24], target: [-30.5, .5, 7], fov: 44},
 };
+const STORY_START = bkk(2026, 11, 24, 9, 0);
 const UNKNOWN_PLATES = [['4ศย 5150', 'ปทุมธานี'], ['ผต 8812', 'กรุงเทพมหานคร'], ['3ฆง 6047', 'ชลบุรี'], ['ฌธ 2290', 'นครปฐม']];
 const pickOne = list => list[Math.floor(Math.random() * list.length)];
 
-// Shared by the showcase and the explore page: background comings and goings keep the lot between ~22 and ~40 cars.
-const wantsExit = parked => parked > 40 || (parked > 22 && Math.random() < .45);
-function idleStaffCars(sim, traffic) {
-  const inside = new Set([...sim.state.presence.values()].map(p => p.vehicleId));
-  return sim.state.vehicles.filter(v => v.type === 'staff' && v.enabled && v.sync === 'synced' && !inside.has(v.id) && !traffic.isArriving(sim.key(v.plate, v.province)));
+// How many cars the car park holds at each time of day (minute, cars): nearly empty at night, the morning rush from
+// 07:00, a dip at lunch, the evening rush out from 16:30. The seeded morning (09:00) has 27.
+const OCCUPANCY = [[0, 2], [390, 2], [420, 5], [480, 17], [540, 27], [600, 34], [720, 35], [750, 30], [810, 34], [990, 35], [1050, 24], [1110, 9], [1170, 5], [1260, 3], [1440, 2]];
+export function occupancyAt(minute) {
+  for (let i = 1; i < OCCUPANCY.length; i++) {
+    const [a, x] = OCCUPANCY[i - 1], [b, y] = OCCUPANCY[i];
+    if (minute <= b) return x + (y - x) * (minute - a) / (b - a);
+  }
+  return OCCUPANCY[0][1];
 }
-// Parked cars that may drive out; VIPs stay. The explore page, which only brings staff cars back, passes staffOnly.
-const leavingCandidates = (sim, traffic, {staffOnly = false} = {}) => traffic.parkedKeys().filter(k => { const type = sim.state.presence.get(k)?.type; return staffOnly ? type === 'staff' : type !== 'vip'; });
+const daytime = minute => minute >= 390 && minute < 1140;
+// Cars not in the car park that may drive in: staff, and in the morning the VIPs (the explore page: staff only).
+function idleCars(sim, traffic, {staffOnly = false} = {}) {
+  const inside = new Set([...sim.state.presence.values()].map(p => p.vehicleId)), m = world.minute();
+  const vip = !staffOnly && m >= 420 && m < 660;
+  return sim.state.vehicles.filter(v => (v.type === 'staff' || (vip && v.type === 'vip')) && v.enabled && v.sync === 'synced' && !inside.has(v.id) && !traffic.isArriving(sim.key(v.plate, v.province)));
+}
+// Parked cars that may drive out: VIPs only from the late afternoon, visitors' cars never (their story is theirs).
+function leavingCandidates(sim, traffic, {staffOnly = false} = {}) {
+  const vip = !staffOnly && world.minute() >= 990;
+  return traffic.parkedKeys().filter(k => { const type = sim.state.presence.get(k)?.type; return type === 'staff' || (vip && type === 'vip'); });
+}
+
+// Background life of the car park, shared by the showcase and the explore page: cars come and go so that the car
+// park follows OCCUPANCY at the world clock's hour. On screen they drive through the barrier, as fast as its one lane
+// allows (two arriving and two leaving at a time); the rest of a gap the barrier cannot close (a rush in time-lapse,
+// a jump in time, or time spent off screen) is made up in the bays directly, logged at times spread over that gap.
+// Between rushes a car comes or goes now and then. `paused()` (the story playing) stops all of it.
+function startLotLife({sim, traffic, lot, staffOnly = false, paused = () => false, watched = () => true, arrive, leave, unknown = null}) {
+  const onScreen = () => lot.root.visible && document.visibilityState === 'visible';
+  const expected = () => sim.state.presence.size + traffic.queued - traffic.leaving;
+  const gap = () => Math.round(occupancyAt(world.minute())) - expected();
+  function park(at) {
+    const v = pickOne(idleCars(sim, traffic, {staffOnly})), stall = v && sim.freeStall(v.type);
+    if (!stall) return;
+    sim.recordEntry({plate: v.plate, province: v.province, type: v.type, stallId: stall.id, color: v.color, at});
+    traffic.appear(sim.key(v.plate, v.province));
+  }
+  function unpark(at) {
+    for (const k of leavingCandidates(sim, traffic, {staffOnly}).sort(() => Math.random() - .5)) {
+      const p = sim.state.presence.get(k);
+      if (traffic.vanish(k)) { sim.recordExit({plate: p.plate, province: p.province, at}); return; }
+    }
+  }
+  // Closes the gap down to `keep` cars, oldest log time first.
+  function catchUp(keep, from, to) {
+    let g = gap();
+    const moves = [];
+    for (; g > keep; g--) moves.push(park);
+    for (; g < -keep; g++) moves.push(unpark);
+    const times = moves.map(() => from + Math.random() * Math.max(0, to - from)).sort((a, b) => a - b);
+    moves.forEach((move, i) => move(Math.round(times[i])));
+  }
+  let last = world.now(), timer = 0;
+  function tick() {
+    const now = world.now(), from = last;
+    last = now;
+    if (!paused()) {
+      // Off screen everything is made up at once; on screen a few cars are left for the barrier to bring in or out.
+      catchUp(!onScreen() ? 0 : watched() ? 6 : 2, from, now);
+      const g = gap(), m = world.minute();
+      if (onScreen()) {
+        // A gap of one car is the everyday coming and going below, not a rush: one car leaving does not send another in.
+        if (g >= 2 && traffic.queued < 2) arrive();
+        else if (g <= -2 && traffic.leaving < 2) leave();
+        else if (!traffic.busy && Math.random() < (daytime(m) ? .07 : .01)) {
+          if (unknown && daytime(m) && Math.random() < .12) unknown();
+          else if (g >= 0) arrive(); else leave();
+        }
+      }
+    }
+    timer = later(tick, 1500);
+  }
+  // A jump in time: the car park is as it would be by then (the log spread over the skipped hours).
+  const off = world.subscribe((kind, p) => { if (kind === 'jump' && !paused()) { catchUp(onScreen() && watched() ? 3 : 0, p.from, p.to); last = world.now(); } });
+  timer = later(tick, 1500);
+  return () => { clearTimeout(timer); off(); };
+}
 
 export function createParking({scene, schedule, renderer, afterRender, capture, fly}) {
   let interactHandler = () => {};
@@ -36,7 +107,7 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
   const layer = $('#parking-layer'), panelRoot = $('#parking-panel'), phoneRoot = $('#pk-phone'), bar = $('#parking-bar');
   const sim = createParkingSim();
   const lot = createLot({scene, stalls: sim.state.stalls, schedule});
-  let active = false, ambientTimer = 0, passTimer = 0, quietAmbient = false;
+  let active = false, passTimer = 0, quietAmbient = false;
 
   // Plate camera: snapshot plus where the plate sits in the frame, or null when the camera cannot read it: the plate
   // faces away, is behind the lens (projected corners would flip into the frame), or is not wholly in the picture.
@@ -138,7 +209,7 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
       const inside = new Set([...presence.values()].map(p => p.vehicleId));
       const pool = kind === 'visitor'
         ? sim.state.vehicles.filter(v => v.type === 'guest' && v.enabled && v.sync === 'synced' && !inside.has(v.id) && !traffic.isArriving(sim.key(v.plate, v.province)) && v.validFrom <= sim.now() && v.validTo >= sim.now())
-        : idleStaffCars(sim, traffic);
+        : idleCars(sim, traffic);
       // The newest approved visitor drives up first, so a request made on the phone can be followed to the gate.
       const v = kind === 'visitor' ? pool[pool.length - 1] : pickOne(pool);
       if (!v) { if (!quiet) overlays.toast(`${icon('user')}<span>${esc(t(kind === 'visitor' ? 'gate.sim.noVisitor' : 'gate.sim.noStaff'))}</span>`); return; }
@@ -172,16 +243,26 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
     hint(text) { currentHint = text; if (currentCaption) overlays.caption({...currentCaption, hint: text}); },
     caption(c) { currentCaption = c; overlays.caption(c ? {...c, hint: currentHint} : null); },
     tap() { for (const el of document.querySelectorAll('[data-cue="true"]')) { el.classList.remove('pk-tapped'); void el.offsetWidth; el.classList.add('pk-tapped'); } },
+    // The story starts from the seeded 09:00 car park, so the clock goes to 09:00 first (the seed would otherwise
+    // leave out whatever lies after an earlier time).
     async resetWorld() {
       quietAmbient = true;
+      sim.setNow(STORY_START);
       sim.reset(); traffic.syncParked(); panel.reset(); phone.reset(); overlays.reset();
       await sleep(50);
     },
   });
   // Only when the story stops (not on every story update, e.g. Auto-advance in free play) are its phone cue and
   // photo read cleared: a cue left on would keep the photo button doing nothing in free play.
-  let storyWasRunning = false;
-  story.subscribe(() => { quietAmbient = story.running; if (storyWasRunning && !story.running) { phone.setCue(null); phone.cancelRead(); } storyWasRunning = story.running; renderBar(); });
+  // While the story plays, the world clock runs at real speed: its steps set their own times (09:02 … 11:30).
+  let storyWasRunning = false, releaseClock = null;
+  story.subscribe(() => {
+    quietAmbient = story.running;
+    if (story.running && !releaseClock) releaseClock = world.hold();
+    if (!story.running && releaseClock) { releaseClock(); releaseClock = null; }
+    if (storyWasRunning && !story.running) { phone.setCue(null); phone.cancelRead(); }
+    storyWasRunning = story.running; renderBar();
+  });
 
   // Story bar below the viewport -----------------------------------------
   function renderBar() {
@@ -234,20 +315,10 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
   panelRoot.addEventListener('click', event => { if (event.target.closest('[data-tab]')) takeOver(event); }, {capture: true});
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && active && story.running) leaveStory(); });
 
-  // Ambient life while the car park is on screen
-  function scheduleAmbient() {
-    clearTimeout(ambientTimer);
-    ambientTimer = later(() => {
-      // Staff cars come and go whenever the car park is on screen. Unknown cars only on the parking stop,
-      // where their alert can be answered.
-      if (lot.root.visible && !quietAmbient && !traffic.busy && document.visibilityState === 'visible') {
-        if (wantsExit(sim.state.presence.size)) actions.simulate('exit', {quiet: true});
-        else if (active && Math.random() < .12) actions.simulate('unknown', {quiet: true});
-        else actions.simulate('registered', {quiet: true});
-      }
-      scheduleAmbient();
-    }, 16000 + Math.random() * 12000);
-  }
+  // Background life of the car park. Unknown cars only on the parking stop, where their alert can be answered.
+  const stopLife = startLotLife({sim, traffic, lot, paused: () => quietAmbient, watched: () => active,
+    arrive: () => actions.simulate('registered', {quiet: true}), leave: () => actions.simulate('exit', {quiet: true}),
+    unknown: () => { if (active) actions.simulate('unknown', {quiet: true}); }});
   function schedulePass() {
     clearTimeout(passTimer);
     // Through-traffic runs whenever the street is on screen (overview and car park), not only in the parking stop.
@@ -258,13 +329,12 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
   // are turned away after 8 s (demo time); ones a presenter sends wait 45 s for an answer.
   const autoDeny = setInterval(() => {
     if (story.running) return;
-    for (const a of sim.state.alerts) if (a.status === 'open' && sim.now() - a.at > (a.ambient ? 8000 : 45000)) sim.resolveAlert(a.id, 'deny', undefined, 'staff.guard');
+    for (const a of sim.state.alerts) if (a.status === 'open' && (performance.now() - a.raised) * SPEED > (a.ambient ? 8000 : 45000)) sim.resolveAlert(a.id, 'deny', undefined, 'staff.guard');
   }, 250);
 
   onLang(() => { panel.render(); phone.render(); overlays.refresh(); story.refreshCaption(); renderBar(); });
   traffic.syncParked();
   schedulePass();
-  scheduleAmbient();
   renderBar();
   panel.render();
 
@@ -290,7 +360,7 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
     setNight(night) { lot.setNight(night); },
     toggleLang() { setLang(getLang() === 'en' ? 'th' : 'en'); },
     setInteractHandler(fn) { interactHandler = fn; },
-    dispose() { afterRender?.delete(drawLiveFeed); story.stop(); clearTimeout(ambientTimer); clearTimeout(passTimer); clearInterval(autoDeny); lot.dispose(); disposeCars(); },
+    dispose() { afterRender?.delete(drawLiveFeed); story.stop(); stopLife(); clearTimeout(passTimer); clearInterval(autoDeny); lot.dispose(); disposeCars(); },
   };
 }
 
@@ -304,16 +374,13 @@ export function createParkingScene({scene, schedule}) {
   const loop = (name, fn, min, spread) => { const run = () => { fn(); timers[name] = later(run, min + Math.random() * spread); }; timers[name] = later(run, min * Math.random()); };
   const onScreen = () => lot.root.visible && document.visibilityState === 'visible';
   loop('street', () => { if (onScreen()) traffic.passBy(); }, 1800, 3200);
-  loop('lot', () => {
-    if (!onScreen() || traffic.busy) return;
-    if (wantsExit(sim.state.presence.size)) { const keys = leavingCandidates(sim, traffic, {staffOnly: true}); if (keys.length) traffic.leave(pickOne(keys)); return; }
-    const v = pickOne(idleStaffCars(sim, traffic));
-    if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70});
-  }, 14000, 12000);
   traffic.syncParked();
+  const stopLife = startLotLife({sim, traffic, lot, staffOnly: true,
+    arrive() { const v = pickOne(idleCars(sim, traffic, {staffOnly: true})); if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70}); },
+    leave() { const keys = leavingCandidates(sim, traffic, {staffOnly: true}); if (keys.length) traffic.leave(pickOne(keys)); }});
   return {
     lot, sim, traffic,
     setNight(night) { lot.setNight(night); },
-    dispose() { for (const id of Object.values(timers)) clearTimeout(id); lot.dispose(); disposeCars(); },
+    dispose() { stopLife(); for (const id of Object.values(timers)) clearTimeout(id); lot.dispose(); disposeCars(); },
   };
 }

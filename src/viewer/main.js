@@ -3,7 +3,8 @@ import {createSecurityPreview} from 'osd/viewer/security-preview.js';
 import {createSceneTransition} from 'osd/viewer/scene-transition.js';
 import {createShowcase,translatePage,pageString} from 'osd/viewer/showcase.js';
 import {getLang} from 'osd/parking/i18n.js';
-import {SPEED} from 'osd/parking/clock.js';
+import {SPEED, world} from 'osd/parking/clock.js';
+import {applySky, isDark} from 'osd/viewer/daylight.js';
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import { OrbitControls } from 'osd/node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'osd/node_modules/three/examples/jsm/loaders/GLTFLoader.js';
@@ -66,7 +67,7 @@ try {
   let warming = false;
   const afterRender = new Set(); // extra views drawn into the same canvas after each frame (the live LPR feed)
   // ?debug=1 exposes the scene for tests and the benchmark (test/).
-  if (new URLSearchParams(location.search).has('debug')) Object.assign(window, {__renderer: renderer, __scene: scene, __camera: camera});
+  if (new URLSearchParams(location.search).has('debug')) Object.assign(window, {__renderer: renderer, __scene: scene, __camera: camera, __world: world});
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -461,14 +462,22 @@ try {
       // Night room lighting: a pool of 6 spot lights, 1 casting shadows, to stay light on laptop GPUs.
       simulation=await createSimulation({THREE,scene,model,floorRoots,renderer,camera,schedule,spotLights:6,shadowSpots:1,
         onSelectFloor(n){if(currentFloor!==String(n)){currentFloor=String(n);interiorView=null;updateView();}},
-        onNightChange(night){
-          scene.background.set(night?'#182b3c':isShowcase?'#e6ecee':'#dce5e5');
-          scene.environmentIntensity=night?.16:.65;
-          hemisphere.intensity=night?.36:1.05;key.intensity=night?.24:3.2;key.color.set(night?0xb7d4ff:0xffe7ba);
-          fill.intensity=night?.09:.6;renderer.toneMappingExposure=night?1.05:1;
-          document.documentElement.dataset.night=String(night);renderer.shadowMap.needsUpdate=true;schedule();
-        }
+        // Night is the world clock's: the sky follows it (below), and the night button asks it for 20:00 or 07:30.
+        onNightChange(night){document.documentElement.dataset.night=String(night);renderer.shadowMap.needsUpdate=true;schedule();},
+        onNightRequest(wantNight){world.jumpTo(wantNight?20*60:7*60+30);}
       });
+      // The world clock drives the sky (in 2-minute steps of world time, each one redraw and one shadow update) and
+      // switches the rooms' lights on after dusk.
+      let skyStep=null;
+      const followClock=()=>{
+        const minute=world.minute(),step=Math.round(minute/2);
+        if(step!==skyStep){skyStep=step;applySky({minute,scene,renderer,hemisphere,key,fill,dayBackground:isShowcase?'#e6ecee':'#dce5e5'});renderer.shadowMap.needsUpdate=true;schedule();}
+        if(simulation.getState().night!==isDark(minute))simulation.setNight(isDark(minute));
+        document.documentElement.dataset.night=String(isDark(minute));
+      };
+      followClock();
+      if(new URLSearchParams(location.search).has('debug'))window.__simulation=()=>simulation.getState();
+      const offClock=world.subscribe(kind=>{if(kind!=='wrap')followClock();});abort.signal.addEventListener('abort',offClock,{once:true});
       status.dataset.state = 'ready';
       status.textContent = L('โมเดลพร้อมแสดง','Model ready');
       for (const button of [...floorButtons, explodeButton, cutButton, resetButton, ...extraButtons]) button.disabled = false;
