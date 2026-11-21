@@ -135,19 +135,19 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
   if(current==='meeting'&&(airLevel>0||airTarget>0)&&!document.hidden)airFrame=requestAnimationFrame(airStep);else airLast=0;
  }
  function fadeAir(on){airTarget=on?1:0;if(!airFrame&&current==='meeting')airFrame=requestAnimationFrame(airStep);if(current!=='meeting'){airLevel=airTarget;setAir();}}
- // The room light's pool and beam fade in and out (~0.35 s) instead of snapping.
- let lampLevel=1,lampTarget=1,lampFrame=0;
- const lampBase=lamp.map(o=>o.material.opacity);
- function drawLamp(){lamp.forEach((o,i)=>{own.set(o.material,lampBase[i]*lampLevel);o.visible=lampLevel>.001;});paint();}
- function fadeLamp(on){
-  lampTarget=on?1:0;if(lampFrame||lampLevel===lampTarget)return;
-  let last=performance.now();
-  const step=time=>{lampLevel=lampTarget>lampLevel?Math.min(lampTarget,lampLevel+(time-last)/350):Math.max(lampTarget,lampLevel-(time-last)/350);last=time;drawLamp();lampFrame=lampLevel===lampTarget?0:requestAnimationFrame(step);};
-  lampFrame=requestAnimationFrame(step);
+ // A level (0 … 1) that runs toward on or off over `ms` instead of snapping, drawn by `draw` on each step.
+ function fader(ms,draw){
+  let level=1,target=1,frame=0,last=0;
+  const step=time=>{const d=Math.max(0,time-last)/ms;last=time;level=target>level?Math.min(target,level+d):Math.max(target,level-d);draw(level);frame=level===target?0:requestAnimationFrame(step);};
+  return {set(on){target=on?1:0;if(frame||level===target)return;last=performance.now();frame=requestAnimationFrame(step);},stop(){cancelAnimationFrame(frame);frame=0;}};
  }
+ // The room light's pool and beam, and the seat markers (the meeting ending or starting), fade in and out (~0.35 s).
+ const lampBase=lamp.map(o=>own.get(o.material)),peopleBase=own.get(teal);
+ const lampFade=fader(350,level=>{lamp.forEach((o,i)=>{own.set(o.material,lampBase[i]*level);o.visible=level>.001;});paint();});
+ const peopleFade=fader(350,level=>{own.set(teal,peopleBase*level);for(const o of people)o.visible=level>.001;paint();});
  let started=false;
  function select(id){current=id;if(id==='meeting'&&!airFrame&&airTarget>0)airFrame=requestAnimationFrame(airStep);for(const name of Object.keys(groups))goal[name]=name===id?1:0;fadeStops(!started);started=true;}
- function update(state){people.forEach(o=>o.visible=state.occupied);fadeLamp(state.light!==false);fadeAir(state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');if(boom)boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;own.set(energyMaterial,state.solar>5?.8:.35);paint();}
+ function update(state){peopleFade.set(state.occupied);lampFade.set(state.light!==false);fadeAir(state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');if(boom)boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;own.set(energyMaterial,state.solar>5?.8:.35);paint();}
  function animate(t){if(current==='meeting')air.forEach((o,i)=>{o.material.dashSize=.12+.035*Math.sin(t*2+i);});if(current==='energy'){packet.position.z=-5.9+((t*.9)%12);packet.position.x=-1.4;}schedule();}
- select('overview');return {securityCamera,select,update,animate,dispose(){cancelAnimationFrame(lampFrame);cancelAnimationFrame(airFrame);cancelAnimationFrame(stopFrame);for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
+ select('overview');return {securityCamera,select,update,animate,dispose(){lampFade.stop();peopleFade.stop();cancelAnimationFrame(airFrame);cancelAnimationFrame(stopFrame);for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
 }

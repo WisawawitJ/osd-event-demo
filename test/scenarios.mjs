@@ -1263,6 +1263,28 @@ export const scenarios = [
     await p.click('[data-action="pond"]');
     await p.until(`!document.querySelector('[data-incident="pond-low"]')`, {timeout: 3000, what: 'alert cleared when switched back'});
   }},
+  {name: 'meeting room: a simulated meeting can be ended (the room empties, its light and AC go off) and started again', async run(p, expect) {
+    await p.goto('?dest=meeting&debug=1&day=10&time=10:00');
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the meeting room'});
+    const room = `__simulation().rooms.f4_meeting_2`;
+    if (await p.eval(`!!document.querySelector('[data-action="meeting"]')`)) await p.click('[data-action="meeting"]');
+    await p.until(`!!document.querySelector('[data-action="meeting-end"]') && ${room}.light`, {timeout: 3000, what: 'a meeting under way'});
+    // The seat markers' opacity on every frame (0 while hidden).
+    await p.eval(`(()=>{let dot=null;__scene.getObjectByName('Demo_meeting').traverse(o=>{if(o.geometry?.parameters?.innerRadius===.11)dot=o;});window.__seats=[];
+      const f=()=>{let shown=true;for(let o=dot;o;o=o.parent)if(!o.visible)shown=false;__seats.push(shown?dot.material.opacity:0);if(__seats.length<240)requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
+    await p.click('[data-action="meeting-end"]');
+    await p.until(`!!document.querySelector('[data-action="meeting"]')`, {timeout: 3000, what: 'the button offers a meeting again'});
+    const ended = await p.eval(`({light:${room}.light,climate:${room}.climate})`);
+    expect(!ended.light && !ended.climate, `ending it switches the room's light and AC off (light ${ended.light}, AC ${ended.climate})`);
+    await p.sleep(2500); // about 5 world minutes at this day length
+    const seats = await p.eval('__seats'), full = Math.max(...seats);
+    let step = 0; for (let i = 1; i < seats.length; i++) step = Math.max(step, Math.abs(seats[i] - seats[i - 1]));
+    expect(full > .3 && seats.at(-1) === 0, `the seat markers go (from ${full.toFixed(2)} to ${seats.at(-1)})`);
+    expect(step < full * .5, `they fade out (largest change in one frame ${(step / full * 100).toFixed(0)}% of full)`);
+    expect(await p.eval(`!!document.querySelector('[data-action="meeting"]') && !${room}.light`), 'the room stays empty as the day runs on');
+    await p.click('[data-action="meeting"]');
+    await p.until(`!!document.querySelector('[data-action="meeting-end"]') && ${room}.light && ${room}.climate`, {timeout: 3000, what: 'a new meeting: light and AC back on'});
+  }},
   {name: 'day cycle: the explore page follows the building schedule (offices dark at night), and no solar demo at night', async run(p, expect) {
     const lit = `Object.values(__simulation().rooms).filter(r=>r.light).length`;
     // The page is ready before its car park (and with it the schedule) loads: wait for the rooms to follow.
