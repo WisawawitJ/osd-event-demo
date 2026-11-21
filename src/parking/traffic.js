@@ -81,6 +81,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     agent.car.position.set(p.x, groundY(p.x, p.z), p.z);
     agent.car.rotation.y = p.h + (reverse ? Math.PI : 0);
     agent.car.updateMatrix();
+    if (!agent.placed) { agent.placed = true; agent.car.visible = true; }
   }
   function sample(route, s) {
     const pts = route.pts;
@@ -115,8 +116,11 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   }
   const wait = (ms, gen) => { const end = demoNow() + ms / SPEED; return waitFor(() => demoNow() >= end, gen); };
 
+  // A new car stays hidden until it is first placed: drawn before that, it stood for a frame at the scene's origin,
+  // in the middle of the building (a car flashing up under it).
   function makeAgent({plate, province, type, color}) {
     const car = createCar({plate, province, color});
+    car.visible = false;
     lot.root.add(car);
     const agent = {car, plate, province, type, color, lit: false};
     live.add(agent); updateLamps();
@@ -202,7 +206,6 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   function arrive({plate, province, color = 0, fromX = -95, ambient = false}) {
     const gen = generation, alive = () => { if (gen !== generation) throw ABORT; };
     const agent = makeAgent({plate, province, type: 'unknown', color});
-    agent.car.visible = false;
     const k = sim.key(plate, province);
     let resolveLane, resolveShown, released = false, onStreet = false, joined = false;
     const previous = entryLane, previousShown = entryShown;

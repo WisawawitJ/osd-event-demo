@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (77), about 75 s
+npm test                 # all behaviour checks (78), about 75 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -88,7 +88,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 - **Car park:** cars come and go to match the hour: a morning rush in from 07:00, a dip at lunch, an evening rush out
   from 16:30, two or three cars overnight. Visitors with a pass for the day (ten are booked) drop in between 09:30
   and 15:30, each at most once, stay 45 minutes to three hours, and drive out by themselves. On screen they drive through the barrier as fast as its one lane allows; the
-  rest is made up in the bays (with log entries over that time), as it is while the car park is off screen.
+  rest is made up in the bays (with log entries over that time), as it is while the car park is off screen, but only
+  in bays out of the camera's view, so no car pops in or out where you can see it (a jump in time changes them all).
 - **Timeline** (under the 3D view): the live time. Drag the slider, or press a moment, to move the world on to that
   time (always forward: what happened stays in the logs). **Night** in the header moves it on to 20:00, **Day** to 07:30.
 - **Follow the day** (timeline button) moves the camera to what the day is doing: the car park in the rushes, the meeting

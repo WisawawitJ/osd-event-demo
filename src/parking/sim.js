@@ -200,8 +200,9 @@ export function createParkingSim() {
 
   function audit(actor, keyName, extra = {}) { state.audit.unshift({at: now(), actor, key: keyName, ...extra}); emit('audit'); }
 
-  function freeStall(type) {
-    const free = state.stalls.filter(s => !s.occupant);
+  // `allow`: only bays it accepts (the background life keeps cars from popping into bays on screen).
+  function freeStall(type, allow = () => true) {
+    const free = state.stalls.filter(s => !s.occupant && allow(s));
     const prefer = type === 'vip' ? free.filter(s => s.zone === 'P1') : type === 'guest' ? free.filter(s => s.reserved === 'guest') : free.filter(s => s.zone === 'P2' && s.reserved !== 'guest');
     const pool = prefer.length ? prefer : free.filter(s => s.zone === 'P2');
     if (!pool.length) return null;

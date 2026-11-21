@@ -546,6 +546,25 @@ export const scenarios = [
     expect(frames < 15, `the view is not redrawn for unseen cars (${frames} frames in 1 s)`);
   }},
 
+  {name: 'car park life: no car pops in or out of view (a fast evening rush from the overview; a new car never flashes at the origin)', async run(p, expect) {
+    // A 4-minute day: the rush outpaces the barrier, and the gap is made up in the bays. On screen, only in bays the
+    // camera cannot see (popping in and out of view under the building read as a flicker).
+    await p.goto('?debug=1&dest=overview&time=17:00&day=4');
+    await p.until(`window.__parking && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='overview' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the overview'});
+    await p.eval(`(()=>{const V=__camera.position.constructor,ndc=new V(),seen=new Map();window.__pops=[];
+      const inView=pos=>{ndc.copy(pos).project(__camera);return ndc.z<1&&Math.abs(ndc.x)<1&&Math.abs(ndc.y)<1;};
+      const cars=()=>__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car_')&&c.visible);
+      for(const c of cars())seen.set(c,c.position.clone());
+      window.__leaving=0;const f=()=>{__leaving=Math.max(__leaving,__parking.traffic.leaving);const now=new Set(cars());for(const c of now)if(!seen.has(c)&&inView(c.position)&&Math.abs(c.position.x)<90)__pops.push('in '+c.name);
+        for(const [c,pos] of seen)if(!now.has(c)&&inView(pos)&&Math.abs(pos.x)<90)__pops.push('out '+c.name);
+        seen.clear();for(const c of now)seen.set(c,c.position.clone());requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
+    await p.sleep(9000);
+    const pops = await p.eval('__pops');
+    // The rush goes on in view: cars drive out through the barrier instead.
+    expect(await p.eval('__leaving') >= 1, `cars leave through the barrier meanwhile (up to ${await p.eval('__leaving')} at once)`);
+    expect(!pops.length, `no car appeared or vanished in view (${pops.slice(0, 4).join(', ') || 'none'})`);
+  }},
+
   {name: 'kiosk follows the day: the morning car park plays the story; a touch pauses it', async run(p, expect) {
     await p.goto(`?kiosk=1&${FAST}&time=07:35`);
     await p.until('window.__parking && __parking.story.running', {timeout: 60000, what: 'the morning car park plays the parking story'});

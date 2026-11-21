@@ -534,7 +534,7 @@ try {
        }
        // The parking access demo adds its own lot, cars and UI to this scene (src/parking).
        const parkingModule=await import('osd/parking/index.js');
-       parking=parkingModule.createParking({scene,schedule,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
+       parking=parkingModule.createParking({scene,schedule,camera,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
        parking.lot.root.visible=renderKit.ground.visible;
        if(debug)window.__parking=parking;
        parking.setNight(simulation.getState().night);simulation.subscribe(()=>parking.setNight(simulation.getState().night));
@@ -713,7 +713,7 @@ try {
       if(!isShowcase){
        // The exploration page shows the car park too: lot, parked cars and traffic, without the showcase UI.
        const {createParkingScene}=await import('osd/parking/index.js');
-       parking=createParkingScene({scene,schedule});
+       parking=createParkingScene({scene,schedule,camera});
        // The rooms follow the building's daily schedule here too (the showcase does it in building-insights.js).
        const followRooms=createRoomSchedule(simulation);followRooms(world.minute(),{all:true});
        const offRooms=world.subscribe(kind=>{if(kind==='tick')followRooms(world.minute());else if(kind==='jump'||kind==='set')followRooms(world.minute(),{all:true});});
