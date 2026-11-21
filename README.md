@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (64), about 60 s
+npm test                 # all behaviour checks (65), about 60 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -82,7 +82,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   and the dark page come on after sunset (about 18:05) and go off before sunrise.
 - **Building:** rooms' lights and AC, the meeting room (09:00 meeting, 14:30 empty with the AC still on), the pond (low
   water around 15:00) and the solar panels follow a daily schedule. A switch flipped by hand stays until the schedule next
-  changes that room; a scenario's readings stay for an hour of world time.
+  changes that room. Readings set by hand (Simulate low water, a meeting) stay until the schedule changes that
+  reading itself; temperature and solar, which the schedule moves all the time, stay for an hour of world time.
 - **Car park:** cars come and go to match the hour: a morning rush in from 07:00, a dip at lunch, an evening rush out
   from 16:30, two or three cars overnight. On screen they drive through the barrier as fast as its one lane allows; the
   rest is made up in the bays (with log entries over that time), as it is while the car park is off screen.

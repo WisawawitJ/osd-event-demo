@@ -894,6 +894,22 @@ export const scenarios = [
     await p.click('#day-play');
     expect(!(await p.eval('__world.paused')), 'Follow the day resumes the clock');
   }},
+  {name: 'day cycle: "low water" set by hand stays while the day runs on, until switched back', async run(p, expect) {
+    // Real speed and a 10-minute day (about 2 world minutes a second), as at the booth: the clock's ticks used to write
+    // the scheduled level back within a quarter of a second. The schedule keeps the water normal until 14:50.
+    await p.goto('?dest=pond&debug=1&day=10&time=10:00');
+    await p.until(`${UP} && document.body.dataset.tourDestination === 'pond' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 40000});
+    await p.click('[data-action="pond"]');
+    await p.until(`!!document.querySelector('[data-incident="pond-low"]')`, {timeout: 3000, what: 'low-water alert'});
+    await p.sleep(2500);
+    expect(await p.eval(`!!document.querySelector('[data-incident="pond-low"]')`), `still low as the day runs on (now ${await p.eval('Math.floor(__world.minute()/60)')}:${await p.eval('String(Math.floor(__world.minute()%60)).padStart(2,"0")')})`);
+    // ... also past the hour a hand-set reading used to be kept for.
+    await p.eval('__world.jumpTo(12*60)');
+    await p.sleep(600);
+    expect(await p.eval(`!!document.querySelector('[data-incident="pond-low"]')`), 'still low at noon (two hours on)');
+    await p.click('[data-action="pond"]');
+    await p.until(`!document.querySelector('[data-incident="pond-low"]')`, {timeout: 3000, what: 'alert cleared when switched back'});
+  }},
   {name: 'day cycle: the explore page follows the clock too (night at 20:00)', async run(p, expect) {
     await p.goto('?debug=1&day=10&time=20:00#explore');
     await p.until(`document.querySelector('#status')?.dataset.state === 'ready'`, {timeout: 40000});

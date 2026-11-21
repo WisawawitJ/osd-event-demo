@@ -147,7 +147,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   if(traveling)return;
   stopScenario();state.scenario=kind;scenarioStart=demoNow();lastTick=-1;let lastVisual=0;
   if(kind==='meeting'){state.occupied=true;state.temp=27.4;simulation.selectRoom(meetingId);simulation.setRoom(meetingId,{light:true,climate:true});}
-  if(kind==='pond'){state.pondAlert=!state.pondAlert;state.water=state.pondAlert?58:82;state.scenario=null;render();return;}
+  if(kind==='pond'){state.pondAlert=!state.pondAlert;state.water=state.pondAlert?58:82;state.scenario=null;insights?.hold(['pondAlert','water']);render();return;}
   if(kind==='energy')state.solar=state.solar<5?8.4:3.1;
   // What a scenario changed by hand stays a while before the building's schedule takes it back.
   insights?.hold({meeting:['temp','occupied'],pond:['pondAlert','water'],energy:['solar']}[kind]||[]);
