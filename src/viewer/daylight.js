@@ -18,7 +18,10 @@ const SOLAR_NOON = (SUNRISE + SUNSET) / 2, LOWEST = .3; // radians, about 17°
 // The sun's elevation through the day: a cosine around solar noon, at NOON_ELEVATION then and zero at sunrise and sunset.
 const DIP = Math.cos(Math.PI * (SUNSET - SUNRISE) / 1440), SWING = NOON_ELEVATION / (1 - DIP);
 const elevationAt = minute => SWING * (Math.cos(2 * Math.PI * (minute - SOLAR_NOON) / 1440) - DIP);
-const DAY = {sky: 0xebf6ff, ground: 0x7b8066, key: 0xffe7ba, fill: 0xc9e2ed}, NIGHT = {sky: 0x7d93b0, key: 0xb7d4ff}, LOW_SUN = 0xffad70;
+const DAY = {sky: 0xebf6ff, ground: 0x7b8066, key: 0xffe7ba, fill: 0xc9e2ed}, NIGHT = {sky: 0x7d93b0, key: 0xb7d4ff,
+  // A real night: the moon and sky give only enough light to make out shapes, so what is lit (street lights, rooms,
+  // headlights) carries the scene. Brighter, the whole site read as dusk.
+  moon: .12, skyLight: .15, fill: .03, environment: .06, background: '#111f2d'}, LOW_SUN = 0xffad70;
 const color = new THREE.Color(), other = new THREE.Color();
 
 // How much daylight there is (0 night … 1 full day) and how high the sun is (0 horizon or below … 1 noon).
@@ -34,13 +37,13 @@ export function applySky({minute, scene, renderer, hemisphere, key, fill, dayBac
   // Highest at noon, where the old fixed light was; the heading turns once a day, so 23:59 and 00:00 are neighbours.
   const heading = NOON_HEADING + 2 * Math.PI * (minute - SOLAR_NOON) / 1440, elevation = Math.max(LOWEST, Math.abs(elevationAt(minute)));
   key.position.set(Math.cos(heading) * Math.cos(elevation), Math.sin(elevation), Math.sin(heading) * Math.cos(elevation)).multiplyScalar(NOON_LENGTH);
-  key.intensity = THREE.MathUtils.lerp(.24, 3.2 * (.45 + .55 * smooth(height / .6)), light);
+  key.intensity = THREE.MathUtils.lerp(NIGHT.moon, 3.2 * (.45 + .55 * smooth(height / .6)), light);
   key.color.set(DAY.key).lerp(other.set(LOW_SUN), low).lerp(other.set(NIGHT.key), 1 - light);
-  hemisphere.intensity = THREE.MathUtils.lerp(.36, 1.05, light);
+  hemisphere.intensity = THREE.MathUtils.lerp(NIGHT.skyLight, 1.05, light);
   hemisphere.color.set(DAY.sky).lerp(other.set(0xffd2b0), low * .6).lerp(other.set(NIGHT.sky), 1 - light);
-  fill.intensity = THREE.MathUtils.lerp(.09, .6, light);
-  scene.environmentIntensity = THREE.MathUtils.lerp(.16, .65, light);
-  renderer.toneMappingExposure = THREE.MathUtils.lerp(1.05, 1, light);
-  color.set(dayBackground).lerp(other.set('#efcfb4'), low * .8).lerp(other.set('#182b3c'), 1 - light);
+  fill.intensity = THREE.MathUtils.lerp(NIGHT.fill, .6, light);
+  scene.environmentIntensity = THREE.MathUtils.lerp(NIGHT.environment, .65, light);
+  renderer.toneMappingExposure = 1;
+  color.set(dayBackground).lerp(other.set('#efcfb4'), low * .8).lerp(other.set(NIGHT.background), 1 - light);
   scene.background.copy(color);
 }

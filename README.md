@@ -92,7 +92,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   does not freeze the view.
 - **Sky:** the sun crosses the building, low and warm in the early morning and late afternoon; at night a dim moonlight
   carries on along the same path, so shadows turn smoothly all day and never jump (not at dusk, dawn or midnight). Room lights, car-park lamps
-  and the dark page come on after sunset (about 18:05) and go off before sunrise.
+  and the dark page come on after sunset (about 18:05) and go off before sunrise. The night is dark, as a real one:
+  the moon and sky only let shapes be made out, and the street lights, lit rooms and headlights carry the scene.
 - **Building:** rooms' lights and AC, the meeting room (09:00 meeting, 14:30 empty with the AC still on), the pond (low
   water around 15:00) and the solar panels follow a daily schedule. A switch flipped by hand stays until the schedule next
   changes that room. Readings set by hand (Simulate low water, a meeting) stay until the schedule changes that
