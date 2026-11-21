@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (66), about 60 s
+npm test                 # all behaviour checks (67), about 60 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -86,7 +86,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   changes that room. Readings set by hand (Simulate low water, a meeting) stay until the schedule changes that
   reading itself; temperature and solar, which the schedule moves all the time, stay for an hour of world time.
 - **Car park:** cars come and go to match the hour: a morning rush in from 07:00, a dip at lunch, an evening rush out
-  from 16:30, two or three cars overnight. On screen they drive through the barrier as fast as its one lane allows; the
+  from 16:30, two or three cars overnight. Visitors with a pass for the day (ten are booked) drop in between 09:30
+  and 15:30, each at most once, stay 45 minutes to three hours, and drive out by themselves. On screen they drive through the barrier as fast as its one lane allows; the
   rest is made up in the bays (with log entries over that time), as it is while the car park is off screen.
 - **Timeline** (under the 3D view): the live time. Drag the slider, or press a moment, to move the world on to that
   time (always forward: what happened stays in the logs). **Night** in the header moves it on to 20:00, **Day** to 07:30.

@@ -2,7 +2,7 @@
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {t, onLang, getLang, setLang, bkk} from './i18n.js';
 import {icon, esc} from './dom.js';
-import {createParkingSim} from './sim.js';
+import {createParkingSim, STORY} from './sim.js';
 import {SPEED, later, cancelLater, sleep, world, demoNow, minuteOf} from './clock.js';
 import {createLot} from './lot3d.js';
 import {createTraffic} from './traffic.js';
@@ -89,6 +89,33 @@ function startLotLife({sim, traffic, lot, staffOnly = false, paused = () => fals
     for (; g < -keep; g++) moves.push([unpark, when(false, from, to)]);
     moves.sort((a, b) => a[1] - b[1]).forEach(([move, t]) => move(Math.round(t)));
   }
+  // Visitors: someone with a pass for today drops in now and then between 09:30 and 15:30 (each at most once a day;
+  // the story's visitor is the story's), stays 45 minutes to three hours of world time, then leaves by themselves.
+  const TODAY = bkk(2026, 11, 24);
+  const stayOf = plate => (45 + [...plate].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 997, 7) % 136) * 60000;
+  function visitorsDue() {
+    const now = world.now(), inside = new Set([...sim.state.presence.values()].map(p => p.vehicleId));
+    const came = new Set(sim.state.events.filter(e => e.at >= TODAY && (e.kind === 'entry' || e.kind === 'manual') && e.type === 'guest').map(e => sim.key(e.plate, e.province)));
+    return sim.state.vehicles.filter(v => v.type === 'guest' && v.plate !== STORY.plate && v.enabled && v.sync === 'synced' && (!v.validFrom || v.validFrom <= now) && (!v.validTo || v.validTo >= now)
+      && !inside.has(v.id) && !came.has(sim.key(v.plate, v.province)) && !traffic.isArriving(sim.key(v.plate, v.province)));
+  }
+  // `from`…`now`: the world time since the last look; on average a visitor arrives every 35 minutes of it.
+  function visits(from, now) {
+    const m = world.minute();
+    // Whose visit is over: one at a time, through the barrier when the car park is on screen.
+    for (const [k, p] of sim.state.presence) {
+      if (p.type !== 'guest' || p.plate === STORY.plate || now - p.since < stayOf(p.plate)) continue;
+      if (onScreen()) { if (traffic.leaving < 2) traffic.leave(k); }
+      else if (traffic.vanish(k)) sim.recordExit({plate: p.plate, province: p.province});
+      break;
+    }
+    if (m < 570 || m >= 930 || Math.random() > (now - from) / 60000 / 35) return;
+    const v = pickOne(visitorsDue());
+    if (!v) return;
+    if (onScreen()) { if (traffic.queued < 2) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70}); return; }
+    const stall = sim.freeStall('guest');
+    if (stall) { sim.recordEntry({plate: v.plate, province: v.province, type: 'guest', stallId: stall.id, color: v.color}); traffic.appear(sim.key(v.plate, v.province)); }
+  }
   let last = world.now(), timer = 0;
   function tick() {
     const now = world.now(), from = last;
@@ -96,6 +123,7 @@ function startLotLife({sim, traffic, lot, staffOnly = false, paused = () => fals
     if (!paused()) {
       // Off screen everything is made up at once; on screen a few cars are left for the barrier to bring in or out.
       catchUp(!onScreen() ? 0 : watched() ? 6 : 2, from, now);
+      if (!staffOnly) visits(from, now);
       const g = gap(), m = world.minute();
       if (onScreen()) {
         // A gap of one car is the everyday coming and going below, not a rush: one car leaving does not send another in.

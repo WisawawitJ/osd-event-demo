@@ -928,6 +928,17 @@ export const scenarios = [
     await p.until(`${UP} && document.body.dataset.tourDestination === 'energy' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 40000});
     expect(await p.eval(`document.querySelector('[data-action="energy"]').disabled`), 'the solar demo button is off at night');
   }},
+  {name: 'day cycle: visitors with a pass for today drop in during the day, and leave by themselves', async run(p, expect) {
+    // Speed 30, 10-minute day: about half an hour of world time a second; visitors come 09:30–15:30.
+    await p.goto(parking('&day=10&time=09:30'));
+    await p.until(ready, {timeout: 40000});
+    const t0 = await p.eval('__world.now()');
+    const visitor = `__parking.sim.state.events.find(e=>e.at>=${t0}&&e.kind==='entry'&&e.type==='guest')`;
+    await p.until(`!!${visitor}`, {timeout: 20000, what: 'a visitor driving in during the morning'});
+    const plate = await p.eval(`${visitor}.plate`);
+    await p.until(`__parking.sim.state.events.some(e=>e.at>=${t0}&&e.kind==='exit'&&e.plate===${JSON.stringify(plate)})`, {timeout: 20000, what: `visitor ${plate} leaving after the visit`});
+    expect(true, `visitor ${plate} came and went`);
+  }},
   {name: 'day cycle: the explore page follows the clock too (night at 20:00)', async run(p, expect) {
     await p.goto('?debug=1&day=10&time=20:00#explore');
     await p.until(`document.querySelector('#status')?.dataset.state === 'ready'`, {timeout: 40000});

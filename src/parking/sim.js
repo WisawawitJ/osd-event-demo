@@ -103,6 +103,21 @@ export function createParkingSim() {
       history: [{at: bkk(2026, 11, 22, 17, 2), key: 'h.submitted'}, {at: bkk(2026, 11, 23, 8, 15), key: 'h.rejected', by: 'staff.name'}]});
     addRequest({status: 'expired', visitor: {name: 'ใจดี มีสุข', phone: '085-121-3434', email: 'jaidee@example.com', company: '—'}, contact: 'host.demo@osd.example', plate: '5ฮม 2001', province: 'นครปฐม', arrival: bkk(2026, 11, 22), departure: bkk(2026, 11, 22), createdAt: bkk(2026, 11, 21, 20, 44), color: 1,
       history: [{at: bkk(2026, 11, 21, 20, 44), key: 'h.submitted'}, {at: bkk(2026, 11, 23, 0, 1), key: 'h.expired'}]});
+    // Visitors booked for the event day, approved earlier in the week: they drop in at random during the day (index.js).
+    // Their own random sequence, so the seeded morning above stays as it was.
+    {
+      const v = rng(7310), vpick = list => list[Math.floor(v() * list.length)];
+      const COMPANIES = ['บริษัท ตัวอย่างโลจิสติกส์ จำกัด', 'บริษัท ตัวอย่างการแพทย์ จำกัด', 'บริษัท ตัวอย่างก่อสร้าง จำกัด', 'ห้างหุ้นส่วน ตัวอย่างบริการ', 'บริษัท ตัวอย่างการเงิน จำกัด', 'บริษัท ตัวอย่างอาหาร จำกัด', '—'];
+      for (let i = 0; i < 8; i++) {
+        let letters;
+        do letters = CONSONANTS[Math.floor(v() * CONSONANTS.length)] + CONSONANTS[Math.floor(v() * CONSONANTS.length)]; while (AVOID.has(letters));
+        const plateText = `${v() < .5 ? 1 + Math.floor(v() * 9) : ''}${letters} ${1000 + Math.floor(v() * 9000)}`;
+        const day = 20 + Math.floor(v() * 4), h = 9 + Math.floor(v() * 8), m = Math.floor(v() * 60), made = bkk(2026, 11, day, h, m), ok = made + (20 + Math.floor(v() * 90)) * 60e3;
+        addRequest({status: 'approved', visitor: {name: `${vpick(FIRST)} ${vpick(LAST)}`, phone: `08${Math.floor(v() * 10)}-${String(100 + Math.floor(v() * 900))}-${String(1000 + Math.floor(v() * 9000))}`, email: `visitor${i + 1}@example.com`, company: vpick(COMPANIES)},
+          contact: 'host.demo@osd.example', plate: plateText, province: v() < .6 ? PROVINCES[0][0] : vpick(PROVINCES.slice(1, 6))[0], arrival: DAY_START, departure: DAY_START, createdAt: made, color: Math.floor(v() * 9), visit: true,
+          history: [{at: made, key: 'h.submitted'}, {at: ok, key: 'h.approved', by: 'staff.name'}, {at: ok, key: 'h.atom'}, {at: ok + 60e3, key: 'h.email'}]});
+      }
+    }
     for (const req of requests.filter(q => q.status === 'approved')) {
       req.vehicleId = addVehicle({plate: req.plate, province: req.province, type: 'guest', owner: req.visitor.name, validFrom: req.arrival, validTo: req.departure + 86399e3, requestId: req.id, color: req.color}).id;
       req.qr = req.ref;
