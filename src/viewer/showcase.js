@@ -26,7 +26,7 @@ const pageText={
  toolbar:['ข้อมูลบนโมเดล','Data on the model'],'layer.heading':['สีพื้นห้อง','Room colours'],'layer.group':['เลือกข้อมูลแสดงด้วยสี','Choose the data shown as colour'],
  'layer.none':['ปกติ','Plain'],'layer.temperature':['อุณหภูมิ','Temperature'],'layer.occupancy':['การใช้ห้อง','Occupancy'],'layer.lights':['ไฟ','Lights'],
  viewport:['โมเดลอาคาร OSD แบบโต้ตอบ','Interactive OSD building model'],
- canvas:['โมเดลอาคาร OSD ลากเพื่อหมุน ใช้ปุ่มลูกศรเพื่อเลื่อน ปุ่มบวกหรือลบเพื่อซูม และ R เพื่อคืนมุมมอง','OSD building model. Drag to rotate, use the arrow keys to pan, plus or minus to zoom, and R to reset the view'],
+ canvas:['โมเดลอาคาร OSD ลากเพื่อหมุน กด Shift ค้างแล้วลาก หรือใช้ปุ่มลูกศร เพื่อเลื่อน ปุ่มบวกหรือลบเพื่อซูม และ R เพื่อคืนมุมมอง','OSD building model. Drag to rotate, Shift-drag or the arrow keys to pan, plus or minus to zoom, and R to reset the view'],
  'scene.heading':['ภาพรวมอาคาร','Building overview'],
  'scene.floor':['ทั้งอาคาร','Whole building'],'scene.chip':['โมเดลอาคาร OSD · 5 ระดับ','OSD building model · 5 levels'],
  loading:['กำลังเตรียมอาคาร…','Preparing the building…'],retry:['ลองโหลดใหม่','Reload'],
@@ -46,7 +46,7 @@ const pageText={
  'x.cameras':['มุมกล้อง','Camera views'],'x.explore':['สำรวจอาคาร','Explore'],'x.front':['มุมหลัก','Front'],'x.side':['อีกมุม','Side'],'x.lift':['ดูลิฟต์','Lift'],
  'x.courtyard':['บ่อปลา','Fish pond'],'x.office':['สำนักงาน','Offices'],'x.arrival':['ลานวนรถ','Drop-off'],'x.reception':['ต้อนรับ','Reception'],'x.services':['ห้องบริการ','Service rooms'],
  'x.parking':['ที่จอดรถ','Parking'],'x.stairs':['บันได','Stairs'],'x.loading':['กำลังโหลดโมเดลอาคาร…','Loading the building model…'],
- 'x.help':['ลากเพื่อหมุน · ลากปุ่มขวาเพื่อเลื่อน · เลื่อนล้อเมาส์หรือใช้สองนิ้วเพื่อซูม','Drag to rotate · right-drag to pan · scroll or pinch to zoom'],
+ 'x.help':['ลากเพื่อหมุน · กด Shift ค้างแล้วลาก ลากปุ่มขวา หรือปัดสองนิ้วบนทัชแพด เพื่อเลื่อน · หมุนล้อเมาส์หรือถ่างนิ้วเพื่อซูม','Drag to rotate · Shift-drag, right-drag or two-finger scroll on a touchpad to pan · mouse wheel or pinch to zoom'],
  'x.footer':['โมเดลสำหรับนำเสนอ','Presentation model'],'x.footnote':['อ้างอิงแปลนและภาพถ่าย · วัสดุ เปลือกอาคาร และสวนเป็นภาพจำลอง','Based on plans and photos · materials, facade and garden are illustrative'],
 };
 export const pageString=key=>{const text=pageText[key];return typeof text==='function'?text():L(...text);};

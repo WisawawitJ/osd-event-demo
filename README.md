@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (145), about 100 s: run before a commit
+npm test                 # all behaviour checks (146), about 100 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -123,6 +123,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
 - **EN / TH** in the header switches the whole showcase page (building and parking) between Thai and English. Names, plates and provinces stay as entered. The `#explore` page opens in the language last chosen (room names included).
 - **Night** / **Day** in the header moves the world clock on to 20:00 or 07:30 (showcase and explore).
+- **Moving the view**: drag to rotate; Shift-drag (or Ctrl-drag), right-drag, the arrow keys or, on a touchpad, a
+  two-finger scroll to pan; the mouse wheel or a pinch to zoom. Close in, zooming in walks forward instead of stalling.
 - **View controls** at the bottom right of the 3D view: zoom in, zoom out, **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
 
 ### The parking story (10 steps, about 2½ minutes on auto)

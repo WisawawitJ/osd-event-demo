@@ -1445,6 +1445,20 @@ export const scenarios = [
       }
     } finally { await viewport(p); }
   }},
+  {name: 'touchpad: two fingers pan, a pinch and a mouse wheel zoom', async run(p, expect) {
+    // Panning needed the right button held down, awkward on a touchpad: a two-finger scroll zoomed instead.
+    await p.goto(`?${FAST}`);
+    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
+    const wheel = init => p.eval(`(()=>{const c=__camera,t=__controls.target,d0=c.position.distanceTo(t),t0=t.clone();
+      document.querySelector('#viewport canvas').dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:400,clientY:300,...${JSON.stringify(init)}}));
+      return JSON.stringify({moved:+t.distanceTo(t0).toFixed(3),zoom:+(c.position.distanceTo(t)-d0).toFixed(3)});})()`).then(JSON.parse);
+    const scroll = await wheel({deltaX: 30, deltaY: 20});
+    expect(scroll.moved > 0 && Math.abs(scroll.zoom) < .01, `two-finger scroll pans (target moved ${scroll.moved}, distance ${scroll.zoom})`);
+    const pinch = await wheel({deltaY: 20, ctrlKey: true});
+    expect(pinch.zoom > 0, `pinch zooms (distance ${pinch.zoom})`);
+    const mouse = await wheel({deltaY: 100});
+    expect(mouse.zoom > 0, `a mouse wheel notch zooms (distance ${mouse.zoom})`);
+  }},
   {name: 'metric pairs stay aligned when one label wraps', async run(p, expect) {
     await p.goto(`?${FAST}`);
     await p.until(`${UP} && !!document.querySelector('.metric-pair .metric-value')`, {timeout: 40000});
