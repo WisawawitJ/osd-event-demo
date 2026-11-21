@@ -269,6 +269,53 @@ export const scenarios = [
     const r = JSON.parse(await p.eval(`JSON.stringify({rows:document.querySelectorAll('.pk-vrow').length,all:__parking.sim.state.vehicles.length})`));
     expect(r.rows === r.all, `${r.rows} rows for ${r.all} vehicles`);
   }},
+  {name: 'a car from the far lane waits to turn, signalling right, and turns in across the near lane', async run(p, expect) {
+    // Every car used to come along the near lane; none turned in from the far one.
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
+      window.__k=sim.key(v.plate,v.province);window.__plate=v.plate;window.__right=false;window.__farLane=false;
+      const t=setInterval(()=>{const c=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate);if(!c)return;if(Math.abs(c.position.z-27.5)<.3)__farLane=true;if(c.children[7]?.visible)__right=true;if(__parking.sim.state.presence.has(__k))clearInterval(t);},20);
+      void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,west:true});})()`);
+    await p.until('__parking.sim.state.presence.has(__k)', {timeout: 30000, what: 'the far-lane car through the barrier'});
+    expect(await p.eval('__farLane'), 'it came along the far lane');
+    expect(await p.eval('__right'), 'its right blinker flashed before the turn');
+  }},
+  {name: 'a car from the near lane signals left before turning in', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
+      window.__k=sim.key(v.plate,v.province);window.__plate=v.plate;window.__left=false;
+      const t=setInterval(()=>{const c=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate);if(c?.children[6]?.visible&&c.position.z>24)__left=true;if(__parking.sim.state.presence.has(__k))clearInterval(t);},20);
+      void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-60});})()`);
+    await p.until('__parking.sim.state.presence.has(__k)', {timeout: 30000, what: 'the car through the barrier'});
+    expect(await p.eval('__left'), 'its left blinker flashed on the street before the turn');
+  }},
+  {name: 'a busy car park: no car drives through another', async run(p, expect) {
+    // Cars queuing at the barrier ran into each other (a new car was given the queue place of one still in it), met
+    // head-on in the aisles, and crossed at the aisle mouths; through-traffic drove through a car waiting at the
+    // barrier, whose rear reached into the near lane. Every pair of cars, every frame, as rotated rectangles.
+    await p.goto('?dest=parking&debug=1&speed=20&warm=0&time=08:00');
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`(()=>{const L=4.34/2,W=1.66/2;window.__hits=[];window.__frames=0;
+ const corners=c=>{const h=c.rotation.y,f=[Math.sin(h),Math.cos(h)],s=[Math.cos(h),-Math.sin(h)],x=c.position.x,z=c.position.z;return [[1,1],[1,-1],[-1,-1],[-1,1]].map(([a,b])=>[x+f[0]*L*a+s[0]*W*b,z+f[1]*L*a+s[1]*W*b]);};
+ const sep=(A,B)=>{for(const P of [A,B])for(let i=0;i<4;i++){const p=P[i],q=P[(i+1)%4],n=[q[1]-p[1],p[0]-q[0]];let a0=1e9,a1=-1e9,b0=1e9,b1=-1e9;for(const v of A){const d=v[0]*n[0]+v[1]*n[1];a0=Math.min(a0,d);a1=Math.max(a1,d);}for(const v of B){const d=v[0]*n[0]+v[1]*n[1];b0=Math.min(b0,d);b1=Math.max(b1,d);}if(a1<b0||b1<a0)return true;}return false;};
+ const last=new Map();
+ const f=()=>{__frames++;const cars=__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car')&&c.visible);
+  const moved=new Set();for(const c of cars){const k=c.position.x+','+c.position.z+','+c.rotation.y;if(last.get(c)!==k)moved.add(c);last.set(c,k);}
+  for(let i=0;i<cars.length;i++)for(let j=i+1;j<cars.length;j++){const a=cars[i],b=cars[j];if(!moved.has(a)&&!moved.has(b))continue;
+   if(Math.hypot(a.position.x-b.position.x,a.position.z-b.position.z)>5)continue;
+   if(!sep(corners(a),corners(b))&&__hits.length<400)__hits.push(\`\${a.name.slice(9)||'street'}@\${a.position.x.toFixed(1)},\${a.position.z.toFixed(1)} x \${b.name.slice(9)||'street'}@\${b.position.x.toFixed(1)},\${b.position.z.toFixed(1)} t\${__world.minute().toFixed(0)}\`);}
+  requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
+    await p.click('[data-tab="gate"]');
+    // The morning rush at twice the usual pace: a car in or out every 0.7 s, and through-traffic both ways.
+    for (let i = 0; i < 22; i++) {
+      await p.eval(`document.querySelector('[data-sim="${['registered', 'exit', 'visitor', 'registered', 'exit'][i % 5]}"]')?.click();__parking.traffic.passBy(1);__parking.traffic.passBy(-1)`);
+      await p.sleep(700);
+    }
+    const hits = await p.eval('__hits');
+    expect(hits.length === 0, `no overlapping cars in ${await p.eval('__frames')} frames (${hits.slice(0, 3).join(' | ') || 'none'})`);
+  }},
   {quick: true, name: 'unknown car: Open once disabled while waiting; Open with a reason is audited', async run(p, expect) {
     // speed 10: the guard turns unanswered cars away after 45 s of demo time, 1.5 s of real time at speed 30.
     await p.goto('?dest=parking&debug=1&speed=10');
@@ -290,7 +337,7 @@ export const scenarios = [
     // An eastbound through car just short of x=-40: car A (spawning at -40) waits for it to pass; car B, arriving
     // next from -60, gets its gap first. B used to appear first, drive to the queue point at -33 (on A's spawn
     // point) and wait there for A, which waited for B to move.
-    await p.until(`(__parking.traffic.passBy(1), !!(window.__thru = __parking.lot.root.children.find(c => c.name === 'Demo_car_' && c.visible && Math.abs(c.position.z - 24.5) < .3 && c.position.x < -60)))`, {timeout: 20000, what: 'an eastbound through car'});
+    await p.until(`(__parking.traffic.passBy(1), !!(window.__thru = __parking.lot.root.children.find(c => c.name === 'Demo_car_' && c.visible && Math.abs(c.position.z - 25.1) < .3 && c.position.x < -60)))`, {timeout: 20000, what: 'an eastbound through car'});
     await p.until(`__thru.position.x > -48`, {timeout: 20000, what: 'the through car near x=-40'});
     await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const [a,b]=__parking.sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(__parking.sim.key(v.plate,v.province)));
       const before=new Set(__parking.lot.root.children);void __parking.traffic.arrive({plate:a.plate,province:a.province,color:a.color,fromX:-40});const ca=__parking.lot.root.children.find(c=>!before.has(c));

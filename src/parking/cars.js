@@ -1,7 +1,8 @@
-// Low-poly cars, four draw calls each (six with headlights on) and no per-car geometry:
+// Low-poly cars, four draw calls each (six with headlights on, one more for a blinker) and no per-car geometry:
 //   body (body + roof, one material per paint colour), details (glass + wheels, vertex colours),
 //   decals (both plates and the four lamps, unlit, one small texture per plate), a soft blob shadow, and at night the
-//   headlights' light on the road (see headlightPool) and their beams in the air (see headlightBeams).
+//   headlights' light on the road (see headlightPool) and their beams in the air (see headlightBeams), and a blinker
+//   on each side (front and rear corners, amber) that the traffic flashes before a turn (setCarBlinker).
 // A car faces local +Z and sits on y = 0.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -61,8 +62,16 @@ function sharedParts() {
   c.fillStyle = g; c.fillRect(0, 0, 64, 64);
   const blobTexture = new THREE.CanvasTexture(blobCanvas);
   const blob = new THREE.PlaneGeometry(2.5, 5.1).rotateX(-Math.PI / 2);
+  // Blinkers: local +X is the driver's left (the car faces +Z), so the left set sits at +X. Corner lamps wrapping round
+  // the side (seen from above and the side too, not only head-on), and a soft amber flare at each that always faces
+  // the camera (blinkerGlow): lamps alone, 16 cm wide, were lost from the car park's usual distance, and a flat glow
+  // lying over the lamp read as a smear on the car.
+  const blinker = side => mergeGeometries([2.12, -2.12].map(z => flat(new THREE.BoxGeometry(.3, .15, .2)).translate(side * .78, .76, z)));
   shared = {
     body, details, decals, blob, ...headlightPool(), ...headlightBeams(),
+    blinkLeft: blinker(1), blinkRight: blinker(-1), blinkMaterial: new THREE.MeshBasicMaterial({color: '#ffa31a', toneMapped: false}),
+    glowLeft: blinkerGlow(1), glowRight: blinkerGlow(-1), glowMaterial: blinkerGlowMaterial(),
+    ...blinkerLight(),
     bodyMaterials: CAR_COLORS.map(color => new THREE.MeshStandardMaterial({color, roughness: .32, metalness: .45})),
     detailMaterial: new THREE.MeshStandardMaterial({vertexColors: true, roughness: .3, metalness: .5}),
     // The soft shadow sits on the road; the depth offset stops it flickering against the asphalt and paint.
@@ -165,6 +174,47 @@ function headlightBeams() {
   return {beam: box, beamMaterial: material};
 }
 
+// A blinker's flare: one quad per lamp (front and rear corner), every vertex at the lamp's centre with a corner
+// offset that the vertex shader lays out across the screen, so the quad always faces the camera. Soft round falloff,
+// added onto what lies behind it.
+function blinkerGlow(side) {
+  const geo = new THREE.BufferGeometry(), pos = [], corner = [], index = [];
+  [2.17, -2.17].forEach((z, q) => {
+    for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { pos.push(side * .82, .78, z); corner.push(u, v); }
+    index.push(q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3);
+  });
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('corner', new THREE.Float32BufferAttribute(corner, 2));
+  geo.setIndex(index);
+  return geo;
+}
+// The blinkers' subtle light: a soft amber patch on the road at each flashing corner (as the headlights' light is
+// painted on the road, not cast by a light: a light per car would recompile every material as cars come and go).
+function blinkerLight() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const c = canvas.getContext('2d'), g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,160,40,.55)'); g.addColorStop(.5, 'rgba(255,150,30,.18)'); g.addColorStop(1, 'rgba(255,140,20,0)');
+  c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const patch = side => mergeGeometries([2.3, -2.3].map(z => flat(new THREE.PlaneGeometry(2.2, 2.2)).rotateX(-Math.PI / 2).translate(side * 1.05, .03, z)));
+  return {lightLeft: patch(1), lightRight: patch(-1), lightTexture: texture,
+    lightMaterial: new THREE.MeshBasicMaterial({map: texture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8})};
+}
+function blinkerGlowMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: {color: {value: new THREE.Color('#ffa31a')}, size: {value: .6}},
+    vertexShader: `attribute vec2 corner; uniform float size; varying vec2 vCorner;
+      void main(){vCorner=corner;vec4 mv=modelViewMatrix*vec4(position,1.);mv.xy+=corner*size;gl_Position=projectionMatrix*mv;}`,
+    fragmentShader: `uniform vec3 color; varying vec2 vCorner;
+      void main(){float a=1.-smoothstep(0.,1.,length(vCorner));a*=a;gl_FragColor=vec4(color*a*1.4,a);
+        #include <colorspace_fragment>
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+}
+
 export function createCar({plate, province, color = 0}) {
   const p = sharedParts();
   const car = new THREE.Group();
@@ -181,6 +231,19 @@ export function createCar({plate, province, color = 0}) {
   pool.receiveShadow = false; pool.visible = false; pool.name = 'Demo_car_headlights';
   const beams = add(p.beam, p.beamMaterial);
   beams.receiveShadow = false; beams.visible = false; beams.name = 'Demo_car_headlight_beams';
+  for (const [side, geo] of [['left', p.blinkLeft], ['right', p.blinkRight]]) {
+    const b = add(geo, p.blinkMaterial);
+    b.receiveShadow = false; b.visible = false; b.name = `Demo_car_blinker_${side}`;
+  }
+  for (const [side, geo] of [['left', p.glowLeft], ['right', p.glowRight]]) {
+    const g = add(geo, p.glowMaterial);
+    // Its quads are spread out in the shader, beyond the bounds three.js would cull by.
+    g.receiveShadow = false; g.visible = false; g.renderOrder = 1; g.frustumCulled = false; g.name = `Demo_car_blinker_glow_${side}`;
+  }
+  for (const [side, geo] of [['left', p.lightLeft], ['right', p.lightRight]]) {
+    const l = add(geo, p.lightMaterial);
+    l.receiveShadow = false; l.visible = false; l.renderOrder = -1; l.name = `Demo_car_blinker_light_${side}`;
+  }
   return car;
 }
 
@@ -194,11 +257,17 @@ export function setCarLamps(car, on, night) {
   if (beams) beams.visible = night && on;
 }
 
+// The blinkers (children 6 and 7, their flares 8 and 9, their light on the road 10 and 11): `side` is 'left', 'right'
+// or null; `lit` is the flash's on half.
+export function setCarBlinker(car, side, lit) {
+  car.children.slice(6, 12).forEach((o, i) => { o.visible = side === (i % 2 ? 'right' : 'left') && lit; });
+}
+
 export function disposeCars() {
   if (!shared) return;
-  for (const k of ['body', 'details', 'decals', 'blob', 'pool', 'beam']) shared[k].dispose();
+  for (const k of ['body', 'details', 'decals', 'blob', 'pool', 'beam', 'blinkLeft', 'blinkRight', 'glowLeft', 'glowRight', 'lightLeft', 'lightRight']) shared[k].dispose();
   for (const m of shared.bodyMaterials) m.dispose();
-  for (const k of ['detailMaterial', 'blobMaterial', 'blobTexture', 'poolMaterial', 'poolTexture', 'beamMaterial']) shared[k].dispose();
+  for (const k of ['detailMaterial', 'blobMaterial', 'blobTexture', 'poolMaterial', 'poolTexture', 'beamMaterial', 'blinkMaterial', 'glowMaterial', 'lightMaterial', 'lightTexture']) shared[k].dispose();
   for (const m of plateCache.values()) { m.map.dispose(); m.dispose(); }
   plateCache.clear();
   shared = null;

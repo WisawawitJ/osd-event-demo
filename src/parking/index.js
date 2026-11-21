@@ -46,6 +46,9 @@ function idleCars(sim, traffic, {staffOnly = false} = {}) {
   const vip = !staffOnly && m >= 420 && m < 660;
   return sim.state.vehicles.filter(v => (v.type === 'staff' || (vip && v.type === 'vip')) && v.enabled && v.sync === 'synced' && !inside.has(v.id) && !traffic.isArriving(sim.key(v.plate, v.province)));
 }
+// About a third of the cars coming in arrive along the far lane and turn right across the near one (the story's own
+// cars keep the near lane, where its camera shots expect them).
+const fromFarLane = () => Math.random() < .35;
 // Parked cars that may drive out: VIPs only from the late afternoon, visitors' cars never by themselves (their visit
 // ends them), only when sent out by hand (`guests`). Unknown cars let in by hand (a delivery) leave too: left out, one
 // stayed in its bay until a reset.
@@ -130,7 +133,7 @@ function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paus
     if (m < 570 || m >= 930 || Math.random() > (now - from) / 60000 / 35) return;
     const v = pickOne(visitorsDue());
     if (!v) return;
-    if (onScreen()) { if (traffic.queued < 2) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70}); return; }
+    if (onScreen()) { if (traffic.queued < 2) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70, west: fromFarLane()}); return; }
     const stall = sim.freeStall('guest');
     if (stall) { sim.recordEntry({plate: v.plate, province: v.province, type: 'guest', stallId: stall.id, color: v.color}); traffic.appear(sim.key(v.plate, v.province)); }
   }
@@ -268,7 +271,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
         const free = UNKNOWN_PLATES.filter(([p, pr]) => !traffic.isArriving(sim.key(p, pr)) && !presence.has(sim.key(p, pr)));
         if (!free.length) return;
         const [plate, province] = pickOne(free);
-        traffic.arrive({plate, province, color: Math.floor(Math.random() * 9), fromX, ambient: quiet});
+        traffic.arrive({plate, province, color: Math.floor(Math.random() * 9), fromX, ambient: quiet, west: fromFarLane()});
         say('gate.sim.coming', plate); blocked();
         return;
       }
@@ -279,7 +282,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
       // The newest approved visitor drives up first, so a request made on the phone can be followed to the gate.
       const v = kind === 'visitor' ? pool[pool.length - 1] : pickOne(pool);
       if (!v) { if (!quiet) overlays.toast(`${icon('user')}<span>${esc(t(kind === 'visitor' ? 'gate.sim.noVisitor' : 'gate.sim.noStaff'))}</span>`); return; }
-      traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX});
+      traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX, west: fromFarLane()});
       say('gate.sim.coming', v.plate); blocked();
     },
   };
@@ -444,7 +447,7 @@ export function createParkingScene({scene, schedule, camera = null}) {
   loop('street', () => { if (lotOnScreen(lot)) traffic.passBy(); }, () => streetGap(world.minute()));
   traffic.syncParked();
   const stopLife = startLotLife({sim, traffic, lot, camera, staffOnly: true,
-    arrive() { const v = pickOne(idleCars(sim, traffic, {staffOnly: true})); if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70}); },
+    arrive() { const v = pickOne(idleCars(sim, traffic, {staffOnly: true})); if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70, west: fromFarLane()}); },
     leave() { const keys = leavingCandidates(sim, traffic, {staffOnly: true}); if (keys.length) traffic.leave(pickOne(keys)); }});
   return {
     lot, sim, traffic,
