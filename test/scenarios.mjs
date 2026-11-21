@@ -529,6 +529,25 @@ export const scenarios = [
       expect(off < 6, `${time}: stand-in ${plain.map(Math.round)} vs live ${live.map(Math.round)} (off by ${off.toFixed(1)} of 255)`);
     }
   }},
+  {name: 'pond: the water is drawn on every frame from the overview to the pond and back (it never appears at once)', async run(p, expect) {
+    await p.goto('?debug=1');
+    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
+    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    // Each frame the pond is on screen: whether its water layer was drawn, and how far its mix moved since the last frame.
+    await p.eval(`(()=>{const R=__renderer,w=__scene.getObjectByName('Courtyard_water_reflection'),pond=__scene.getObjectByName('Floor_1_koi_pond_0');window.__water={frames:0,missing:0,jump:0};let drawn=false,last=null;
+      const ob=w.onBeforeRender;w.onBeforeRender=function(...a){ob.apply(this,a);drawn=true;const m=this.material.uniforms.reflectionMix.value;if(last!==null)__water.jump=Math.max(__water.jump,Math.abs(m-last));last=m;};
+      const r=R.render.bind(R);R.render=(s,c)=>{if(R.getRenderTarget()||c!==__camera)return r(s,c);drawn=false;const o=r(s,c);
+        pond.geometry.computeBoundingSphere();const q=pond.geometry.boundingSphere.center.clone().applyMatrix4(pond.matrixWorld).project(__camera);
+        if(q.z<1&&Math.abs(q.x)<1&&Math.abs(q.y)<1){__water.frames++;if(!drawn)__water.missing++;}return o;};})()`);
+    for (const to of ['pond', 'overview']) {
+      await p.click(`[data-destination="${to}"]`);
+      await p.until(`${idle} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
+      await p.sleep(400);
+    }
+    const water = await p.eval('__water');
+    expect(water.frames > 30 && water.missing === 0, `the water was drawn on every frame the pond was on screen (${water.frames - water.missing} of ${water.frames})`);
+    expect(water.jump < .2, `its reflection fades in and out, never in one step (largest change in a frame ${water.jump.toFixed(2)})`);
+  }},
   {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
     await p.goto(`?dest=pond&${FAST}`);
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});

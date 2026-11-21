@@ -14,11 +14,15 @@ export function createRenderKit(renderer, scene) {
  const h=holes.getContext('2d');h.fillStyle='white';h.fillRect(0,0,64,64);h.fillStyle='black';
  for(const [x,y] of [[16,16],[48,48]]){h.beginPath();h.arc(x,y,13,0,Math.PI*2);h.fill();}
  const perforation=new THREE.CanvasTexture(holes);perforation.wrapS=perforation.wrapT=THREE.RepeatWrapping;perforation.repeat.set(5,5);perforation.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),4);
- const reflections=[],STILL_MS=100,FADE_MS=250;let reflectionsPaused=false;
+ const reflections=[],STILL_MS=100,FADE_MS=250;let reflectionsPaused=false,liveView=true;
  // The mirror's share of the water colour (reflectionMix) fades over FADE_MS when the camera sets off or stops,
  // instead of snapping between the reflection and the plain water colour (the whole pond flashed).
  let mixFrom=1,mixTo=1,mixAt=0;
  const mixNow=()=>mixFrom+(mixTo-mixFrom)*Math.min(1,(performance.now()-mixAt)/FADE_MS);
+ // Live while the camera is still on a ground-floor view (where the pond is close enough to be worth the mirror's
+ // second pass over the scene); elsewhere the water keeps its stand-in. The water itself is always drawn: hidden
+ // outside the ground floor, it appeared and vanished at once as a flight changed floors.
+ function retarget(){const to=reflectionsPaused||!liveView?0:1;if(to===mixTo)return;mixFrom=mixNow();mixTo=to;mixAt=performance.now();}
  // The Reflector draws the mirrored scene through the whole view, though only the pond's few pixels show it. Handing it
  // a projection cropped to the pond's rectangle (in the mirrored camera) keeps its texture mapping consistent (it is
  // built from that projection) and lets frustum culling drop everything the pond cannot show: most of the building.
@@ -76,7 +80,7 @@ export function createRenderKit(renderer, scene) {
     // the water, as drawn, the same average colour as the live reflection, morning, noon, dusk and night (within 2 of
     // 255). A fixed mid grey made the paused water too bright, by day and much more at night.
     if(scene.background?.isColor)this.material.uniforms.plainColor.value.copy(scene.background).multiplyScalar(.3).addScalar(.015);
-    if(reflectionsPaused){seen.camera=null;return;}
+    if(reflectionsPaused||!liveView){seen.camera=null;return;}
     const now=performance.now();
     if(camera===seen.camera&&now-seen.at<STILL_MS&&seen.view.equals(camera.matrixWorld)&&seen.projection.equals(camera.projectionMatrix))return;
     seen.camera=camera;seen.view.copy(camera.matrixWorld);seen.projection.copy(camera.projectionMatrix);seen.at=now;
@@ -93,5 +97,5 @@ export function createRenderKit(renderer, scene) {
  const logo=receptionCanvas.getContext('2d');logo.font='bold 112px Arial';logo.textAlign='center';logo.textBaseline='middle';logo.strokeStyle='#b9eaff';logo.lineWidth=2;logo.shadowColor='#5caaff';logo.shadowBlur=12;logo.strokeText('OSD',256,82);
  const receptionTexture=new THREE.CanvasTexture(receptionCanvas);receptionTexture.colorSpace=THREE.SRGBColorSpace;
  function createReceptionSign(position){const sign=new THREE.Mesh(new THREE.PlaneGeometry(1.45,.45),new THREE.MeshBasicMaterial({map:receptionTexture,transparent:true,depthWrite:false}));sign.name='OSD_reception_sign';sign.position.fromArray(position);sign.rotation.y=Math.PI;sign.userData={type:'furniture',interiorFeature:true};return sign;}
- return {ground,perforation,createReceptionSign,addPondReflections,setReflectionsPaused(value){if(value===reflectionsPaused)return;mixFrom=mixNow();mixTo=value?0:1;mixAt=performance.now();reflectionsPaused=value;},fadeMs:FADE_MS,setReflectionVisible(value){for(const reflection of reflections)reflection.visible=value;},dispose(){for(const reflection of reflections){reflection.geometry.dispose();reflection.dispose();}environment.dispose();perforation.dispose();receptionTexture.dispose();ground.geometry.dispose();ground.material.dispose();}};
+ return {ground,perforation,createReceptionSign,addPondReflections,setReflectionsPaused(value){reflectionsPaused=value;retarget();},fadeMs:FADE_MS,setReflectionLive(value){liveView=value;retarget();},dispose(){for(const reflection of reflections){reflection.geometry.dispose();reflection.dispose();}environment.dispose();perforation.dispose();receptionTexture.dispose();ground.geometry.dispose();ground.material.dispose();}};
 }

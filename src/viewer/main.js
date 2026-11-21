@@ -290,7 +290,7 @@ try {
     exteriorButton.setAttribute('aria-pressed',String(showExterior));
     renderKit.ground.visible=currentFloor==='all'||currentFloor==='1';
     if(parking)parking.lot.root.visible=renderKit.ground.visible;
-    renderKit.setReflectionVisible(currentFloor==='1'&&!cutaway&&!exploded);
+    renderKit.setReflectionLive(currentFloor==='1'&&!cutaway&&!exploded);
     renderer.shadowMap.needsUpdate=true;
     for (const button of floorButtons) button.setAttribute('aria-pressed', String(button.dataset.floor === currentFloor));
     explodeButton.disabled = currentFloor !== 'all';
