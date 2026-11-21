@@ -126,7 +126,7 @@ function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paus
     // Whose visit is over: one at a time, through the barrier when the car park is on screen.
     for (const [k, p] of sim.state.presence) {
       if (p.type !== 'guest' || p.plate === STORY.plate || now - p.since < stayOf(p.plate)) continue;
-      if (onScreen()) { if (traffic.leaving < 2) traffic.leave(k); }
+      if (onScreen()) { if (traffic.leaving < 2) traffic.leave(k, {west: fromFarLane()}); }
       else traffic.vanish(k, () => sim.recordExit({plate: p.plate, province: p.province}));
       break;
     }
@@ -262,7 +262,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
         const keys = leavingCandidates(sim, traffic, {guests: !quiet});
         if (!keys.length) return;
         const k = pickOne(keys);
-        traffic.leave(k);
+        traffic.leave(k, {west: fromFarLane()});
         if (!quiet) overlays.toast(`${icon('arrowOut')}<span>${esc(t('gate.sim.leaving', {plate: presence.get(k)?.plate}))}</span>`, 'info');
         blocked();
         return;
@@ -448,7 +448,7 @@ export function createParkingScene({scene, schedule, camera = null}) {
   traffic.syncParked();
   const stopLife = startLotLife({sim, traffic, lot, camera, staffOnly: true,
     arrive() { const v = pickOne(idleCars(sim, traffic, {staffOnly: true})); if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70, west: fromFarLane()}); },
-    leave() { const keys = leavingCandidates(sim, traffic, {staffOnly: true}); if (keys.length) traffic.leave(pickOne(keys)); }});
+    leave() { const keys = leavingCandidates(sim, traffic, {staffOnly: true}); if (keys.length) traffic.leave(pickOne(keys), {west: fromFarLane()}); }});
   return {
     lot, sim, traffic,
     setNight(night) { lot.setNight(night); traffic.setNight(night); },

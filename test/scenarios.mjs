@@ -281,6 +281,19 @@ export const scenarios = [
     expect(await p.eval('__farLane'), 'it came along the far lane');
     expect(await p.eval('__right'), 'its right blinker flashed before the turn');
   }},
+  {name: 'a car leaving for the far lane signals right and turns out across the near lane', async run(p, expect) {
+    // Every car left along the near lane; none turned out to the far one.
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic,k=t.parkedKeys().find(k=>sim.state.presence.get(k)?.type==='staff');window.__k=k;
+      const c=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+sim.state.presence.get(k).plate);window.__o={right:false,far:false,west:false};
+      const iv=setInterval(()=>{if(c.children[7]?.visible&&c.position.z<20)__o.right=true;if(Math.abs(c.position.z-27.5)<.2&&Math.sin(c.rotation.y)<-.99)__o.far=true;if(c.position.x<-45)__o.west=true;if(!c.parent)clearInterval(iv);},20);
+      void t.leave(k,{west:true});})()`);
+    await p.until('!__parking.sim.state.presence.has(__k) && __o.west', {timeout: 30000, what: 'the car out along the far lane'});
+    const o = JSON.parse(await p.eval('JSON.stringify(__o)'));
+    expect(o.right, 'its right blinker flashed at the barrier');
+    expect(o.far, 'it drove off westbound in the far lane');
+  }},
   {name: 'a car from the near lane signals left before turning in', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});

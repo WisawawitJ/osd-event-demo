@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (151), about 115 s: run before a commit
+npm test                 # all behaviour checks (152), about 115 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -152,12 +152,13 @@ In the staff console:
 
 The visitor's phone form can be filled in by hand. The car photo reads a sample plate. On the emailed ticket,
 **Add to calendar** downloads a simulated `.ics` invite for the visit.
-Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street, and leaving cars wait in their aisle.
+Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street, and leaving cars wait in their bay until the one ahead is out.
 Cars also come and go by themselves, following the hour (see above). Through-traffic drives both lanes of the
 street whenever it is in view; it keeps to one speed per lane and gives way to cars turning in or pulling out.
 About a third of the cars coming in arrive along the far lane: the near lane has right of way, so they wait at the
-turn, signalling right, for a gap in it and a clear gate mouth, then turn in across it. Near-lane cars bound for the car
-park signal left from the start, queuing included. Cars flash their blinkers (amber lenses at the four corners) before
+turn, signalling right, for a gap in it and a clear gate mouth, then turn in across it. About a third of the cars
+leaving turn right out to the far lane: at the barrier they signal right and wait for a gap in both lanes and for no car
+on its way into the entry. Near-lane cars bound for the car park signal left from the start, queuing included. Cars flash their blinkers (amber lenses at the four corners) before
 every turn. No car drives
 through another: on the street a car keeps its distance to the one ahead, every car brakes for a car on its path, and an
 aisle takes cars in or out, not both at once (a check watches every pair of cars in a busy car park).
