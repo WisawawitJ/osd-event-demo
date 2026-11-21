@@ -679,12 +679,15 @@ try {
        let orbitEnabled=true;try{orbitEnabled=localStorage.getItem('osd-demo-orbit')!=='off';}catch{}
        orbitButton.setAttribute('aria-pressed',String(orbitEnabled));
        orbitButton.addEventListener('click',()=>{orbitEnabled=!orbitEnabled;orbitButton.setAttribute('aria-pressed',String(orbitEnabled));try{localStorage.setItem('osd-demo-orbit',orbitEnabled?'on':'off');}catch{}if(!orbitEnabled)stopOrbit();},{signal:abort.signal});
-       // Idle: 20 s with no input in free use, or 2.5 s into a building stop of the tour/loop. Never while
-       // the camera is flying or the parking story is directing it.
+       // Idle: 20 s with no input on the 3D view in free use, or 2.5 s into a building stop of the tour/loop. Never while
+       // the camera is flying or the parking story is directing it. Only the 3D view's own input counts (the canvas and
+       // its view controls): scrolling or tapping the panel, the page or the phone mock-up leaves the camera turning.
        let lastInput=performance.now(),orbitFrame=0;
        const ORBIT_DEG_PER_S=3.5,IDLE_FREE_MS=20000,IDLE_TOUR_MS=2500;
        function stopOrbit(){if(orbitFrame)cancelAnimationFrame(orbitFrame);orbitFrame=0;}
-       for(const type of ['pointerdown','wheel','keydown'])document.addEventListener(type,event=>{if(event.target.closest?.('#view-orbit'))return;lastInput=performance.now();stopOrbit();},{capture:true,signal:abort.signal});
+       const onView=target=>Boolean(target.closest?.('#viewport'))&&!target.closest('#view-orbit, #parking-layer');
+       for(const type of ['pointerdown','wheel','keydown'])document.addEventListener(type,event=>{if(!onView(event.target))return;lastInput=performance.now();stopOrbit();},{capture:true,signal:abort.signal});
+       if(debug)window.__idleNow=()=>{lastInput=-Infinity;}; // tests: idle from now on, without waiting 20 s
        const orbitAllowed=()=>{const st=showcase.getState();if(!orbitEnabled||disposed||document.hidden||isPaused()||flight.running||st.traveling||parking?.story.running)return false;return performance.now()-lastInput>(st.touring?IDLE_TOUR_MS:IDLE_FREE_MS);};
        let flightWasRunning=false;
        const orbitWatch=setInterval(()=>{

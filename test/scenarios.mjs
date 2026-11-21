@@ -442,6 +442,22 @@ export const scenarios = [
       expect(!built.length, `${time}: no shader built during the flights (${built.join(', ') || 'none'})`);
     }
   }},
+  {name: 'idle orbit: scrolling the panel leaves it turning; a wheel on the 3D view stops it', async run(p, expect) {
+    await p.goto('?debug=1&dest=energy');
+    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='energy' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the energy stop'});
+    const pos = () => p.eval('__controls.object.position.toArray()');
+    const turning = async () => { const a = await pos(); await p.sleep(400); const b = await pos(); return Math.hypot(...a.map((v, i) => v - b[i])) > 1e-3; };
+    const startIdle = async () => { await p.eval('__idleNow()'); await p.until(`(()=>{const k=__controls.object.position.toArray().join();const r=window.__k!==undefined&&window.__k!==k;window.__k=k;return r;})()`, {timeout: 5000, what: 'idle orbit turning'}); await p.eval('window.__k=undefined'); };
+    const box = async sel => JSON.parse(await p.eval(`JSON.stringify(document.querySelector('${sel}').getBoundingClientRect())`));
+    const panel = await box('.context-panel'), view = await box('#viewport');
+    await startIdle();
+    await p.cdp('Input.dispatchMouseEvent', {type: 'mouseWheel', x: panel.x + panel.width / 2, y: panel.y + 200, deltaX: 0, deltaY: 200});
+    await p.cdp('Input.synthesizeScrollGesture', {x: Math.round(panel.x + panel.width / 2), y: Math.round(panel.y + 300), yDistance: -200, gestureSourceType: 'touch', speed: 800});
+    expect(await turning(), 'scrolling the panel (wheel and touch) leaves the camera turning');
+    await p.cdp('Input.dispatchMouseEvent', {type: 'mouseWheel', x: view.x + view.width / 2, y: view.y + view.height / 2, deltaX: 0, deltaY: -100});
+    await p.sleep(150);
+    expect(!(await turning()), 'a wheel on the 3D view stops it');
+  }},
   {name: 'the car park layout changes as one animation (a view transition), not in a single frame', async run(p, expect) {
     await p.goto('?debug=1');
     const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
