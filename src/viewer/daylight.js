@@ -21,7 +21,7 @@ const elevationAt = minute => SWING * (Math.cos(2 * Math.PI * (minute - SOLAR_NO
 const DAY = {sky: 0xebf6ff, ground: 0x7b8066, key: 0xffe7ba, fill: 0xc9e2ed}, NIGHT = {sky: 0x7d93b0, key: 0xb7d4ff,
   // A real night: the moon and sky give only enough light to make out shapes, so what is lit (street lights, rooms,
   // headlights) carries the scene. Brighter, the whole site read as dusk.
-  moon: .12, skyLight: .15, fill: .03, environment: .06, background: '#111f2d'}, LOW_SUN = 0xffad70;
+  moon: .16, skyLight: .22, fill: .05, environment: .09, background: '#111f2d'}, LOW_SUN = 0xffad70;
 const color = new THREE.Color(), other = new THREE.Color();
 
 // How much daylight there is (0 night … 1 full day) and how high the sun is (0 horizon or below … 1 noon).
