@@ -1,7 +1,7 @@
 // In-memory parking simulation: allowed list, visitor requests, presence, gate events,
 // alerts, audit and outbox. Nothing here talks to ATOM, Keycloak, mail or cameras.
 import {buildStalls} from './layout.js';
-import {bkk, parts} from './i18n.js';
+import {bkk} from './i18n.js';
 import {later, world, demoNow} from './clock.js';
 
 const DAY_START = bkk(2026, 11, 24, 0, 0);
@@ -360,8 +360,10 @@ export function createParkingSim() {
     const entries = today.filter(e => e.kind === 'entry' || e.kind === 'manual');
     const exits = today.filter(e => e.kind === 'exit' || e.kind === 'exitNoEntry');
     const hourly = [];
-    const nowHour = parts(at).h;
-    for (let h = 6; h <= 18; h++) {
+    // The whole day (the car park is open round the clock), counted from the day's start, so the small hours after
+    // midnight (before the day wraps at 03:00) still show the evening behind them.
+    const nowHour = Math.floor((at - DAY_START) / 3600e3);
+    for (let h = 0; h < 24; h++) {
       const from = DAY_START + h * 3600e3, to = from + 3600e3;
       hourly.push({h, in: h > nowHour ? null : entries.filter(e => e.at >= from && e.at < to).length, out: h > nowHour ? null : exits.filter(e => e.at >= from && e.at < to).length});
     }

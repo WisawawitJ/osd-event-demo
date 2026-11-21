@@ -63,7 +63,7 @@
 .pk-bar-idle { line-height: 1.5; }
 .pk-dots { display: flex; gap: 5px; flex: 1; max-width: 260px; }
 .pk-dots i { flex: 1; height: 5px; border-radius: 3px; background: #e2e8f0; }
-.pk-dots i.done { background: #9db3f2; }
+.pk-dots i.done { background: #8fb8e6; }
 .pk-dots i.now { background: var(--pk-blue); }
 .pk-switch { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-left: 6px; white-space: nowrap; cursor: pointer; }
 .pk-switch input { accent-color: var(--pk-blue); }

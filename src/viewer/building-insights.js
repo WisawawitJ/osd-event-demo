@@ -1,4 +1,4 @@
-import {daySnapshot,dayEvents,dayHistory,formatTime,incidentsFor} from 'osd/viewer/building-day.js';
+import {daySnapshot,dayEvents,dayHistory,formatTime,incidentsFor,createRoomSchedule} from 'osd/viewer/building-day.js';
 import {createRoomLayers} from 'osd/viewer/room-layers.js';
 import {getLang} from 'osd/parking/i18n.js';
 import {world} from 'osd/parking/clock.js';
@@ -17,7 +17,8 @@ const DAY_LENGTHS=[10,20,40,60];
 export function createBuildingInsights({model,simulation,schedule,read,write,render,navigate,stopActivity,following=()=>false,onFollow=()=>{}}){
  const $=s=>document.querySelector(s),abort=new AbortController(),layers=createRoomLayers({model,rooms:simulation.rooms,schedule});
  const listen=(el,event,fn)=>el.addEventListener(event,fn,{signal:abort.signal});
- let layer='none',disposed=false,lastContext=null,dragging=false,applied=null,lastRender=0,lastShown='';
+ let layer='none',disposed=false,lastContext=null,dragging=false,lastRender=0,lastShown='';
+ const followRooms=createRoomSchedule(simulation);
  const held=new Map(); // reading → {base: the schedule's value when set by hand} or {until: world time}
  const events=$('#day-events'),incidentList=$('#incident-list'),range=$('#day-time');
  // Rebuilt on a language switch (relabel); paint() then restores aria-current.
@@ -46,19 +47,10 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
    for(const [key,h] of held){if('until' in h?now<h.until:telemetry[key]===h.base)delete telemetry[key];else held.delete(key);}
    write(telemetry);
   }
-  const changes={};
-  for(const [id,next] of Object.entries(snapshot.rooms)){
-   const before=applied?.[id],patch={};
-   for(const key of ['light','climate'])if(all||!before||before[key]!==next[key])patch[key]=next[key];
-   const doors=Object.fromEntries(Object.entries(next.doors).filter(([door,open])=>all||!before||before.doors[door]!==open));
-   if(Object.keys(doors).length)patch.doors=doors;
-   if(Object.keys(patch).length)changes[id]=patch;
-  }
-  applied=snapshot.rooms;
   // The panels redraw when something they show as a state changes, otherwise every 2 s (each redraw rebuilds their
-  // buttons, so redrawing on every tick could swallow a tap).
+  // buttons, so redrawing on every tick could swallow a tap). A room change redraws them through the simulation.
   const shown=JSON.stringify([state.occupied,state.pondAlert,state.water]);
-  if(Object.keys(changes).length){lastRender=performance.now();lastShown=shown;simulation.applySnapshot({rooms:changes});}
+  if(followRooms(snapshot.minute,{all})){lastRender=performance.now();lastShown=shown;}
   else if(all||shown!==lastShown||performance.now()-lastRender>2000){lastRender=performance.now();lastShown=shown;render();}
   paint();
  }

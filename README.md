@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (65), about 60 s
+npm test                 # all behaviour checks (66), about 60 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -97,7 +97,7 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 
 ## At the booth
 
-- **Auto loop** (bottom-left checkbox, or `?kiosk=1`) follows the day. When a visitor touches the screen it stops and
+- **Kiosk mode** (bottom-left checkbox, or `?kiosk=1`) follows the day. When a visitor touches the screen it stops and
   they can explore. After a quiet minute it follows the day again. **Start tour** still plays the fixed tour.
 - On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance** and
   **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps

@@ -5,6 +5,7 @@ import {createShowcase,translatePage,pageString} from 'osd/viewer/showcase.js';
 import {getLang} from 'osd/parking/i18n.js';
 import {SPEED, world, isPaused} from 'osd/parking/clock.js';
 import {applySky, isDark} from 'osd/viewer/daylight.js';
+import {createRoomSchedule} from 'osd/viewer/building-day.js';
 import {createKoi} from 'osd/viewer/koi.js';
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import { OrbitControls } from 'osd/node_modules/three/examples/jsm/controls/OrbitControls.js';
@@ -690,6 +691,10 @@ try {
        // The exploration page shows the car park too: lot, parked cars and traffic, without the showcase UI.
        const {createParkingScene}=await import('osd/parking/index.js');
        parking=createParkingScene({scene,schedule});
+       // The rooms follow the building's daily schedule here too (the showcase does it in building-insights.js).
+       const followRooms=createRoomSchedule(simulation);followRooms(world.minute(),{all:true});
+       const offRooms=world.subscribe(kind=>{if(kind==='tick')followRooms(world.minute());else if(kind==='jump'||kind==='set')followRooms(world.minute(),{all:true});});
+       abort.signal.addEventListener('abort',offRooms,{once:true});
        parking.lot.root.visible=renderKit.ground.visible;
        parking.setNight(simulation.getState().night);simulation.subscribe(()=>parking.setNight(simulation.getState().night));
       }

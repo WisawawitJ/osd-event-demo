@@ -25,7 +25,7 @@ html[data-night=true] #scene-chip { color: #c9d6e3; }
 html[data-night=true] .scene-title { background: #151f29f0; color: var(--ink); }
 html[data-night=true] .destination-dock button, html[data-night=true] .layer-controls button, html[data-night=true] .parking-bar button:not(.primary-button) { color: #b9c7d5; }
 html[data-night=true] .destination-dock button[aria-pressed=true] { color: #fff; }
-html[data-night=true] .layer-controls button[aria-pressed=true] { background: #22314a; color: #b8cbff; }
+html[data-night=true] .layer-controls button[aria-pressed=true] { background: #22314a; color: #7fd0f3; }
 html[data-night=true] button:not(:disabled):hover, html[data-night=true] a:hover { background: #22314a; }
 html[data-night=true] .primary-button, html[data-night=true] #day-play { background: #e4ebf2; color: #0e151c; }
 html[data-night=true] .primary-button:hover { background: #ffffff !important; }
@@ -39,7 +39,7 @@ html[data-night=true] .day-events [aria-current=true] { background: #1d2a45; }
 
 /* Building panel */
 html[data-night=true] .data-row { border-bottom-color: var(--line); }
-html[data-night=true] .system-icon, html[data-night=true] .panel-action, html[data-night=true] .incidents-heading > span { background: #1d2a45; color: #a9bfff; }
+html[data-night=true] .system-icon, html[data-night=true] .panel-action, html[data-night=true] .incidents-heading > span { background: #1d2a45; color: #7fd0f3; }
 html[data-night=true] .panel-action:hover { background: #24345a; }
 html[data-night=true] .local-controls button { background: #1e2a37; color: var(--ink); }
 html[data-night=true] .local-controls button[aria-pressed=true] { background: #173329; color: #7fd8b0; }
@@ -47,7 +47,7 @@ html[data-night=true] .status-pill { background: #173329; color: #7fd8b0; }
 html[data-night=true] .status-pill.attention, html[data-night=true] .alert-strip { background: #3a2b14; color: #f1bf73; }
 html[data-night=true] .metric-note { color: #7fd8b0; }
 html[data-night=true] .energy-node { background: #173329; color: #7fd8b0; }
-html[data-night=true] .energy-node:last-child { background: #1d2a45; color: #a9bfff; }
+html[data-night=true] .energy-node:last-child { background: #1d2a45; color: #7fd0f3; }
 html[data-night=true] .water-level i { background: #1e3331; }
 html[data-night=true] .event-row { border-left-color: var(--line); }
 html[data-night=true] .incident-item { background: #2c2416; border-color: #4a3a1f; }
@@ -57,7 +57,7 @@ html[data-night=true] .chart text { fill: #8c9db0; }
 html[data-night=true] .chart path[fill="#eaf1fb"] { fill: #1b2740; }
 html[data-night=true] .plate { border-color: #3a4a5a; }
 html[data-night=true] .kiosk-toggle { color: var(--muted); }
-html[data-night=true].kiosk-on .kiosk-toggle, html[data-night=true] .kiosk-on .kiosk-toggle { background: #1d2a45; color: #a9bfff; }
+html[data-night=true].kiosk-on .kiosk-toggle, html[data-night=true] .kiosk-on .kiosk-toggle { background: #1d2a45; color: #7fd0f3; }
 
 /* Staff console */
 html[data-night=true] .pk-tabs { background: #1b2632; }
@@ -88,7 +88,7 @@ html[data-night=true] .pk-zone > i { background: #1e2a37; }
 html[data-night=true] .pk-dots i { background: #263544; }
 html[data-night=true] .pk-qr-row { border-color: var(--line); }
 html[data-night=true] .pk-caption p { color: var(--muted); }
-html[data-night=true] .pk-caption-hint { background: #1d2a45; color: #a9bfff; }
+html[data-night=true] .pk-caption-hint { background: #1d2a45; color: #7fd0f3; }
 html[data-night=true] .view-controls button { color: #b9c7d5 !important; }
 html[data-night=true] .flash { animation-name: pk-flash-night; }
 @keyframes pk-flash-night { 0%, 30% { background: #3b3416; } 100% { background: transparent; } }

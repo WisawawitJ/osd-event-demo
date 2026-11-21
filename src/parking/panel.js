@@ -35,7 +35,7 @@ export function createPanel({root, sim, actions}) {
     const w = 300, hgt = 92, bw = w / hourly.length;
     const bars = hourly.map((h, i) => {
       const x = i * bw + 3, ih = h.in == null ? 0 : (h.in / max) * (hgt - 18), oh = h.out == null ? 0 : (h.out / max) * (hgt - 18);
-      return `<rect x="${x}" y="${hgt - ih}" width="${bw / 2 - 2}" height="${ih}" rx="2" class="in"/><rect x="${x + bw / 2 - 1}" y="${hgt - oh}" width="${bw / 2 - 2}" height="${oh}" rx="2" class="out"/>${i % 3 === 0 ? `<text x="${x + bw / 2 - 2}" y="${hgt + 13}" text-anchor="middle">${String(h.h).padStart(2, '0')}:00</text>` : ''}`;
+      return `<rect x="${x}" y="${hgt - ih}" width="${bw / 2 - 2}" height="${ih}" rx="2" class="in"/><rect x="${x + bw / 2 - 1}" y="${hgt - oh}" width="${bw / 2 - 2}" height="${oh}" rx="2" class="out"/>${i % 4 === 2 ? `<text x="${x + bw / 2 - 2}" y="${hgt + 13}" text-anchor="middle">${String(h.h).padStart(2, '0')}:00</text>` : ''}`;
     }).join('');
     return `<svg class="pk-bars" viewBox="0 0 ${w} ${hgt + 16}" role="img" aria-label="${t('ov.hourly')}"><path d="M0 ${hgt}h${w}" class="axis"/>${bars}</svg><div class="pk-legend"><span><i class="in"></i>${t('ev.entry')}</span><span><i class="out"></i>${t('ev.exit')}</span></div>`;
   }

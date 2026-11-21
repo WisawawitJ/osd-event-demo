@@ -3,7 +3,7 @@ import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {t, onLang, getLang, setLang, bkk} from './i18n.js';
 import {icon, esc} from './dom.js';
 import {createParkingSim} from './sim.js';
-import {SPEED, later, cancelLater, sleep, world, demoNow} from './clock.js';
+import {SPEED, later, cancelLater, sleep, world, demoNow, minuteOf} from './clock.js';
 import {createLot} from './lot3d.js';
 import {createTraffic} from './traffic.js';
 import {createPanel} from './panel.js';
@@ -32,6 +32,12 @@ export function occupancyAt(minute) {
   return OCCUPANCY[0][1];
 }
 const daytime = minute => minute >= 390 && minute < 1140;
+// Through-traffic on the street follows the hour too: closest together in the rushes (07:00–08:45, 16:45–18:30),
+// a car now and then at night (22:00–05:30). The delay (ms of demo time) until the next one is offered.
+function streetGap(minute) {
+  const rush = (minute >= 420 && minute < 525) || (minute >= 1005 && minute < 1110), night = minute < 330 || minute >= 1320;
+  return rush ? 1100 + Math.random() * 1500 : night ? 9000 + Math.random() * 9000 : 1800 + Math.random() * 3200;
+}
 // Cars not in the car park that may drive in: staff, and in the morning the VIPs (the explore page: staff only).
 function idleCars(sim, traffic, {staffOnly = false} = {}) {
   const inside = new Set([...sim.state.presence.values()].map(p => p.vehicleId)), m = world.minute();
@@ -65,14 +71,23 @@ function startLotLife({sim, traffic, lot, staffOnly = false, paused = () => fals
       if (traffic.vanish(k)) { sim.recordExit({plate: p.plate, province: p.province, at}); return; }
     }
   }
+  // A log time between `from` and `to` for a car coming in (or leaving): when the car park was filling (or emptying)
+  // most, so a jump over the evening logs its departures in the evening rush, not spread over the afternoon.
+  function when(arriving, from, to) {
+    for (let i = 0; i < 40; i++) {
+      const t = from + Math.random() * Math.max(0, to - from), m = minuteOf(t);
+      const change = occupancyAt((m + 10) % 1440) - occupancyAt(m); // cars per 10 minutes
+      if (Math.random() < Math.max(0, arriving ? change : -change) / 4) return t;
+    }
+    return from + Math.random() * Math.max(0, to - from);
+  }
   // Closes the gap down to `keep` cars, oldest log time first.
   function catchUp(keep, from, to) {
     let g = gap();
     const moves = [];
-    for (; g > keep; g--) moves.push(park);
-    for (; g < -keep; g++) moves.push(unpark);
-    const times = moves.map(() => from + Math.random() * Math.max(0, to - from)).sort((a, b) => a - b);
-    moves.forEach((move, i) => move(Math.round(times[i])));
+    for (; g > keep; g--) moves.push([park, when(true, from, to)]);
+    for (; g < -keep; g++) moves.push([unpark, when(false, from, to)]);
+    moves.sort((a, b) => a[1] - b[1]).forEach(([move, t]) => move(Math.round(t)));
   }
   let last = world.now(), timer = 0;
   function tick() {
@@ -325,7 +340,7 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
   function schedulePass() {
     cancelLater(passTimer);
     // Through-traffic runs whenever the street is on screen (overview and car park), not only in the parking stop.
-    passTimer = later(() => { if (lot.root.visible && document.visibilityState === 'visible') traffic.passBy(); schedulePass(); }, 1800 + Math.random() * 3200);
+    passTimer = later(() => { if (lot.root.visible && document.visibilityState === 'visible') traffic.passBy(); schedulePass(); }, streetGap(world.minute()));
   }
   // Unknown cars that nobody answers are turned away after a while in free play.
   // The single barrier serves entry and exit, so a waiting unknown car blocks cars leaving too. Background ones
@@ -374,9 +389,9 @@ export function createParkingScene({scene, schedule}) {
   const lot = createLot({scene, stalls: sim.state.stalls, schedule});
   const traffic = createTraffic({lot, sim, schedule, hooks: {}});
   const timers = {};
-  const loop = (name, fn, min, spread) => { const run = () => { fn(); timers[name] = later(run, min + Math.random() * spread); }; timers[name] = later(run, min * Math.random()); };
+  const loop = (name, fn, gap) => { const run = () => { fn(); timers[name] = later(run, gap()); }; timers[name] = later(run, gap() * Math.random()); };
   const onScreen = () => lot.root.visible && document.visibilityState === 'visible';
-  loop('street', () => { if (onScreen()) traffic.passBy(); }, 1800, 3200);
+  loop('street', () => { if (onScreen()) traffic.passBy(); }, () => streetGap(world.minute()));
   traffic.syncParked();
   const stopLife = startLotLife({sim, traffic, lot, staffOnly: true,
     arrive() { const v = pickOne(idleCars(sim, traffic, {staffOnly: true})); if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70}); },

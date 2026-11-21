@@ -910,6 +910,17 @@ export const scenarios = [
     await p.click('[data-action="pond"]');
     await p.until(`!document.querySelector('[data-incident="pond-low"]')`, {timeout: 3000, what: 'alert cleared when switched back'});
   }},
+  {name: 'day cycle: the explore page follows the building schedule (offices dark at night), and no solar demo at night', async run(p, expect) {
+    const lit = `Object.values(__simulation().rooms).filter(r=>r.light).length`;
+    // The page is ready before its car park (and with it the schedule) loads: wait for the rooms to follow.
+    await p.goto('?debug=1&time=22:00#explore');
+    await p.until(`document.querySelector('#status')?.dataset.state === 'ready' && !!window.__simulation && ${lit} <= 2`, {timeout: 40000, what: 'offices dark at 22:00 on the explore page'});
+    await p.goto('?debug=1&time=10:00#explore');
+    await p.until(`document.querySelector('#status')?.dataset.state === 'ready' && !!window.__simulation && ${lit} > 10`, {timeout: 40000, what: 'offices lit at 10:00 on the explore page'});
+    await p.goto(`?dest=energy&${FAST}&time=22:00`);
+    await p.until(`${UP} && document.body.dataset.tourDestination === 'energy' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 40000});
+    expect(await p.eval(`document.querySelector('[data-action="energy"]').disabled`), 'the solar demo button is off at night');
+  }},
   {name: 'day cycle: the explore page follows the clock too (night at 20:00)', async run(p, expect) {
     await p.goto('?debug=1&day=10&time=20:00#explore');
     await p.until(`document.querySelector('#status')?.dataset.state === 'ready'`, {timeout: 40000});

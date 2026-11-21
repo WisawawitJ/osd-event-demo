@@ -58,3 +58,23 @@ export function dayHistory(minute,rooms,key){
  const times=Array.from({length:steps},(_,i)=>Math.round(start+(end-start)*i/(steps-1)));
  return {values:times.map(t=>daySnapshot(t,rooms).telemetry[key]),labels:[formatTime(start),formatTime(end)]};
 }
+// Keeps the building's rooms on the schedule: each call (with the clock's minute) applies only what the schedule changed
+// since the last call, so a light or AC switched by hand stays until the schedule next changes that room. `all`
+// re-applies every room (a jump in time, or a reset). Returns whether anything changed.
+export function createRoomSchedule(simulation){
+ let applied=null;
+ return (minute,{all=false}={})=>{
+  const next=daySnapshot(minute,simulation.rooms).rooms,changes={};
+  for(const [id,room] of Object.entries(next)){
+   const before=applied?.[id],patch={};
+   for(const key of ['light','climate'])if(all||!before||before[key]!==room[key])patch[key]=room[key];
+   const doors=Object.fromEntries(Object.entries(room.doors).filter(([door,open])=>all||!before||before.doors[door]!==open));
+   if(Object.keys(doors).length)patch.doors=doors;
+   if(Object.keys(patch).length)changes[id]=patch;
+  }
+  applied=next;
+  if(!Object.keys(changes).length)return false;
+  simulation.applySnapshot({rooms:changes});
+  return true;
+ };
+}

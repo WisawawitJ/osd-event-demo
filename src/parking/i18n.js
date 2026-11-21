@@ -271,7 +271,7 @@ const S = {
   'story.restart': ['เริ่มใหม่', 'Restart'],
   'story.exit': ['ออกจากเรื่องราว', 'Exit story'],
   'story.autoAdvance': ['เดินเรื่องอัตโนมัติ', 'Auto-advance'],
-  'story.kiosk': ['เล่นวนอัตโนมัติ', 'Auto loop'],
+  'story.kiosk': ['โหมดจัดแสดง', 'Kiosk mode'],
   'story.step': ['ขั้นที่ {n} / {total}', 'Step {n} / {total}'],
   'story.idle': ['เลือก “เล่นเรื่องราว” เพื่อดูการเดินทางของผู้มาติดต่อ หรือทดลองกดเองได้ทุกส่วน', 'Choose “Play the story” to follow one visitor, or try any part yourself'],
   'story.freeMode': ['ออกจากเรื่องราวแล้ว · ทดลองเองได้ทุกส่วน: แผงเจ้าหน้าที่ มือถือ หรือส่งรถไปที่ไม้กั้น', 'Story stopped · try anything: the staff console, the phone, or send cars to the barrier'],
