@@ -483,8 +483,9 @@ export const scenarios = [
     const beams = `__scene.getObjectsByProperty('isSpotLight',true).filter(s=>s.name.startsWith('Demo_headlight'))`;
     await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');window.__out=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__parking.sim.state.presence.get(k).plate);window.__still=__parking.lot.root.children.find(c=>c.name.startsWith('Demo_car_')&&c!==__out&&c.visible&&__parking.traffic.parkedKeys().some(k=>'Demo_car_'+__parking.sim.state.presence.get(k).plate===c.name));void __parking.traffic.leave(k)})()`);
     // Two beams, one from each lamp at the car's front corners, aimed to meet ahead of it.
-    await p.until(`${beams}.filter(s=>s.intensity>0&&s.position.distanceTo(__out.position)<3).length===2`, {timeout: 10000, what: 'two headlight beams on the car pulling out'});
-    const pair = JSON.parse(await p.eval(`JSON.stringify((()=>{const [l,r]=${beams}.filter(s=>s.intensity>0&&s.position.distanceTo(__out.position)<3);return {apart:l.position.distanceTo(r.position),aimsApart:l.target.position.distanceTo(r.target.position)}})())`));
+    // Measured in the same moment the pair is found (the beams move on to cars nearer the gate as this one drives off).
+    await p.until(`(()=>{const b=${beams}.filter(s=>s.intensity>0&&s.position.distanceTo(__out.position)<3);if(b.length!==2)return false;window.__pair={apart:b[0].position.distanceTo(b[1].position),aimsApart:b[0].target.position.distanceTo(b[1].target.position)};return true})()`, {timeout: 10000, what: 'two headlight beams on the car pulling out'});
+    const pair = await p.eval('__pair');
     expect(pair.apart > 1 && pair.aimsApart < pair.apart, `beams start at the two lamps (${pair.apart.toFixed(2)} m apart) and converge ahead (${pair.aimsApart.toFixed(2)} m apart)`);
     expect(await p.eval(lamps('__out')) === 1, 'the leaving car has its lamps on');
     expect(await p.eval(lamps('__still')) < .5, 'a parked car is dark');
@@ -880,6 +881,9 @@ export const scenarios = [
     await p.until(UP, {timeout: 40000});
     await p.until('__parking.traffic.busy || __parking.lot.root.children.some(c=>c.name==="Demo_car_"&&c.visible)', {timeout: 20000, what: 'a car on the move'});
     const cars = `JSON.stringify(__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car_')&&c.visible).map(c=>c.position.toArray().map(v=>v.toFixed(3))))`;
+    // The clock's controls are there at the car park stop too (it runs on the same clock).
+    await p.click('[data-destination="parking"]');
+    await p.until(`__parking.active && !document.querySelector('[data-destination][aria-busy=true]') && getComputedStyle(document.querySelector('#day-pause')).display !== 'none'`, {timeout: 20000, what: 'clock controls at the car park stop'});
     await p.click('#day-pause');
     await p.sleep(100);
     const a = await p.eval('__world.now()'), carsA = await p.eval(cars); await p.sleep(1000); const b = await p.eval('__world.now()'), carsB = await p.eval(cars);

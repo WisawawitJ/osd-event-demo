@@ -34,8 +34,10 @@
 #parking-layer > * > *, #parking-layer .pk-phone { pointer-events: auto; }
 #pk-overlays { position: absolute; inset: 0; pointer-events: none; }
 .parking-active .tour-workspace { grid-template-columns: minmax(0, 1fr) 440px; }
-.parking-active .day-timeline, .parking-active #dashboard-content, .parking-active .building-incidents { display: none !important; }
-.parking-active #viewport { height: calc(100dvh - 330px); min-height: 500px; }
+/* The car park runs on the same clock: its controls stay (time, pause, day length, Follow the day, slider), without
+   the building's moment buttons, to leave the 3D view room above the story bar. */
+.parking-active #dashboard-content, .parking-active .building-incidents, .parking-active .day-events { display: none !important; }
+.parking-active #viewport { height: calc(100dvh - 420px); min-height: 460px; }
 .parking-active .context-panel { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 .parking-active .context-panel .panel-heading { padding: 20px 22px 0; margin-bottom: 12px; }
 .parking-active.phone-open .scene-title, .parking-active.phone-open #scene-chip { opacity: 0; }
