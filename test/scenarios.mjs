@@ -528,8 +528,8 @@ export const scenarios = [
     const still = await p.eval('({...__passes})');
     expect(still.screen >= 30 && still.mirror <= Math.ceil(still.screen / 4), `still: the mirror is not redrawn every frame (${still.mirror} mirror passes for ${still.screen} frames)`);
     // The camera turns a little: the mirror follows on that same frame.
-    await p.eval('Object.assign(__passes,{screen:0,mirror:0})');
-    await p.eval(`(()=>{const c=__controls.object,t=__controls.target;c.position.sub(t).applyAxisAngle({x:0,y:1,z:0,isVector3:true},.02).add(t);__controls.update();})()`);
+    // Counted from the move on, in one step: a frame drawn in between (cars passing, the camera still) is not it.
+    await p.eval(`(()=>{Object.assign(__passes,{screen:0,mirror:0});const c=__controls.object,t=__controls.target;c.position.sub(t).applyAxisAngle({x:0,y:1,z:0,isVector3:true},.02).add(t);__controls.update();})()`);
     await p.until('__passes.screen >= 1', {what: 'a frame drawn'});
     const moved = await p.eval('({...__passes})');
     expect(moved.mirror >= 1, `moved: the mirror is redrawn with the frame (${moved.mirror} mirror passes for ${moved.screen} frames)`);
