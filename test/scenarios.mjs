@@ -775,6 +775,20 @@ export const scenarios = [
     await p.eval(`__controls.dispatchEvent({type:'start'});__controls.dispatchEvent({type:'end'})`);
     expect(await p.eval(`document.querySelector('#day-play').getAttribute('aria-pressed')`) === 'false', 'a drag stops following');
   }},
+  {name: 'day cycle: the shadow-casting light moves smoothly all day, midnight and dusk included', async run(p, expect) {
+    await p.goto('?debug=1');
+    await p.until(UP, {timeout: 40000});
+    // The sky for every minute of the day (and back round to 00:00), on stand-in lights: how far the light turns
+    // from one minute to the next, and how low it gets.
+    const r = JSON.parse(await p.eval(`(async()=>{const THREE=await import('osd/node_modules/three/build/three.module.js'),{applySky}=await import('osd/viewer/daylight.js');
+      const key=new THREE.DirectionalLight(),parts={scene:{background:new THREE.Color()},renderer:{},hemisphere:new THREE.HemisphereLight(),key,fill:new THREE.DirectionalLight(),dayBackground:'#e6ecee'};
+      let prev=null,worst=0,at=0,lowest=90;
+      for(let m=0;m<=1440;m+=1){applySky({...parts,minute:m%1440});const d=key.position.clone().normalize();lowest=Math.min(lowest,Math.asin(d.y)*180/Math.PI);
+        if(prev){const turn=prev.angleTo(d)*180/Math.PI;if(turn>worst){worst=turn;at=m;}}prev=d;}
+      return JSON.stringify({worst,at,lowest});})()`));
+    expect(r.worst < 1, `the light turns at most ${r.worst.toFixed(2)}° in a minute (worst at ${Math.floor(r.at / 60)}:${String(r.at % 60).padStart(2, '0')})`);
+    expect(r.lowest > 15, `never lower than ${r.lowest.toFixed(1)}° (shadows of a sensible length)`);
+  }},
   {name: 'day cycle: the explore page follows the clock too (night at 20:00)', async run(p, expect) {
     await p.goto('?debug=1&day=10&time=20:00#explore');
     await p.until(`document.querySelector('#status')?.dataset.state === 'ready'`, {timeout: 40000});

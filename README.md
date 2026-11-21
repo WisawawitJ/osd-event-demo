@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (56), about 55 s
+npm test                 # all behaviour checks (57), about 55 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -56,7 +56,8 @@ Everything runs on one world clock (`src/parking/clock.js`) on the event date, 2
 10 real minutes (the night, 21:00–05:00, a little faster) and then starts again, so visitors see the building through
 morning, noon, dusk and night.
 
-- **Sky:** the sun crosses the building, low and warm in the early morning and late afternoon. Room lights, car-park lamps
+- **Sky:** the sun crosses the building, low and warm in the early morning and late afternoon; at night a dim moonlight
+  carries on along the same path, so shadows turn smoothly all day and never jump (not at dusk, dawn or midnight). Room lights, car-park lamps
   and the dark page come on after sunset (about 18:05) and go off before sunrise.
 - **Building:** rooms' lights and AC, the meeting room (09:00 meeting, 14:30 empty with the AC still on), the pond (low
   water around 15:00) and the solar panels follow a daily schedule. A switch flipped by hand stays until the schedule next
