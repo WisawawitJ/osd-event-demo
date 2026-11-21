@@ -218,6 +218,7 @@ export function createParking({scene, schedule, renderer, afterRender, capture, 
     },
   };
 
+  actions.gateShown = () => { for (const which of ['in', 'out']) panel.setSnapshot(which, snap(which)); };
   const panel = createPanel({root: panelRoot, sim, actions});
   const phone = createPhone({root: phoneRoot, sim, actions: {interact: actions.interact, openChanged: () => renderBar()}});
   const overlays = createOverlays({layer: $('#pk-overlays'), sim, actions});

@@ -425,6 +425,22 @@ export const scenarios = [
     await p.until(shown, {timeout: 5000, what: 'view controls back after the story'});
     expect(true, 'hidden during the story, back after it');
   }},
+  {name: 'narrow window: both gate cameras show a picture, the story step and the disclosure stay on one line', async run(p, expect) {
+    await p.cdp('Emulation.setDeviceMetricsOverride', {width: 1000, height: 900, deviceScaleFactor: 1, mobile: false});
+    try {
+      await p.goto(parking());
+      await p.until(ready, {timeout: 40000});
+      await p.click('[data-tab="gate"]');
+      await p.until(`[...document.querySelectorAll('.pk-cams figure')].every(f=>f.querySelector('img'))`, {timeout: 5000, what: 'both camera pictures (the exit one before any car has left)'});
+      const line = sel => `(e=>{const r=e.getBoundingClientRect(),h=parseFloat(getComputedStyle(e).lineHeight)||parseFloat(getComputedStyle(e).fontSize)*1.6;return r.height<=h*1.3})(document.querySelector(${JSON.stringify(sel)}))`;
+      expect(await p.eval(line('.simulation-disclosure')), 'disclosure on one line');
+      await p.click('[data-bar="play"]');
+      await p.until('__parking.story.index >= 1', {timeout: 30000, what: 'story step 2'});
+      expect(await p.eval(line('.pk-bar-progress > span')), `step label on one line (${await p.eval(`document.querySelector('.pk-bar-progress > span').getBoundingClientRect().height`)} px tall)`);
+      const rows = await p.eval(`new Set([...document.querySelector('#parking-bar').children].map(e=>Math.round(e.getBoundingClientRect().top/10))).size`);
+      expect(rows <= 2, `story bar in at most two rows (${rows})`);
+    } finally { await p.cdp('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false}); }
+  }},
   {name: 'kiosk recovers from an idle guided story', async run(p, expect) {
     // speed 5, not 30: the 60 s idle timeout becomes 12 s, room for the setup taps and the story's first step under load.
     await p.goto('?kiosk=1&debug=1&speed=5');

@@ -6,6 +6,7 @@ import {PROVINCES, normalizePlate, GATE_REASONS as REASONS} from './sim.js';
 const TABS = [['overview', 'chart'], ['requests', 'inbox'], ['gate', 'gate'], ['vehicles', 'car'], ['reports', 'doc']];
 
 export function createPanel({root, sim, actions}) {
+  let shownTab = null;
   const ui = {tab: 'overview', reqFilter: 'pending', reqSearch: '', selected: null, rejecting: false, rejectText: '', vehFilter: 'all', vehSearch: '', add: {plate: '', province: PROVINCES[0][0], owner: ''}, manualReason: REASONS[0], alertReason: {}, newIds: new Set(), cue: null, flash: null, snapshots: {in: '', out: ''}};
   let frame = 0;
   const schedule = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; render(); }); };
@@ -151,6 +152,9 @@ export function createPanel({root, sim, actions}) {
       body = r ? requestDetail(r) : requestList();
     } else body = {overview, gate, vehicles, reports}[ui.tab]();
     patch(root, `<div class="pk-console-head"><span>${icon('shield')}${t('console.title')}</span><small>ATOM Parking Access · ${t('sim')}</small></div>${tabs()}<div class="pk-tab-body" data-tab-body="${ui.tab}">${body}</div>`);
+    // Opening the Gate tab takes fresh pictures from both cameras: the exit camera has none until a car leaves.
+    if (ui.tab === 'gate' && shownTab !== 'gate') actions.gateShown?.();
+    shownTab = ui.tab;
   }
 
   // Events
