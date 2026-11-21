@@ -37,6 +37,20 @@ const abort = new AbortController();
 let currentFloor = 'all', exploded = false, cutaway = false;
 let renderer, controls, model, resizeObserver, showcase, flight, sceneTransition, securityPreview, parking = null;
 const isShowcase=Boolean(document.querySelector('#showcase'));
+// The page's night look (night.css) switches in one go and cross-fades as a whole (a view transition). Fading each
+// element's text and background colours instead took both through the same grey halfway, so text blinked out.
+let pageNight=null; // the look the page has or is switching to (the switch applies it a frame or two later)
+function setPageNight(night){
+  const root=document.documentElement,value=String(night);
+  if(pageNight===value)return;
+  const first=pageNight===null;pageNight=value;
+  // No CSS transitions from now until the new look is in place (the night button's own pressed state included).
+  root.classList.add('theme-switch');
+  const apply=()=>{root.dataset.night=pageNight;requestAnimationFrame(()=>requestAnimationFrame(()=>root.classList.remove('theme-switch')));};
+  if(first||!document.startViewTransition||matchMedia('(prefers-reduced-motion: reduce)').matches){apply();return;}
+  // A switch made while another is still starting replaces it; the skipped one only rejects its promises.
+  const transition=document.startViewTransition(apply);transition.ready.catch(()=>{});transition.finished.catch(()=>{});transition.updateCallbackDone.catch(()=>{});
+}
 // Texts follow the saved TH/EN choice on both pages (the showcase can also switch while open).
 const L=(th,en)=>getLang()==='en'?en:th;
 let frame = 0, disposed = false;
@@ -463,7 +477,7 @@ try {
       simulation=await createSimulation({THREE,scene,model,floorRoots,renderer,camera,schedule,spotLights:6,shadowSpots:1,
         onSelectFloor(n){if(currentFloor!==String(n)){currentFloor=String(n);interiorView=null;updateView();}},
         // Night is the world clock's: the sky follows it (below), and the night button asks it for 20:00 or 07:30.
-        onNightChange(night){document.documentElement.dataset.night=String(night);renderer.shadowMap.needsUpdate=true;schedule();},
+        onNightChange(night){setPageNight(night);renderer.shadowMap.needsUpdate=true;schedule();},
         onNightRequest(wantNight){world.jumpTo(wantNight?20*60:7*60+30);}
       });
       // The world clock drives the sky (in 2-minute steps of world time, each one redraw and one shadow update) and
@@ -473,7 +487,7 @@ try {
         const minute=world.minute(),step=Math.round(minute/2);
         if(step!==skyStep){skyStep=step;applySky({minute,scene,renderer,hemisphere,key,fill,dayBackground:isShowcase?'#e6ecee':'#dce5e5'});renderer.shadowMap.needsUpdate=true;schedule();}
         if(simulation.getState().night!==isDark(minute))simulation.setNight(isDark(minute));
-        document.documentElement.dataset.night=String(isDark(minute));
+        setPageNight(isDark(minute));
       };
       followClock();
       if(new URLSearchParams(location.search).has('debug'))window.__simulation=()=>simulation.getState();

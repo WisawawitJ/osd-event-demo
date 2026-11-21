@@ -8,8 +8,10 @@ html[data-night=true] {
   background: var(--paper);
 }
 html[data-night=true] body { background: var(--paper); color: var(--ink); }
-html, body, .tour-header, .context-panel, .destination-dock, .day-timeline, .insight-toolbar, .parking-bar, .header,
-#scene-floor, #scene-chip, .view-controls, .pk-caption, .pk-alert-pop { transition: background-color .35s, color .35s, border-color .35s; }
+/* The switch itself is one cross-fade of the whole page (main.js, setPageNight): no element fades its own colours, which
+   took text and background through the same grey halfway. */
+html.theme-switch, html.theme-switch * { transition: none !important; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .35s; }
 
 /* Surfaces */
 html[data-night=true] .tour-header, html[data-night=true] .context-panel, html[data-night=true] .destination-dock,

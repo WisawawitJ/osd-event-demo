@@ -411,6 +411,16 @@ export const scenarios = [
     expect(!/unknown/.test(kinds), `no unknown cars away from the parking stop (got ${kinds})`);
   }},
 
+  {name: 'night: the page switches as one cross-fade, no text fades through its own background', async run(p, expect) {
+    await p.goto(`?${FAST}`);
+    await p.until(`${UP} && !document.querySelector('#tour-night').disabled`, {timeout: 40000});
+    // Every frame for 1 s from the switch: colour transitions running on any element (the old per-element fades).
+    await p.eval(`(()=>{window.__fades=0;const end=performance.now()+1000;(function watch(){window.__fades=Math.max(window.__fades,document.getAnimations().filter(a=>a instanceof CSSTransition&&/color|background/.test(a.transitionProperty)).length);if(performance.now()<end)requestAnimationFrame(watch);})()})()`);
+    await p.click('#tour-night');
+    await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 10000, what: 'night on'});
+    await p.sleep(1100);
+    expect(await p.eval('__fades') === 0, `no element fades its own colours during the switch (${await p.eval('__fades')} at most)`);
+  }},
   {name: 'night: switching the meeting-room light changes only that room', async run(p, expect) {
     await p.goto(`?${FAST}`);
     await p.until("document.querySelector('#status')?.dataset.state === 'ready' && !!window.__parking", {timeout: 40000, what: 'model ready'});
