@@ -574,24 +574,36 @@ try {
           const same=id===lastDestination;
           const distance=new THREE.Vector3(...start.eye).distanceTo(new THREE.Vector3(...to.eye));
           if(same&&distance<.1)return true;
-          const direction=new THREE.Vector3(...start.eye).sub(new THREE.Vector3(...start.target)).normalize();direction.y=Math.max(.35,direction.y);
-          const retreat=local||same?{eye:new THREE.Vector3(...start.target).add(new THREE.Vector3(...start.eye).sub(new THREE.Vector3(...start.target)).multiplyScalar(1.3)).toArray(),target:start.target,fov:start.fov}:contextPose(direction);
-          const orient=contextPose();
           const phases=[];
-          if(!same&&lastDestination!=='overview')phases.push({to:retreat,duration:local?400:650,
-           onStart(){onPhase(L('ถอยออกจากจุดเดิม','Pulling back'));if(!local)sceneTransition.begin(()=>applyDestination('overview'));},
-           onUpdate(t){if(!local)sceneTransition.progress(Math.max(0,(t-.25)/.75));},
-           onEnd(){if(!local)sceneTransition.finish();}
-          });
-          if(!local&&!same)phases.push({to:orient,duration:lastDestination==='overview'?300:450,
-           onStart(){onPhase(L('มองตำแหน่งบนอาคาร','Locating it on the building'));marker.position.set(to.target[0],id==='energy'?15.8:id==='meeting'?meetingTarget.y-.6:.2,to.target[2]);marker.visible=id!=='overview';},
-           onUpdate(){schedule();}
-          });
-          phases.push({to,duration:local?750:same?550:900,
-           onStart(){onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));onApproach();},
-           onUpdate(t){sceneTransition.progress(Math.min(1,t/.75));markerMaterial.opacity=.6*(1-t);},
-           onEnd(){sceneTransition.finish();}
-          });
+          if(local||same){
+           // A nearby spot on the same floor (or this stop again): a short step back, then in.
+           const retreat={eye:new THREE.Vector3(...start.target).add(new THREE.Vector3(...start.eye).sub(new THREE.Vector3(...start.target)).multiplyScalar(1.3)).toArray(),target:start.target,fov:start.fov};
+           if(!same)phases.push({to:retreat,duration:400,onStart(){onPhase(L('ถอยออกจากจุดเดิม','Pulling back'));}});
+           phases.push({to,duration:local?750:550,
+            onStart(){onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));sceneTransition.begin(()=>applyDestination(id));onApproach();},
+            onUpdate(t){sceneTransition.progress(Math.min(1,t/.75));},
+            onEnd(){sceneTransition.finish();}
+           });
+          }else{
+           // Another stop: one continuous flight that swings out far enough to show where the next stop sits on the
+           // building, without first returning to the overview. The curve bends towards the whole-building view from
+           // between the two stops' viewing directions; the floors change while the camera travels.
+           const facing=pose=>new THREE.Vector3(...pose.eye).sub(new THREE.Vector3(...pose.target)).normalize();
+           const direction=facing(start).add(facing(to));if(direction.lengthSq()<.01)direction.copy(facing(start));
+           direction.normalize();direction.y=Math.max(.35,direction.y);
+           const via=contextPose(direction),span=new THREE.Vector3(...start.eye).distanceTo(new THREE.Vector3(...to.eye));
+           marker.position.set(to.target[0],id==='energy'?15.8:id==='meeting'?meetingTarget.y-.6:.2,to.target[2]);marker.visible=id!=='overview';
+           let approached=false;
+           phases.push({to,via,duration:Math.round(THREE.MathUtils.clamp(1100+span*12,1300,1900)),
+            onStart(){onPhase(L('กำลังเดินทาง','On the way'));sceneTransition.begin(()=>applyDestination(id));},
+            onUpdate(t){
+             sceneTransition.progress(THREE.MathUtils.clamp((t-.15)/.6,0,1));markerMaterial.opacity=.6*Math.min(1,t*4)*(1-t);
+             // The stop's title and panel arrive as the camera starts its descent onto it.
+             if(!approached&&t>=.45){approached=true;onPhase(L('กำลังเข้าใกล้จุดหมาย','Approaching'));onApproach();}
+            },
+            onEnd(){sceneTransition.finish();if(!approached)onApproach();}
+           });
+          }
           const arrived=await flight.flyPath(phases);
           if(ticket===navigation){marker.visible=false;markerMaterial.opacity=.6;if(arrived)lastDestination=id;schedule();}
           return arrived;

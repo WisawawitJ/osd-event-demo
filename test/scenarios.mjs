@@ -397,6 +397,23 @@ export const scenarios = [
     expect(JSON.stringify(await p.eval('[...__mixes]')) === '[0]', `during the flight the pond shows plain water (mix ${JSON.stringify(await p.eval('[...__mixes]'))})`);
     expect(await p.eval(mix) === 1, 'landed: the live reflection is back');
   }},
+  {name: 'flying between stops: one continuous move (no stop at the overview on the way)', async run(p, expect) {
+    await p.goto('?debug=1');
+    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
+    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    await p.click('[data-destination="meeting"]'); await p.until(`${idle} && document.body.dataset.tourDestination==='meeting'`, {timeout: 20000, what: 'landed at the meeting room'});
+    // The camera's speed on every frame of the flight to the pond. The old route (back out to the overview, turn,
+    // then in) came to a near standstill between its legs; one flight only slows down at its two ends.
+    await p.eval(`(()=>{window.__speeds=[];const c=__controls.object,last={p:c.position.clone(),t:performance.now()};
+      const step=t=>{if(!document.querySelector('#viewport').classList.contains('flying')&&__speeds.length)return;
+        if(t>last.t){__speeds.push(c.position.distanceTo(last.p)/(t-last.t));last.p.copy(c.position);last.t=t;}requestAnimationFrame(step);};requestAnimationFrame(step);})()`);
+    await p.click('[data-destination="pond"]');
+    await p.until(`${idle} && document.body.dataset.tourDestination==='pond'`, {timeout: 20000, what: 'landed at the pond'});
+    const speeds = (await p.eval('__speeds')).filter((v, i, a) => i > a.findIndex(x => x > 0) - 1);
+    const middle = speeds.slice(Math.floor(speeds.length * .2), Math.ceil(speeds.length * .8)), top = Math.max(...speeds);
+    expect(speeds.length > 10, `frames sampled (${speeds.length})`);
+    expect(Math.min(...middle) > top * .15, `no standstill mid-flight (slowest ${Math.min(...middle).toFixed(4)} vs top ${top.toFixed(4)} per ms)`);
+  }},
   {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
     await p.goto(`?dest=pond&${FAST}`);
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
