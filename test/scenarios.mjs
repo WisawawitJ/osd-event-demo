@@ -414,6 +414,23 @@ export const scenarios = [
     expect(speeds.length > 10, `frames sampled (${speeds.length})`);
     expect(Math.min(...middle) > top * .15, `no standstill mid-flight (slowest ${Math.min(...middle).toFixed(4)} vs top ${top.toFixed(4)} per ms)`);
   }},
+  {name: 'flying between stops: floors are sliced away and built up solid, never faded see-through', async run(p, expect) {
+    await p.goto('?debug=1');
+    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
+    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    // Every frame of the flights: named building meshes drawn more see-through than they were before (the stop's
+    // marker, unnamed, fades on purpose), and frames where geometry is being cut.
+    await p.eval(`(()=>{const scene=__scene,before=new Map();scene.traverse(o=>{if(o.isMesh&&o.name)before.set(o,[].concat(o.material).map(m=>({transparent:m.transparent,opacity:m.opacity})));});
+      window.__xray=0;window.__cuts=0;const f=()=>{if(document.querySelector('#viewport').classList.contains('flying')){let cut=false;
+        for(const [o,was] of before){if(!o.visible)continue;[].concat(o.material).forEach((m,i)=>{if(m.transparent&&m.opacity<.99&&(!was[i].transparent||was[i].opacity-m.opacity>.02))__xray++;if(m.clippingPlanes?.length)cut=true;});}
+        if(cut)__cuts++;}requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
+    for (const stop of ['meeting', 'pond', 'energy']) {
+      await p.click(`[data-destination="${stop}"]`);
+      await p.until(`${idle} && document.body.dataset.tourDestination==='${stop}'`, {timeout: 20000, what: `landed at ${stop}`});
+    }
+    expect(await p.eval('__cuts') > 5, `floors were cut while changing (${await p.eval('__cuts')} frames)`);
+    expect(await p.eval('__xray') === 0, `no floor faded see-through (${await p.eval('__xray')} mesh-frames)`);
+  }},
   {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
     await p.goto(`?dest=pond&${FAST}`);
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});

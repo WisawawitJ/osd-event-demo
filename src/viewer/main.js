@@ -602,7 +602,7 @@ try {
             onStart(){onPhase(L('กำลังเดินทาง','On the way'));sceneTransition.begin(()=>applyDestination('overview'));},
             onUpdate(t){
              if(!approached&&t>=SPLIT)approach();
-             sceneTransition.progress(approached?THREE.MathUtils.clamp((t-SPLIT)/.4,0,1):Math.min(1,t/.35));
+             sceneTransition.progress(approached?THREE.MathUtils.clamp((t-SPLIT)/(.95-SPLIT),0,1):t/SPLIT);
              markerMaterial.opacity=.6*Math.min(1,t*4)*(1-t);
             },
             onEnd(){if(!approached)approach();sceneTransition.finish();}
@@ -647,6 +647,13 @@ try {
          await forced(()=>renderer.compileAsync(scene,camera));
          drawOffscreen();
          setTransparent(false);
+         // The flight's floor change slices geometry with a level cut, which is one more clipping plane (another
+         // shader variant): compile that too.
+         const cut=new THREE.Plane(new THREE.Vector3(0,-1,0),1e4),planes=new Map();
+         model.traverse(object=>{for(const material of [].concat(object.material||[]))planes.set(material,material.clippingPlanes);});
+         for(const material of planes.keys()){material.clippingPlanes=[...(material.clippingPlanes||[]),cut];material.needsUpdate=true;}
+         try{await forced(()=>renderer.compileAsync(scene,camera));drawOffscreen();}
+         finally{for(const [material,value] of planes){material.clippingPlanes=value;material.needsUpdate=true;}}
          for(const [,state] of nightLights)state.forced=!state.wanted;
          await forced(()=>renderer.compileAsync(scene,camera));
          drawOffscreen();

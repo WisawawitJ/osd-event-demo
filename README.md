@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (70), about 60 s
+npm test                 # all behaviour checks (71), about 60 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -155,8 +155,9 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
   the 6 room lights (1 with shadows) are the selected room and its neighbours, so moving the camera never swaps lights or shadows.
 - The near clipping plane follows the viewing distance, and road paint, bay tints and car shadows use a depth offset,
   so nothing flickers against the surface underneath while the camera moves.
-- Dock switches take about 2 s (1.2 s to the meeting room), with no first-visit stall. At load, every shader is compiled
-  both opaque and transparent (the flight's floor fades use transparent copies), textures are uploaded, and one tiny
+- Dock switches are one continuous camera move of 1.3–1.9 s, with no first-visit stall. On the way the current stop's
+  floors are sliced away from the top down and the next stop's build up from the bottom, solid throughout. At load,
+  every shader is compiled opaque, transparent and with that level cut, textures are uploaded, and one tiny
   off-screen frame is drawn. The meeting-room cutaway moves a permanent clipping plane instead of swapping shaders.
 - The live plate-camera pop-up is one extra render into a scissored corner of the same canvas, only while it shows.
 - Car movement runs in real time at any frame rate. Add `?fps=1` to see the frame rate, or run `npm run bench`.
