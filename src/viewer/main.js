@@ -190,6 +190,8 @@ try {
     inMotion = value;
     renderKit.setReflectionsPaused(value);
     applyPixelRatio();
+    // Landed: keep drawing while the pond's reflection fades back in.
+    if (!value) { const until = performance.now() + renderKit.fadeMs + 50; const pump = () => { schedule(); if (performance.now() < until) requestAnimationFrame(pump); }; requestAnimationFrame(pump); }
   }
   function adaptResolution(time) {
     const gap = time - lastFrameAt; lastFrameAt = time;
@@ -363,7 +365,9 @@ try {
     renderer.setSize(width, height, false);
     if (model && !isShowcase && Math.abs(lastAspect - camera.aspect) > 0.25) frameVisible();
     lastAspect = camera.aspect;
-    schedule();
+    // Resizing clears the canvas: redraw before this frame is painted, or the view shows empty for a frame (the car
+    // park's layout change resizes it as the flight sets off).
+    if (model && !warming && !disposed) draw(); else schedule();
   });
   resizeObserver.observe(viewport);
   document.addEventListener('visibilitychange', () => {
@@ -509,7 +513,7 @@ try {
        securityPreview=createSecurityPreview({renderer,scene,schedule,fullVisibility:[...floorRoots,...presentationMeshes,...roofs,...ceilings]});
        const meetingRoom=simulation.rooms.find(r=>r.id==='f4_meeting_2'),meetingRoot=model.getObjectByName(`Floor_${meetingRoom.floor}`);
        const meetingTarget=meetingRoot.localToWorld(new THREE.Vector3(meetingRoom.center[0],.8,meetingRoom.center[2]));
-       sceneTransition=createSceneTransition({model,schedule,onFinish:()=>{renderer.shadowMap.needsUpdate=true;}});
+       sceneTransition=createSceneTransition({model,schedule,onFinish:()=>{renderer.shadowMap.needsUpdate=true;},onProgress:()=>{renderer.shadowMap.needsUpdate=true;}});
        if(debug)window.__transition=sceneTransition;
        const buildingBounds=new THREE.Box3().setFromObject(model),buildingCenter=buildingBounds.getCenter(new THREE.Vector3());
        let navigation=0,lastDestination='overview',stopPoses=null;

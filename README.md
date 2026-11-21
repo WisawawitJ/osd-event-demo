@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (76), about 75 s
+npm test                 # all behaviour checks (77), about 75 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -159,9 +159,12 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
   so nothing flickers against the surface underneath while the camera moves.
 - Dock switches are one continuous camera move of 1.3–1.9 s that speeds up and slows down once (eased on the distance
   covered, not on the curve's own uneven parameter), with no first-visit stall, by day or night. On the way the current
-  stop's floors are sliced away from the top down and the next stop's build up from the bottom, solid throughout, using
-  copies of the materials that are kept between flights. The car park's own layout (wider panel, taller view) changes
-  as a 0.35 s view transition instead of in one frame.
+  stop's floors are sliced away from the top down and the next stop's appear from the top down too (the slab over a
+  ground-floor view comes last), solid throughout, with the sun's shadows redrawn to follow the cut, using copies of
+  the materials that are kept between flights. A stop picked mid-change starts from what is on screen. The car park's
+  own layout (wider panel, taller view) changes as a 0.35 s view transition instead of in one frame: the 3D view stays
+  live as it resizes, and a second switch waits for the first instead of cutting it short. The pond's reflection fades
+  out and back in around a flight.
 - The loading screen (about 2 s) prepares every shader a visit can need: each material as it is, its cut copies, by
   day and by night, and the plate snapshot's colour pass. Textures are uploaded and one tiny frame is drawn. At night
   the number of lights never changes with the view (all 6 room lights and 6 headlight beams stay in the scene, unused

@@ -109,11 +109,20 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
  function stopTour(message=['หยุดพาชมแล้ว · เลือกจุดต่อไปได้เอง','Tour stopped · pick the next spot yourself']){if(touring)parking?.stopStory();tourGeneration++;cancelLater(tourTimer);tourTimer=null;touring=false;play.innerHTML=icon('play')+`<span>${playLabel()}</span>`;setProgress(message);}
  // The car park's layout (a wider panel, a taller view, no timeline) changes as one short animation, a view transition:
  // the 3D view, the dock and the panel move to their new size and place while the rest cross-fades. Switched in one
- // frame, the whole page jumped and the 3D picture zoomed by about 8% just as the camera set off.
- function switchLayout(change){
-  if(!document.startViewTransition||reduced.matches||document.hidden){change();return;}
-  let done=false;const transition=document.startViewTransition(()=>{done=true;change();});
-  transition.ready.catch(()=>{});transition.finished.catch(()=>{});transition.updateCallbackDone.catch(()=>{});
+ // frame, the whole page jumped and the 3D picture zoomed by about 8% just as the camera set off. A switch asked for
+ // while one is still running waits for it, then goes to the layout wanted last: cutting one short made the page
+ // jump to its end and flash.
+ let layoutWanted=false,layoutChange=null;
+ function setParkingLayout(on){
+  if(!parking)return;
+  layoutWanted=on;
+  if(!on)parking.stopStory(); // leaving: the story drives the camera, so it stops at once; the layout follows
+  if(layoutChange||parking.active===on)return;
+  const apply=()=>{if(parking.active!==layoutWanted){if(layoutWanted)parking.enter();else parking.exit();}};
+  if(!document.startViewTransition||reduced.matches||document.hidden){apply();return;}
+  let done=false;const transition=layoutChange=document.startViewTransition(()=>{done=true;apply();});
+  transition.ready.catch(()=>{});transition.updateCallbackDone.catch(()=>{});
+  transition.finished.catch(()=>{}).finally(()=>{layoutChange=null;if(!disposed&&parking.active!==layoutWanted)setParkingLayout(layoutWanted);});
   // The animation starts at the browser's next frame; if that is slow to come, the layout changes without it.
   setTimeout(()=>{if(!done)transition.skipTransition();},250);
  }
@@ -121,8 +130,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   if(!destinations[id]||disposed)return false;if(!guided){stopFollowing();stopTour(['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around']);}stopScenario();const ticket=++sequence,d=destinations[id];
   // The car park changes the page layout: switch it as the flight sets off, so the view is its final size while the
   // camera moves instead of jumping at the end.
-  if(parking&&destination==='parking'&&id!=='parking')switchLayout(()=>parking.exit());
-  if(parking&&id==='parking'&&!parking.active)switchLayout(()=>parking.enter());
+  setParkingLayout(id==='parking');
   traveling=true;landed=false;pendingDestination=id;effects.select(null);render();
   document.querySelectorAll('[data-destination]').forEach(b=>{b.setAttribute('aria-busy',String(b.dataset.destination===id));b.setAttribute('aria-pressed',String(b.dataset.destination===id));});
   // The stop's title, panel and scene state arrive as the final approach begins, not after the camera settles.
@@ -143,8 +151,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,snapshot,
   if(!arrived&&!committed&&id==='parking'&&parking?.story.running)commit();
   if(!arrived&&!committed){
    $('#scene-chip').textContent=L('หยุดการบินแล้ว · หมุนสำรวจหรือเลือกจุดต่อไป','Flight stopped · orbit to explore or pick the next spot');effects.select(destination);
-   if(destination==='parking'&&!parking?.active)parking?.enter();
-   if(destination!=='parking'&&parking?.active)parking.exit();
+   setParkingLayout(destination==='parking');
    render();return false;
   }
   // The floor transition ends by restoring the visibility it captured when it began; re-apply this stop's effects.

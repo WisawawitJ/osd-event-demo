@@ -46,6 +46,10 @@
 .context-panel { view-transition-name: tour-panel; }
 ::view-transition-group(tour-view), ::view-transition-group(tour-dock), ::view-transition-group(tour-panel) { animation-duration: .35s; animation-timing-function: cubic-bezier(.4, 0, .2, 1); overflow: clip; }
 ::view-transition-old(tour-view), ::view-transition-new(tour-view), ::view-transition-old(tour-panel), ::view-transition-new(tour-panel) { height: 100%; object-fit: cover; object-position: top left; }
+/* The 3D view keeps drawing during the change: show it live as it resizes, without its frozen "before" picture
+   cross-fading over it (a double image). */
+::view-transition-old(tour-view) { display: none; }
+::view-transition-new(tour-view) { animation: none; opacity: 1; }
 .parking-active .context-panel { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 .parking-active .context-panel .panel-heading { padding: 20px 22px 0; margin-bottom: 12px; }
 .parking-active.phone-open .scene-title, .parking-active.phone-open #scene-chip { opacity: 0; }

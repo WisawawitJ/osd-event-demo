@@ -384,18 +384,27 @@ export const scenarios = [
     expect(c === d, 'paused: the fish stand still');
     await p.eval('__world.setPaused(false)');
   }},
-  {name: 'flying to the pond: plain water during the flight (never a stale, dark mirror), the reflection once landed', async run(p, expect) {
+  {name: 'pond reflection: plain water flying in (never a stale, dark mirror), fading out and back in, never snapping', async run(p, expect) {
     await p.goto('?debug=1');
     await p.until(`${UP} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
-    const mix = `__scene.getObjectByName('Courtyard_water_reflection').material.uniforms.reflectionMix.value`;
-    // Read each time the pond is actually drawn in flight (the mirror sets the value just before; when the pond is off
-    // screen it is not drawn and the value is not used).
-    await p.eval(`(()=>{window.__mixes=new Set();const w=__scene.getObjectByName('Courtyard_water_reflection'),before=w.onBeforeRender;w.onBeforeRender=function(...a){before.apply(this,a);if(document.querySelector('#viewport').classList.contains('flying'))__mixes.add(${mix});};})()`);
+    const idle = `!document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
+    // Read each time the pond is actually drawn (the mirror sets the value just before; when the pond is off screen it
+    // is not drawn and the value is not used), with whether the camera was flying. The water's material may be a cut
+    // copy mid-flight: it must still show the mirror's picture (a copy that lost it drew the pond black).
+    await p.eval(`(()=>{window.__mixes=[];window.__blind=0;const w=__scene.getObjectByName('Courtyard_water_reflection'),before=w.onBeforeRender;w.onBeforeRender=function(...a){before.apply(this,a);const u=this.material.uniforms;if(u.reflectionMix.value>0&&!u.tDiffuse.value)__blind++;__mixes.push([document.querySelector('#viewport').classList.contains('flying'),u.reflectionMix.value]);};})()`);
     await p.click('[data-destination="pond"]');
-    await p.until(`document.body.dataset.tourDestination==='pond' && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 20000, what: 'landed at the pond'});
-    await p.sleep(300);
-    expect(JSON.stringify(await p.eval('[...__mixes]')) === '[0]', `during the flight the pond shows plain water (mix ${JSON.stringify(await p.eval('[...__mixes]'))})`);
-    expect(await p.eval(mix) === 1, 'landed: the live reflection is back');
+    await p.until(`document.body.dataset.tourDestination==='pond' && ${idle}`, {timeout: 20000, what: 'landed at the pond'});
+    await p.sleep(400);
+    const flyingIn = (await p.eval('__mixes')).filter(([flying]) => flying).map(([, v]) => v);
+    expect(flyingIn.length && flyingIn.every(v => v === 0), `flying in, the pond shows plain water (mix ${[...new Set(flyingIn)].join(', ')})`);
+    const landing = (await p.eval('__mixes')).filter(([flying]) => !flying).map(([, v]) => v);
+    expect(landing.at(-1) === 1 && landing.some(v => v > 0 && v < 1), `landed: the reflection fades back in (mix ${landing.slice(0, 6).map(v => v.toFixed(2)).join(', ')} … ${landing.at(-1)})`);
+    await p.eval('__mixes.length=0');
+    await p.click('[data-destination="overview"]');
+    await p.until(`document.body.dataset.tourDestination==='overview' && ${idle}`, {timeout: 20000, what: 'landed at the overview'});
+    const leaving = (await p.eval('__mixes')).filter(([flying]) => flying).map(([, v]) => v);
+    expect(leaving.length > 1 && leaving[0] > .5 && leaving.every((v, i) => !i || v <= leaving[i - 1]), `leaving, the reflection fades out (mix ${leaving.slice(0, 8).map(v => v.toFixed(2)).join(', ')})`);
+    expect(await p.eval('__blind') === 0, `the water always had the mirror's picture while showing it (${await p.eval('__blind')} draws without)`);
   }},
   {name: 'flying between stops: one continuous move that speeds up and slows down once, the car park included', async run(p, expect) {
     await p.goto('?debug=1');
@@ -423,6 +432,18 @@ export const scenarios = [
       smooth.forEach((v, i) => { if (i <= peak) { high = Math.max(high, v); dip = Math.max(dip, high - v); } else { low = Math.min(low, v); bump = Math.max(bump, v - low); } });
       expect(speeds.length > 10, `${from} → ${to}: frames sampled (${speeds.length})`);
       expect(dip < top * .08 && bump < top * .08, `${from} → ${to}: one rise and one fall (largest dip on the way up ${(dip / top * 100).toFixed(0)}%, rise on the way down ${(bump / top * 100).toFixed(0)}% of top speed)`);
+    }
+  }},
+  {name: 'car park layout: a second stop picked during the layout change still ends in the right layout', async run(p, expect) {
+    await p.goto('?debug=1');
+    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
+    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    for (const [first, second, parked] of [['parking', 'energy', false], ['pond', 'parking', true]]) {
+      await p.eval(`document.querySelector('[data-destination="${first}"]').click()`); await p.sleep(120);
+      await p.eval(`document.querySelector('[data-destination="${second}"]').click()`);
+      await p.until(`${idle} && document.body.dataset.tourDestination==='${second}'`, {timeout: 20000, what: `landed at ${second}`});
+      await p.sleep(900); // any layout change still queued has run
+      expect(await p.eval(`document.body.classList.contains('parking-active')`) === parked, `${first} then ${second}: the ${parked ? 'car park' : 'building'} layout`);
     }
   }},
   {name: 'no shader is built mid-flight, by day or night: the loading screen prepared them all', async run(p, expect) {

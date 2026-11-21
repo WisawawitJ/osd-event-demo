@@ -14,7 +14,11 @@ export function createRenderKit(renderer, scene) {
  const h=holes.getContext('2d');h.fillStyle='white';h.fillRect(0,0,64,64);h.fillStyle='black';
  for(const [x,y] of [[16,16],[48,48]]){h.beginPath();h.arc(x,y,13,0,Math.PI*2);h.fill();}
  const perforation=new THREE.CanvasTexture(holes);perforation.wrapS=perforation.wrapT=THREE.RepeatWrapping;perforation.repeat.set(5,5);perforation.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),4);
- const reflections=[],STILL_MS=100;let reflectionsPaused=false;
+ const reflections=[],STILL_MS=100,FADE_MS=250;let reflectionsPaused=false;
+ // The mirror's share of the water colour (reflectionMix) fades over FADE_MS when the camera sets off or stops,
+ // instead of snapping between the reflection and the plain water colour (the whole pond flashed).
+ let mixFrom=1,mixTo=1,mixAt=0;
+ const mixNow=()=>mixFrom+(mixTo-mixFrom)*Math.min(1,(performance.now()-mixAt)/FADE_MS);
  // The Reflector draws the mirrored scene through the whole view, though only the pond's few pixels show it. Handing it
  // a projection cropped to the pond's rectangle (in the mirrored camera) keeps its texture mapping consistent (it is
  // built from that projection) and lets frustum culling drop everything the pond cannot show: most of the building.
@@ -55,8 +59,8 @@ export function createRenderKit(renderer, scene) {
    reflection.material.transparent=true;reflection.material.depthWrite=false;reflection.material.uniforms.reflectionMix={value:1};reflection.userData={type:'water',interiorFeature:true};
    // The mirror re-renders the scene every frame, but not during camera flights (it would cost ~45% more per flight
    // frame). Its last image only fits the camera it was drawn from (and may be from long ago, or empty, when the pond
-   // was off screen: the water went dark flying in), so meanwhile the pond shows its plain water colour, and the
-   // reflection returns on the first still frame.
+   // was off screen: the water went dark flying in), so meanwhile the pond fades to its plain water colour (the last
+   // image still nearly fits in the flight's first slow moments), and the reflection fades back once the camera stops.
    // Its camera is cropped to the pond's patch of the screen, so culling skips everything else (see pondCrop).
    // With the camera still, the mirror's picture barely changes, while the view may redraw every frame for cars driving
    // past: it is then redrawn at most every STILL_MS (lights, doors), every frame only while the camera moves. Each
@@ -66,8 +70,8 @@ export function createRenderKit(renderer, scene) {
    const seen={camera:null,view:new THREE.Matrix4(),projection:new THREE.Matrix4(),at:-Infinity};
    const update=reflection.onBeforeRender;reflection.onBeforeRender=function(renderer,scene,camera,...rest){
     const mix=this.material.uniforms.reflectionMix;
-    if(reflectionsPaused){mix.value=0;seen.camera=null;return;}
-    mix.value=1;
+    mix.value=mixNow();
+    if(reflectionsPaused){seen.camera=null;return;}
     const now=performance.now();
     if(camera===seen.camera&&now-seen.at<STILL_MS&&seen.view.equals(camera.matrixWorld)&&seen.projection.equals(camera.projectionMatrix))return;
     seen.camera=camera;seen.view.copy(camera.matrixWorld);seen.projection.copy(camera.projectionMatrix);seen.at=now;
@@ -84,5 +88,5 @@ export function createRenderKit(renderer, scene) {
  const logo=receptionCanvas.getContext('2d');logo.font='bold 112px Arial';logo.textAlign='center';logo.textBaseline='middle';logo.strokeStyle='#b9eaff';logo.lineWidth=2;logo.shadowColor='#5caaff';logo.shadowBlur=12;logo.strokeText('OSD',256,82);
  const receptionTexture=new THREE.CanvasTexture(receptionCanvas);receptionTexture.colorSpace=THREE.SRGBColorSpace;
  function createReceptionSign(position){const sign=new THREE.Mesh(new THREE.PlaneGeometry(1.45,.45),new THREE.MeshBasicMaterial({map:receptionTexture,transparent:true,depthWrite:false}));sign.name='OSD_reception_sign';sign.position.fromArray(position);sign.rotation.y=Math.PI;sign.userData={type:'furniture',interiorFeature:true};return sign;}
- return {ground,perforation,createReceptionSign,addPondReflections,setReflectionsPaused(value){reflectionsPaused=value;},setReflectionVisible(value){for(const reflection of reflections)reflection.visible=value;},dispose(){for(const reflection of reflections){reflection.geometry.dispose();reflection.dispose();}environment.dispose();perforation.dispose();receptionTexture.dispose();ground.geometry.dispose();ground.material.dispose();}};
+ return {ground,perforation,createReceptionSign,addPondReflections,setReflectionsPaused(value){if(value===reflectionsPaused)return;mixFrom=mixNow();mixTo=value?0:1;mixAt=performance.now();reflectionsPaused=value;},fadeMs:FADE_MS,setReflectionVisible(value){for(const reflection of reflections)reflection.visible=value;},dispose(){for(const reflection of reflections){reflection.geometry.dispose();reflection.dispose();}environment.dispose();perforation.dispose();receptionTexture.dispose();ground.geometry.dispose();ground.material.dispose();}};
 }
