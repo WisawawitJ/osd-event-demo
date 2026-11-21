@@ -441,6 +441,14 @@ export const scenarios = [
       expect(rows <= 2, `story bar in at most two rows (${rows})`);
     } finally { await p.cdp('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false}); }
   }},
+  {name: 'metric pairs stay aligned when one label wraps', async run(p, expect) {
+    await p.goto(`?${FAST}`);
+    await p.until(`${UP} && !!document.querySelector('.metric-pair .metric-value')`, {timeout: 40000});
+    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const m=document.querySelector('.metric-pair');m.style.width='260px';m.querySelectorAll('.metric-label')[1].textContent='Sample meeting room on floor 4';
+      const top=s=>[...m.querySelectorAll(s)].map(e=>Math.round(e.getBoundingClientRect().top));return {labels:[...m.querySelectorAll('.metric-label')].map(e=>Math.round(e.getBoundingClientRect().height)),values:top('.metric-value'),notes:top('.metric-note')}})())`));
+    expect(r.labels[1] > r.labels[0], `the second label wraps (${r.labels.join(' / ')} px)`);
+    expect(r.values[0] === r.values[1] && r.notes[0] === r.notes[1], `values and notes stay level (values ${r.values.join('/')}, notes ${r.notes.join('/')})`);
+  }},
   {name: 'kiosk recovers from an idle guided story', async run(p, expect) {
     // speed 5, not 30: the 60 s idle timeout becomes 12 s, room for the setup taps and the story's first step under load.
     await p.goto('?kiosk=1&debug=1&speed=5');

@@ -34,7 +34,7 @@ Useful URLs:
 ## Testing
 
 ```sh
-npm test                 # all behaviour checks (67), about 60 s
+npm test                 # all behaviour checks (68), about 60 s
 npm test -- kiosk night  # only checks whose names match
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
