@@ -51,12 +51,13 @@ export function createRenderKit(renderer, scene) {
   for(const pond of ponds){
    const shader={...Reflector.ReflectorShader};
    shader.vertexShader=shader.vertexShader.replace('varying vec4 vUv;','varying vec4 vUv; varying vec2 pondPoint;').replace('vUv = textureMatrix','pondPoint = position.xy; vUv = textureMatrix');
-   // reflectionMix 0 shows the plain water colour (overlay on mid grey is the colour itself): see onBeforeRender.
-   shader.fragmentShader=shader.fragmentShader.replace('varying vec4 vUv;','varying vec4 vUv; varying vec2 pondPoint; uniform float reflectionMix;').replace('vec4 base = texture2DProj( tDiffuse, vUv );',`vec4 rippleUv=vUv; rippleUv.xy += vec2(sin(pondPoint.y*18.0+sin(pondPoint.x*11.0)),cos(pondPoint.x*17.0+pondPoint.y*6.0))*.0018*vUv.w; vec4 base=mix(vec4(.5),texture2DProj(tDiffuse,rippleUv),reflectionMix);`).replace('base.rgb, color ), 1.0','base.rgb, color ), .46');
+   // reflectionMix 0 shows, instead of the mirror's picture, a flat colour as bright as that picture on average
+   // (plainColor, see onBeforeRender), so the water looks the same while the mirror is paused.
+   shader.fragmentShader=shader.fragmentShader.replace('varying vec4 vUv;','varying vec4 vUv; varying vec2 pondPoint; uniform float reflectionMix; uniform vec3 plainColor;').replace('vec4 base = texture2DProj( tDiffuse, vUv );',`vec4 rippleUv=vUv; rippleUv.xy += vec2(sin(pondPoint.y*18.0+sin(pondPoint.x*11.0)),cos(pondPoint.x*17.0+pondPoint.y*6.0))*.0018*vUv.w; vec4 base=mix(vec4(plainColor,1.),texture2DProj(tDiffuse,rippleUv),reflectionMix);`).replace('base.rgb, color ), 1.0','base.rgb, color ), .46');
    const geometry=pond.geometry.clone().translate(0,.09,0).rotateX(Math.PI/2);
    const reflection=new Reflector(geometry,{color:'#9bb6ae',textureWidth:512,textureHeight:512,multisample:0,clipBias:.003,shader});
    reflection.name='Courtyard_water_reflection';reflection.rotation.x=-Math.PI/2;reflection.position.y=-.078;
-   reflection.material.transparent=true;reflection.material.depthWrite=false;reflection.material.uniforms.reflectionMix={value:1};reflection.userData={type:'water',interiorFeature:true};
+   reflection.material.transparent=true;reflection.material.depthWrite=false;reflection.material.uniforms.reflectionMix={value:1};reflection.material.uniforms.plainColor={value:new THREE.Color()};reflection.userData={type:'water',interiorFeature:true};
    // The mirror re-renders the scene every frame, but not during camera flights (it would cost ~45% more per flight
    // frame). Its last image only fits the camera it was drawn from (and may be from long ago, or empty, when the pond
    // was off screen: the water went dark flying in), so meanwhile the pond fades to its plain water colour (the last
@@ -71,6 +72,10 @@ export function createRenderKit(renderer, scene) {
    const update=reflection.onBeforeRender;reflection.onBeforeRender=function(renderer,scene,camera,...rest){
     const mix=this.material.uniforms.reflectionMix;
     mix.value=mixNow();
+    // The mirror's picture is mostly sky, so its stand-in follows the sky's colour: 0.3 × it + 0.015 (linear) gives
+    // the water, as drawn, the same average colour as the live reflection, morning, noon, dusk and night (within 2 of
+    // 255). A fixed mid grey made the paused water too bright, by day and much more at night.
+    if(scene.background?.isColor)this.material.uniforms.plainColor.value.copy(scene.background).multiplyScalar(.3).addScalar(.015);
     if(reflectionsPaused){seen.camera=null;return;}
     const now=performance.now();
     if(camera===seen.camera&&now-seen.at<STILL_MS&&seen.view.equals(camera.matrixWorld)&&seen.projection.equals(camera.projectionMatrix))return;

@@ -508,6 +508,27 @@ export const scenarios = [
     expect(await p.eval('__cuts') > 5, `floors were cut while changing (${await p.eval('__cuts')} frames)`);
     expect(await p.eval('__xray') === 0, `no floor faded see-through (${await p.eval('__xray')} mesh-frames)`);
   }},
+  {name: 'pond: the paused reflection\'s stand-in has the live water\'s colour, by day and by night', async run(p, expect) {
+    for (const time of ['10:00', '17:50', '20:30']) {
+      await p.goto(`?debug=1&dest=pond&time=${time}`);
+      await p.until(`document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='pond' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the pond'});
+      await p.sleep(600);
+      // The water's average colour as drawn (the pixels that change when it is hidden): live, then with the mirror's
+      // picture replaced by its stand-in (as during a flight).
+      const [live, plain] = await p.eval(`(()=>{const R=__renderer,gl=R.getContext(),w=__scene.getObjectByName('Courtyard_water_reflection'),V=__camera.position.constructor;
+        w.geometry.computeBoundingBox();const bb=w.geometry.boundingBox,pts=[];for(const x of [bb.min.x,bb.max.x])for(const y of [bb.min.y,bb.max.y])pts.push(new V(x,y,0).applyMatrix4(w.matrixWorld).project(__camera));
+        const W=gl.drawingBufferWidth,H=gl.drawingBufferHeight,xs=pts.map(q=>Math.round((q.x+1)/2*W)),ys=pts.map(q=>Math.round((q.y+1)/2*H));
+        const x0=Math.max(0,Math.min(...xs)),x1=Math.min(W,Math.max(...xs)),y0=Math.max(0,Math.min(...ys)),y1=Math.min(H,Math.max(...ys)),buf=new Uint8Array((x1-x0)*(y1-y0)*4);
+        const grab=()=>{gl.readPixels(x0,y0,x1-x0,y1-y0,gl.RGBA,gl.UNSIGNED_BYTE,buf);return buf.slice();};
+        w.visible=false;R.render(__scene,__camera);const under=grab();w.visible=true;
+        const avg=()=>{const a=grab();const s=[0,0,0];let n=0;for(let i=0;i<a.length;i+=4){if(a[i]===under[i]&&a[i+1]===under[i+1]&&a[i+2]===under[i+2])continue;s[0]+=a[i];s[1]+=a[i+1];s[2]+=a[i+2];n++;}return s.map(v=>v/Math.max(1,n));};
+        R.render(__scene,__camera);const live=avg();
+        const before=w.onBeforeRender;w.onBeforeRender=function(...a){before.apply(this,a);this.material.uniforms.reflectionMix.value=0;};
+        R.render(__scene,__camera);const plain=avg();w.onBeforeRender=before;R.render(__scene,__camera);return [live,plain];})()`);
+      const off = Math.max(...live.map((v, i) => Math.abs(v - plain[i])));
+      expect(off < 6, `${time}: stand-in ${plain.map(Math.round)} vs live ${live.map(Math.round)} (off by ${off.toFixed(1)} of 255)`);
+    }
+  }},
   {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
     await p.goto(`?dest=pond&${FAST}`);
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
