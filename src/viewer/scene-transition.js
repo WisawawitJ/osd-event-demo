@@ -26,11 +26,16 @@ export function createSceneTransition({model,schedule,onFinish=()=>{},onProgress
   return m;
  }
  const effective=o=>{for(let p=o;p;p=p.parent)if(!p.visible)return false;return true;};
+ // A stop's presentation effects (tour-effects.js, userData.simulation) fade themselves in and out as the camera
+ // arrives and leaves: the change leaves them alone (drawn through its copies, their fade did not show, and the
+ // meeting room's light cone popped up when the change ended).
+ const effect=o=>{for(let p=o;p&&p!==model;p=p.parent)if(p.userData?.simulation)return true;return false;};
  // What is on screen: mid-change, an object being swept counts as shown while its cut keeps its middle, and its
  // materials' own planes are read without the sweep's.
  function capture(){
   const nodes=new Map(),drawables=new Map(),cuts=new Set(sweeps.map(s=>s.plane));model.updateWorldMatrix(true,true);
   model.traverse(o=>{
+   if(effect(o))return;
    nodes.set(o,o.visible);
    const sweep=swept.get(o);
    if(o.material)drawables.set(o,{visible:sweep?sweep.plane.normal.y*sweep.middle+sweep.plane.constant>=0:effective(o),materials:[].concat(o.material).map(m=>({planes:(m.clippingPlanes||[]).filter(p=>!cuts.has(p)).map(p=>p.clone())}))});
@@ -42,7 +47,7 @@ export function createSceneTransition({model,schedule,onFinish=()=>{},onProgress
   for(const [o,visible] of targetVisibility)o.visible=visible;targetVisibility.clear();
   apply();const to=capture();targetVisibility=to.nodes;
   // Flatten parent visibility for the bounded blend, preserving effective mesh visibility.
-  model.traverse(o=>{if(!o.material&&!o.isLight)o.visible=true;});
+  model.traverse(o=>{if(!o.material&&!o.isLight&&!effect(o))o.visible=true;});
   // One cut for everything leaving (keeps what lies below it) and one for everything arriving (keeps what lies above).
   const leaving={plane:new THREE.Plane(new THREE.Vector3(0,-1,0),0),box:new THREE.Box3()},arriving={plane:new THREE.Plane(new THREE.Vector3(0,1,0),0),box:new THREE.Box3()};
   sweeps=[leaving,arriving];
@@ -74,7 +79,7 @@ export function createSceneTransition({model,schedule,onFinish=()=>{},onProgress
  // its copy), so the loading screen sets their shaders up instead of the first flight to each stop.
  async function prepare(use){
   const cut=new THREE.Plane(new THREE.Vector3(0,-1,0),1e4),meshes=[];
-  model.traverse(o=>{if(o.material)meshes.push([o,o.material]);});
+  model.traverse(o=>{if(o.material&&!effect(o))meshes.push([o,o.material]);});
   for(const kind of ['leaving','arriving','none']){
    for(const [o,material] of meshes){
     const list=[].concat(material).map(base=>{const own=(base.clippingPlanes||[]).map(p=>p.clone());return kind==='none'&&!own.length?base:copyOf(base,kind,kind==='none'?own:[...own,cut]);});

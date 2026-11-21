@@ -548,6 +548,20 @@ export const scenarios = [
     expect(water.frames > 30 && water.missing === 0, `the water was drawn on every frame the pond was on screen (${water.frames - water.missing} of ${water.frames})`);
     expect(water.jump < .2, `its reflection fades in and out, never in one step (largest change in a frame ${water.jump.toFixed(2)})`);
   }},
+  {name: 'meeting room: its light cone fades in as the camera arrives and out as it leaves (no pop)', async run(p, expect) {
+    await p.goto('?debug=1&time=10:00');
+    const idle = `${UP} && !document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')`;
+    await p.until(`${idle} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
+    // The cone's opacity on every frame (0 while hidden).
+    await p.eval(`(()=>{window.__cone=[];const g=__scene.getObjectByName('Demo_meeting');let cone=null;g.traverse(o=>{if(o.geometry?.type==='CylinderGeometry')cone=o;});
+      const f=()=>{let shown=true;for(let o=cone;o;o=o.parent)if(!o.visible)shown=false;__cone.push(shown?cone.material.opacity:0);if(__cone.length<600)requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
+    await p.click('[data-destination="meeting"]'); await p.until(`${idle} && document.body.dataset.tourDestination==='meeting'`, {timeout: 20000, what: 'at the meeting room'}); await p.sleep(500);
+    await p.click('[data-destination="pond"]'); await p.until(`${idle} && document.body.dataset.tourDestination==='pond'`, {timeout: 20000, what: 'at the pond'});
+    const c = await p.eval('__cone'), top = Math.max(...c);
+    let step = 0; for (let i = 1; i < c.length; i++) step = Math.max(step, Math.abs(c[i] - c[i - 1]));
+    expect(top > .15 && c.at(-1) === 0, `the cone showed at the meeting room (${top.toFixed(2)}) and is gone at the pond`);
+    expect(step < top * .25, `it faded in and out (largest change in one frame ${(step / top * 100).toFixed(0)}% of full)`);
+  }},
   {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
     await p.goto(`?dest=pond&${FAST}`);
     await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});

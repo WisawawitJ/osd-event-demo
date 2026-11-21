@@ -73,31 +73,57 @@ export function createTourEffects({model,schedule,meetingRoom,ownBarrier=true}){
   securityCamera=new T.PerspectiveCamera(68,16/9,.05,160);securityCamera.name='Demo_security_camera';securityCamera.position.z=-.27;head.add(securityCamera);
  }
 
+ // Each stop's effects fade in as the camera arrives and out as it leaves (~0.45 s), like the room's own light: switched
+ // on in one frame, the meeting room's light cone and pool popped up while the room light came on smoothly. A
+ // material's opacity is what its effect wants (the lamp's and the air's own fades, the solar flow's strength) times
+ // its stop's level.
+ // Every effect material is drawn as transparent from the start (an opaque one turned transparent for a fade would
+ // need another shader, built on the spot).
+ const level={},goal={},own=new Map(),stopOf=new Map();
+ for(const [id,g] of Object.entries(groups)){level[id]=goal[id]=0;g.traverse(o=>{for(const m of [].concat(o.material||[])){stopOf.set(m,id);own.set(m,m.opacity);m.transparent=true;}});}
+ function paint(){
+  for(const [m,opacity] of own)m.opacity=opacity*level[stopOf.get(m)];
+  for(const [id,g] of Object.entries(groups))g.visible=level[id]>.001;
+  schedule();
+ }
+ let stopFrame=0;
+ function fadeStops(instant=false){
+  cancelAnimationFrame(stopFrame);stopFrame=0;
+  if(instant){for(const id of Object.keys(groups))level[id]=goal[id];paint();return;}
+  let last=performance.now();
+  const step=time=>{const d=Math.max(0,time-last)/450;last=time;let moving=false;
+   for(const id of Object.keys(groups)){const g=goal[id];level[id]=g>level[id]?Math.min(g,level[id]+d):Math.max(g,level[id]-d);if(level[id]!==g)moving=true;}
+   paint();stopFrame=moving?requestAnimationFrame(step):0;};
+  stopFrame=requestAnimationFrame(step);
+ }
+
  // The AC's air: fades in and out with the switch, and while it is on the dashes flow down from the unit.
  let airLevel=1,airTarget=1,airFrame=0,airLast=0;
  const airBase=air.map(o=>o.material.opacity);
  for(const line of air)line.userData.distances=Float32Array.from(line.geometry.attributes.lineDistance.array);
+ const setAir=()=>{air.forEach((o,i)=>{o.visible=airLevel>.001;own.set(o.material,airBase[i]*airLevel);});paint();};
  function airStep(time){
   airFrame=0;const dt=Math.min(.1,(time-(airLast||time))/1000);airLast=time;
   airLevel=airTarget>airLevel?Math.min(airTarget,airLevel+dt/.35):Math.max(airTarget,airLevel-dt/.35);
   const shift=(demoNow()/1000*.35)%.26; // demo time: the air stands still while paused
-  air.forEach((o,i)=>{o.visible=airLevel>.001;o.material.opacity=airBase[i]*airLevel;const d=o.geometry.attributes.lineDistance,base=o.userData.distances;for(let j=0;j<base.length;j++)d.array[j]=base[j]-shift;d.needsUpdate=true;});
-  schedule();
+  for(const o of air){const d=o.geometry.attributes.lineDistance,base=o.userData.distances;for(let j=0;j<base.length;j++)d.array[j]=base[j]-shift;d.needsUpdate=true;}
+  setAir();
   if(current==='meeting'&&(airLevel>0||airTarget>0)&&!document.hidden)airFrame=requestAnimationFrame(airStep);else airLast=0;
  }
- function fadeAir(on){airTarget=on?1:0;if(!airFrame&&current==='meeting')airFrame=requestAnimationFrame(airStep);if(current!=='meeting'){airLevel=airTarget;air.forEach((o,i)=>{o.visible=airLevel>0;o.material.opacity=airBase[i]*airLevel;});}}
+ function fadeAir(on){airTarget=on?1:0;if(!airFrame&&current==='meeting')airFrame=requestAnimationFrame(airStep);if(current!=='meeting'){airLevel=airTarget;setAir();}}
  // The room light's pool and beam fade in and out (~0.35 s) instead of snapping.
  let lampLevel=1,lampTarget=1,lampFrame=0;
  const lampBase=lamp.map(o=>o.material.opacity);
- function drawLamp(){lamp.forEach((o,i)=>{o.material.opacity=lampBase[i]*lampLevel;o.visible=lampLevel>.001;});schedule();}
+ function drawLamp(){lamp.forEach((o,i)=>{own.set(o.material,lampBase[i]*lampLevel);o.visible=lampLevel>.001;});paint();}
  function fadeLamp(on){
   lampTarget=on?1:0;if(lampFrame||lampLevel===lampTarget)return;
   let last=performance.now();
   const step=time=>{lampLevel=lampTarget>lampLevel?Math.min(lampTarget,lampLevel+(time-last)/350):Math.max(lampTarget,lampLevel-(time-last)/350);last=time;drawLamp();lampFrame=lampLevel===lampTarget?0:requestAnimationFrame(step);};
   lampFrame=requestAnimationFrame(step);
  }
- function select(id){current=id;if(id==='meeting'&&!airFrame&&airTarget>0)airFrame=requestAnimationFrame(airStep);for(const [name,g] of Object.entries(groups))g.visible=name===id;schedule();}
- function update(state){people.forEach(o=>o.visible=state.occupied);fadeLamp(state.light!==false);fadeAir(state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');if(boom)boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;energyMaterial.opacity=state.solar>5?.8:.35;schedule();}
+ let started=false;
+ function select(id){current=id;if(id==='meeting'&&!airFrame&&airTarget>0)airFrame=requestAnimationFrame(airStep);for(const name of Object.keys(groups))goal[name]=name===id?1:0;fadeStops(!started);started=true;}
+ function update(state){people.forEach(o=>o.visible=state.occupied);fadeLamp(state.light!==false);fadeAir(state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');if(boom)boom.rotation.z=state.barrierAngle||0;packet.visible=state.solar>0;own.set(energyMaterial,state.solar>5?.8:.35);paint();}
  function animate(t){if(current==='meeting')air.forEach((o,i)=>{o.material.dashSize=.12+.035*Math.sin(t*2+i);});if(current==='energy'){packet.position.z=-5.9+((t*.9)%12);packet.position.x=-1.4;}schedule();}
- select('overview');return {securityCamera,select,update,animate,dispose(){cancelAnimationFrame(lampFrame);cancelAnimationFrame(airFrame);for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
+ select('overview');return {securityCamera,select,update,animate,dispose(){cancelAnimationFrame(lampFrame);cancelAnimationFrame(airFrame);cancelAnimationFrame(stopFrame);for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
 }
