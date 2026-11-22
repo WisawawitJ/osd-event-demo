@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (156), about 115 s: run before a commit
+npm test                 # all behaviour checks (157), about 115 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -155,7 +155,7 @@ In the staff console:
 
 The visitor's phone form can be filled in by hand. The car photo reads a sample plate. On the emailed ticket,
 **Add to calendar** downloads a simulated `.ics` invite for the visit.
-Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street, and leaving cars wait in their bay until the one ahead is out.
+Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street (the first just clear of a car backing out of the entry, the rest a car and 2 m apart), and leaving cars wait in their bay until the one ahead is out.
 Cars also come and go by themselves, following the hour (see above). Through-traffic drives both lanes of the
 street whenever it is in view; it keeps to one speed per lane and gives way to cars turning in or pulling out.
 About a third of the cars coming in arrive along the far lane: the near lane has right of way, so they wait at the

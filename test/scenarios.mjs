@@ -309,6 +309,26 @@ export const scenarios = [
     // It flashed all the way from the edge of the map; now from 30 m before the turn (x -56).
     expect(await p.eval('__early') === null, `not while still far from the turn (lit at x ${await p.eval('__early')})`);
   }},
+  {name: 'the queue waits close behind the barrier, and a car turned away there still backs out past it', async run(p, expect) {
+    // The first car in the queue waited at x -33, 7–8 m of empty road behind the car at the barrier. Closer up, it
+    // must still leave room for that car to back out if it is refused (else each waits for the other for good).
+    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`void __parking.traffic.arrive({plate:'3ฆง 6047',province:'ชลบุรี',color:6,fromX:-40})`);
+    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='3ฆง 6047')`, {timeout: 30000, what: 'the unknown car held at the barrier'});
+    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));
+      window.__q=sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)).slice(0,2);
+      for(const v of __q)void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-60});
+      const L=4.46/2,W=1.72/2,corners=c=>{const h=c.rotation.y,f=[Math.sin(h),Math.cos(h)],s=[Math.cos(h),-Math.sin(h)];return [[1,1],[1,-1],[-1,-1],[-1,1]].map(([a,b])=>[c.position.x+f[0]*L*a+s[0]*W*b,c.position.z+f[1]*L*a+s[1]*W*b]);};
+      const sep=(A,B)=>{for(const P of [A,B])for(let i=0;i<4;i++){const p=P[i],q=P[(i+1)%4],n=[q[1]-p[1],p[0]-q[0]];let a0=1e9,a1=-1e9,b0=1e9,b1=-1e9;for(const v of A){const d=v[0]*n[0]+v[1]*n[1];a0=Math.min(a0,d);a1=Math.max(a1,d);}for(const v of B){const d=v[0]*n[0]+v[1]*n[1];b0=Math.min(b0,d);b1=Math.max(b1,d);}if(a1<b0||b1<a0)return true;}return false;};
+      window.__hit=null;const f=()=>{const cars=__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car')&&c.visible&&c.position.z>20);
+        for(let i=0;i<cars.length;i++)for(let j=i+1;j<cars.length;j++)if(!__hit&&!sep(corners(cars[i]),corners(cars[j])))__hit=cars[i].name+' x '+cars[j].name;requestAnimationFrame(f)};requestAnimationFrame(f);})()`);
+    // At a queue place: the first at x -31.43, the next 6.5 m apart (a background car may have queued first).
+    await p.until(`__parking.lot.root.children.some(c=>c.visible&&c.name==='Demo_car_'+__q[0].plate&&c.position.x<-31&&Math.abs(c.position.z-25.1)<.1&&Math.abs(((c.position.x+31.43)%6.5+6.5)%6.5-3.25)>3.1)`, {timeout: 30000, what: 'the first queued car at its place'});
+    await p.eval(`(()=>{const a=__parking.sim.state.alerts.find(a=>a.status==='open'&&a.plate==='3ฆง 6047');__parking.sim.resolveAlert(a.id,'deny')})()`);
+    await p.until(`__q.every(v=>__parking.sim.state.presence.has(__parking.sim.key(v.plate,v.province)))`, {timeout: 40000, what: 'the turned-away car out and both queued cars in'});
+    expect(await p.eval('__hit') === null, `no car drove into another (${await p.eval('__hit')})`);
+  }},
   {name: 'a near-lane car queuing for the barrier signals left while it waits', async run(p, expect) {
     // In the queue it showed no blinker, so it was not clear it was waiting to turn in.
     // speed 10: an unknown car holds the barrier for its alert (45 s of demo time) while the next car queues.
@@ -319,7 +339,8 @@ export const scenarios = [
     await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
       window.__plate=v.plate;void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-60});})()`);
     const car = `__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate)`;
-    await p.until(`(c=>!!c&&c.visible&&Math.abs(c.position.x+33)<.3)(${car})`, {timeout: 20000, what: 'the car at its queue place'});
+    // At a queue place: the first at x -31.43, the next 6.5 m apart (a background car may have queued first).
+    await p.until(`(c=>!!c&&c.visible&&c.position.x<-31&&Math.abs(c.position.z-25.1)<.1&&Math.abs(((c.position.x+31.43)%6.5+6.5)%6.5-3.25)>2.95)(${car})`, {timeout: 20000, what: 'the car at its queue place'});
     const seen = await p.eval(`new Promise(done=>{let left=false;const t=setInterval(()=>{if(${car}.getObjectByName('Demo_car_blinker_left')?.visible)left=true;},15);setTimeout(()=>{clearInterval(t);done(left);},600);})`);
     expect(seen, 'its left blinker flashed while it queued');
   }},

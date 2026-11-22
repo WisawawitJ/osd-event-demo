@@ -38,6 +38,10 @@ class Route {
 const streetToHold = (fromX, holdX) => new Route(fromX, STREET.laneEast, EAST).toX(holdX).build();
 // The turn between the near lane and the entry barrier's stop line (and back out of it, for a car turned away).
 const ENTRY_R = STREET.laneEast - GATE.entryStopZ;
+// The queue for the entry on the near lane: its first place is just clear (0.8 m) of a car backing out of the entry,
+// turned away, which ends where the turn in starts; the places behind are a car and 2 m apart. (The first place was
+// x -33, leaving 7–8 m of empty road behind the car at the barrier.)
+const QUEUE_HEAD = GATE.entryX - ENTRY_R - 2.23 - .8 - 2.2, QUEUE_GAP = 6.5;
 // How far before its turn off the street a car starts signalling.
 const SIGNAL_AHEAD = 30;
 const streetToGate = fromX => new Route(fromX, STREET.laneEast, EAST).toX(GATE.entryX - ENTRY_R).arc(ENTRY_R, Math.PI / 2).build();
@@ -339,7 +343,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           await waitFor(spawnClear, gen);
           // Its place in the queue: behind the last car on the street (one driving up to the barrier counts as at it).
           // Counted from the cars there, not from a running total: that gave a new car the place of one still in it.
-          const holdBehind = () => Math.min(-33, ...laneCars(1).map(a => (a.holdX ?? -26.5) - 6.5));
+          const holdBehind = () => Math.min(QUEUE_HEAD, ...laneCars(1).map(a => (a.holdX ?? QUEUE_HEAD + QUEUE_GAP) - QUEUE_GAP));
           if (!ready && holdBehind() <= fromX + 2) { await previous; alive(); await waitFor(spawnClear, gen); }
           const holdX = holdBehind(), queue = !ready && holdX > fromX + 2;
           agent.holdX = queue ? holdX : undefined;
