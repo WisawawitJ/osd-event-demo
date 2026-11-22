@@ -65,7 +65,7 @@ function leavingCandidates(sim, traffic, {staffOnly = false, guests = false} = {
 // allow (two arriving and two leaving at a time); the rest of a gap the barrier cannot close (a rush in time-lapse,
 // a jump in time, or time spent off screen) is made up in the bays directly, logged at times spread over that gap.
 // Between rushes a car comes or goes now and then. `paused()` (the story playing) stops all of it.
-function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paused = () => false, watched = () => true, storyRunning = () => false, arrive, leave, unknown = null}) {
+function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paused = () => false, watched = () => true, arrive, leave, unknown = null}) {
   const onScreen = () => lotOnScreen(lot);
   // Cars made up in the bays appear or vanish on the spot, so while the car park is on screen only in bays the camera
   // cannot see: popping in and out of view (the building's covered bays, at rush hour on a short day) read as a flicker.
@@ -127,9 +127,9 @@ function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paus
     const m = world.minute();
     // Whose visit is over: one at a time, through the barrier when the car park is on screen.
     for (const [k, p] of sim.state.presence) {
-      // The story's visitor leaves by the story's own step while it runs; a story left before that step lets it go
-      // like any visitor once its visit is over (it stayed parked for good).
-      if (p.type !== 'guest' || (p.plate === STORY.plate && storyRunning()) || now - p.since < stayOf(p.plate)) continue;
+      // The story's visitor too, once the story is left before its exit step (it stayed parked for good). While the
+      // story runs, none of this does (`paused()`), and the story drives it out itself.
+      if (p.type !== 'guest' || now - p.since < stayOf(p.plate)) continue;
       if (onScreen()) { if (traffic.leaving < 2) traffic.leave(k, {west: fromFarLane()}); }
       else traffic.vanish(k, () => sim.recordExit({plate: p.plate, province: p.province}));
       break;
@@ -394,7 +394,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   // Background life of the car park. Unknown cars only on the parking stop, where their alert can be answered.
   // The parked cars are placed first: a late start's first catch-up takes cars away from the bays.
   traffic.syncParked();
-  const stopLife = startLotLife({sim, traffic, lot, camera, paused: () => quietAmbient, watched: () => active, storyRunning: () => story.running,
+  const stopLife = startLotLife({sim, traffic, lot, camera, paused: () => quietAmbient, watched: () => active,
     arrive: () => actions.simulate('registered', {quiet: true}), leave: () => actions.simulate('exit', {quiet: true}),
     unknown: () => { if (active) actions.simulate('unknown', {quiet: true}); }});
   function schedulePass() {

@@ -104,7 +104,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   // A car leaving for the far lane: `outWest` while it crosses the near lane (near-lane arrivals do not start their
   // last stretch to the barrier, nor far-lane ones their turn, nor turned-away cars their back-out), and `westExitHold`
   // while it waits at the barrier for its gap (no new far-lane through-traffic). `inbound`: near-lane arrivals on their
-  // last stretch to the barrier, whose turn-in a car crossing to the far lane would meet.
+  // last stretch to the barrier, whose turn-in an exit would meet (either way: both wait for it).
   let outWest = 0, westExitHold = 0, inbound = 0;
   // `outEast`: a car leaving with a left turn onto the near lane, while it turns: its rear swings out over the entry's
   // curve, so a near-lane arrival's last stretch and a turned-away car's back-out wait (it touched one of them).

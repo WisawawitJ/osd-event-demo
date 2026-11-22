@@ -8,7 +8,7 @@ const ABORT = Symbol('story-abort');
 const at = (h, m) => bkk(2026, 11, 24, h, m);
 
 export function createStory(ctx) {
-  let token = 0, index = -1, auto = true, paused = false, running = false, nextWaiter = null, requestId = null;
+  let shownVariant, token = 0, index = -1, auto = true, paused = false, running = false, nextWaiter = null, requestId = null;
   const listeners = new Set();
   const emit = () => { for (const fn of listeners) fn(); };
 
@@ -110,7 +110,7 @@ export function createStory(ctx) {
       try { await s.until(() => alertId || (approved && ctx.sim.state.gate === 'open'), 40000); } finally { off(); }
       if (alertId) {
         // The no-pass captions too (the pass may have stopped working after the step began, under the other ones).
-        ctx.caption(captionFor(index, 'r'));
+        shownVariant = 'r'; ctx.caption(captionFor(index, 'r'));
         ctx.hint(t('story.hint.noPass'));
         await s.wait(1800);
         if (ctx.sim.state.alerts.find(a => a.id === alertId)?.status === 'open') ctx.actions.resolveAlert(alertId, 'deny');
@@ -179,7 +179,7 @@ export function createStory(ctx) {
         const step = steps[index], s = api(my);
         s.alive();
         if (step.skip?.()) continue;
-        ctx.caption(captionFor(index));
+        shownVariant = undefined; ctx.caption(captionFor(index));
         emit();
         ctx.fly(step.cam, 1600);
         await step.run(s);
@@ -213,7 +213,8 @@ export function createStory(ctx) {
     resume() { paused = false; emit(); },
     next() { if (nextWaiter) nextWaiter(); },
     stop() { token++; running = false; paused = false; index = -1; if (nextWaiter) nextWaiter(); nextWaiter = null; ctx.caption(null); ctx.cue(null); ctx.hint(null); emit(); },
-    refreshCaption() { if (running && index >= 0) ctx.caption(captionFor(index)); },
+    // In the variant on show (a language switch went back to the step's first pick after step 6 switched to no-pass).
+    refreshCaption() { if (running && index >= 0) ctx.caption(captionFor(index, shownVariant)); },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   };
 }

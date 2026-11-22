@@ -129,11 +129,12 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
   const stale = readdirSync(profileRoot).filter(name => { try { return name.startsWith('chrome-') && runnerGone(name); } catch { return false; } });
   if (stale.length) {
     for (const pid of readdirSync('/proc').filter(n => /^\d+$/.test(n))) {
-      try { const cmd = readFileSync(`/proc/${pid}/cmdline`, 'utf8'); if (cmd.includes('chrom') && stale.some(name => cmd.includes(join(profileRoot, name)))) process.kill(Number(pid), 'SIGKILL'); } catch {}
+      // Only a browser started with that profile (a `du` or `rm -r` of the folder had it in its arguments too). Chromium
+      // rewrites its command line as one space-joined string, so this is a search, not a match of whole arguments.
+      try { const cmd = readFileSync(`/proc/${pid}/cmdline`, 'utf8'); if (stale.some(name => cmd.includes(`--user-data-dir=${join(profileRoot, name)}`))) process.kill(Number(pid), 'SIGKILL'); } catch {}
     }
     for (const name of stale) try { rmSync(join(profileRoot, name), {recursive: true, force: true}); } catch {}
   }
-  mkdirSync(shots, {recursive: true});
   const server = await startServer();
   let browser = null, renderer = '';
   // A browser that fails to start or answer leaves nothing running behind the error.
@@ -188,6 +189,8 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
     async click(selector) { const r = await page.eval(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const o={bubbles:true,cancelable:true,pointerId:1,pointerType:'mouse',isPrimary:true};e.dispatchEvent(new PointerEvent('pointerdown',{...o,buttons:1}));e.dispatchEvent(new PointerEvent('pointerup',o));e.click();return true})()`); if (!r) throw new Error(`no element ${selector}`); },
     async shot(name) {
       const r = await send('Page.captureScreenshot', {format: 'png'});
+      // The folder is made with its first screenshot (each run left an empty one).
+      mkdirSync(shots, {recursive: true});
       const file = join(shots, `${String(++shot).padStart(2, '0')}-${name}.png`);
       writeFileSync(file, Buffer.from(r.result.data, 'base64'));
       return file;

@@ -405,10 +405,10 @@ try {
   servicesButton.addEventListener('click',()=>interiorCamera('services'));
   parkingButton.addEventListener('click',()=>interiorCamera('parking'));
   stairsButton.addEventListener('click',()=>interiorCamera('stairs'));
-  // The view keys, by the key's place (the Thai layout types other characters on them), or by the character when a
-  // keyboard sends no place.
+  // The view keys, by the key's place (the Thai layout types other characters on them), else by the character: a
+  // keyboard may send no place, and other layouts put - and + elsewhere (German: - on the Slash key).
   const VIEW_KEYS = {KeyR: 'reset', Equal: 'in', NumpadAdd: 'in', Minus: 'out', NumpadSubtract: 'out'}, VIEW_CHARS = {r: 'reset', R: 'reset', '+': 'in', '=': 'in', '-': 'out'};
-  const viewKey = event => (event.code ? VIEW_KEYS[event.code] : VIEW_CHARS[event.key]);
+  const viewKey = event => VIEW_KEYS[event.code] ?? VIEW_CHARS[event.key];
   canvas.addEventListener('keydown', event => {
     if (!model) return;
     // Not with Ctrl, Alt or Cmd: those are the browser's (reload, its own zoom). By the key's place, not the character
