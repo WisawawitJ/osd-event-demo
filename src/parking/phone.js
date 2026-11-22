@@ -48,7 +48,7 @@ export function createPhone({root, sim, actions}) {
       ${f.faceConsent ? `<div class="ph-face-row">${f.face ? faceArt : `<button type="button" class="ph-photo-btn small" data-ph="face">${icon('user')}${t('ph.facePhoto')}</button>`}</div>` : ''}
     </div>
     <label class="ph-check"><input type="checkbox" name="consent"${f.consent ? ' checked' : ''}><span>${t('ph.consent')}</span></label>
-    ${ui.error ? `<p class="ph-error">${ui.error}</p>` : ''}
+    ${ui.error ? `<p class="ph-error">${t(ui.error)}</p>` : ''}
     <button type="button" class="ph-submit" data-ph="submit"${cue('submit')}>${t('ph.submit')}</button>`;
   }
   // The form's response, as in the real app: received, the result comes by email, and the receipt details.
@@ -85,7 +85,7 @@ export function createPhone({root, sim, actions}) {
     patch(root, `<div class="ph-frame"><div class="ph-notch"></div><div class="ph-status"><span>${fmtTime(sim.now())}</span><span class="ph-sys">${signal}<b>5G</b>${battery}</span></div>
       ${bar}
       <div class="ph-screen" data-screen="${ui.screen}">${body}</div>
-      ${ui.banner ? `<button type="button" class="ph-banner" data-ph="inbox"${cue('banner')}><span class="ph-avatar">P</span><span><b>OSD Parking</b><small>${esc(ui.banner)}</small></span></button>` : ''}
+      ${ui.banner ? `<button type="button" class="ph-banner" data-ph="inbox"${cue('banner')}><span class="ph-avatar">P</span><span><b>OSD Parking</b><small>${esc(t(ui.banner))}</small></span></button>` : ''}
       <div class="ph-home"></div></div><span class="ph-caption">${icon('phone')}${t('ph.label')}</span>`);
   }
 
@@ -94,7 +94,7 @@ export function createPhone({root, sim, actions}) {
     const f = ui.form, color = ui.color;
     ui.color = undefined;
     const missing = ['name', 'email', 'contact', 'phone', 'plate', 'province'].some(k => !String(f[k]).trim()) || !f.consent;
-    if (missing) { ui.error = t('ph.required'); render(); return null; }
+    if (missing) { ui.error = 'ph.required'; render(); return null; }
     ui.error = '';
     const arrival = dateValue(f.arrival), departure = Math.max(arrival, dateValue(f.departure));
     const r = sim.submitRequest({visitor: {name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), company: f.company.trim() || '—'}, contact: f.contact.trim(), plate: f.plate.trim(), province: f.province, arrival, departure, notes: f.notes, face: f.faceConsent && f.face, color});
@@ -111,7 +111,8 @@ export function createPhone({root, sim, actions}) {
     // A tap on the story's cued photo button is the presenter going along: the story reads its own plate next.
     if (what === 'photo' && ui.cue !== 'photo') readPhoto();
     if (what === 'face') { ui.form.face = true; render(); }
-    if (what === 'submit') submit();
+    // As with the photo: a tap on the story's cued Send is the presenter going along (it sent the request twice).
+    if (what === 'submit' && ui.cue !== 'submit') submit();
     if (what === 'inbox') { ui.screen = 'mail'; ui.banner = null; render(); }
     if (what === 'site') { ui.screen = req() ? 'sent' : 'form'; render(); }
     if (what === 'calendar' && req()) saveFile('parking-visit.ics', visitInvite(req()), 'text/calendar;charset=utf-8');
@@ -165,7 +166,8 @@ export function createPhone({root, sim, actions}) {
   }
 
   sim.subscribe((kind, payload) => {
-    if (kind === 'email' && payload.requestId === ui.requestId) { ui.banner = t(`ph.mail.${payload.kind}`); render(); }
+    // Text keys, not text (they stayed in the old language after a switch).
+    if (kind === 'email' && payload.requestId === ui.requestId) { ui.banner = `ph.mail.${payload.kind}`; render(); }
     else if (ui.open && (kind === 'request' || kind === 'clock')) schedule();
   });
 
@@ -179,6 +181,12 @@ export function createPhone({root, sim, actions}) {
     setScreen(s) { ui.screen = s; if (s === 'mail') ui.banner = null; render(); },
     setCue(name) { ui.cue = name; render(); },
     setColor(c) { ui.color = c; },
+    // Back on request `id`, with its email's banner (the story's own, after a tap on New request let go of it).
+    follow(id) {
+      if (!id || ui.requestId === id) return;
+      const mail = sim.state.emails.find(m => m.requestId === id);
+      Object.assign(ui, {requestId: id, screen: 'sent', banner: mail ? `ph.mail.${mail.kind}` : null}); render();
+    },
     typeInto, readPhoto, submit,
     // The story stopped: a read it started ends without touching the form the visitor now owns.
     cancelRead() { if (!settleRead) return; settleRead(); ui.form.photo = 'idle'; render(); },

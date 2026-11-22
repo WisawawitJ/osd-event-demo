@@ -7,6 +7,8 @@
 .kiosk-toggle { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); cursor: pointer; padding: 6px 10px; border-radius: 8px; }
 .kiosk-toggle input { accent-color: var(--pk-blue); width: 16px; height: 16px; }
 .kiosk-on .kiosk-toggle { background: var(--pk-blue-soft); color: #023e8a; }
+/* The kiosk stays on the showcase: no way off to the explore page (it has no kiosk to come back). */
+.kiosk-on .explore-link { display: none; }
 
 /* Explore page: way back to the showcase beside the download link */
 .header-links { display: flex; align-items: center; gap: 6px; }
@@ -410,4 +412,10 @@ html[data-night=true] .ph-caption { background: #ffffffe6; }
   .pk-feed { width: 270px; }
   .pk-phone { width: 236px; }
   .parking-active.phone-open .pk-caption { left: calc(50% + 125px); width: calc(100% - 300px); }
+}
+
+/* A narrow view (phones, tablets upright): beside the open phone the caption had a 40–66 px column, one word a line.
+   It takes the top of the view instead, full width, above the phone. */
+@container scene (max-width: 720px) {
+  .parking-active.phone-open .pk-caption { left: 50%; top: 10px; bottom: auto; width: calc(100% - 20px); padding: 10px 14px 11px; z-index: 6; }
 }

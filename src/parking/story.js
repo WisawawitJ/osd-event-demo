@@ -14,14 +14,15 @@ export function createStory(ctx) {
 
   function api(my) {
     const alive = () => { if (my !== token) throw ABORT; };
-    const wait = ms => new Promise((resolve, reject) => {
+    // `stopIf`: ends the wait early (Auto-advance turned off during a hold).
+    const wait = (ms, stopIf = () => false) => new Promise((resolve, reject) => {
       let left = ms, last = demoNow();
       const tick = () => {
         if (my !== token) return reject(ABORT);
         const now = demoNow();
         if (!paused) left -= (now - last) * SPEED;
         last = now;
-        if (left <= 0) resolve(); else setTimeout(tick, 50);
+        if (left <= 0 || stopIf()) resolve(); else setTimeout(tick, 50);
       };
       tick();
     });
@@ -34,11 +35,13 @@ export function createStory(ctx) {
     async function userAction({cue, hint, done, perform, delay = 2600}) {
       ctx.cue(cue);
       ctx.hint(hint);
+      // Auto-advance turned off while it waits: the presenter takes the step over (it was done for them anyway).
       if (auto) {
-        await Promise.race([wait(delay), until(done)]);
+        await Promise.race([wait(delay, () => !auto), until(done)]);
         alive();
-        if (!done()) { ctx.tap(cue); await wait(250); perform(); }
-      } else {
+        if (auto && !done()) { ctx.tap(cue); await wait(250); perform(); }
+      }
+      if (!auto && !done()) {
         // Next performs the action for the presenter; stopping the story (token bumped first) must not.
         await Promise.race([until(done, 1e9), new Promise(r => { nextWaiter = () => { if (my === token && !done()) perform(); r(); }; })]);
         nextWaiter = null;
@@ -86,12 +89,14 @@ export function createStory(ctx) {
     {key: 's4', cam: 'lot', async run(s) {
       const req = () => ctx.sim.state.requests.find(q => q.id === requestId);
       ctx.panel.show('requests', {request: requestId});
-      await s.userAction({cue: 'approve', hint: t('story.hint.approve'), done: () => req()?.status !== 'pending', perform: () => ctx.actions.approve(requestId)});
+      await s.userAction({cue: 'approve', hint: 'story.hint.approve', done: () => req()?.status !== 'pending', perform: () => ctx.actions.approve(requestId)});
       // Rejected, no ticket email follows (it waited 8 s for one).
       if (req()?.status === 'approved') await s.until(() => req()?.history.some(h => h.key === 'h.email'), 8000);
     }, hold: 2500},
     {key: 's5', cam: 'lot', variant: () => (noPass() ? 'r' : ''), async run(s) {
       ctx.phone.setOpen(true);
+      // On the story's request (a tap on the phone's New request since then left it on an empty form).
+      ctx.phone.follow(requestId);
       ctx.phone.setCue('banner');
       await s.wait(1300);
       ctx.phone.setCue(null);
@@ -111,7 +116,7 @@ export function createStory(ctx) {
       if (alertId) {
         // The no-pass captions too (the pass may have stopped working after the step began, under the other ones).
         shownVariant = 'r'; ctx.caption(captionFor(index, 'r'));
-        ctx.hint(t('story.hint.noPass'));
+        ctx.hint('story.hint.noPass');
         await s.wait(1800);
         if (ctx.sim.state.alerts.find(a => a.id === alertId)?.status === 'open') ctx.actions.resolveAlert(alertId, 'deny');
         // Not until it has driven off the map (some 20 s).
@@ -129,14 +134,15 @@ export function createStory(ctx) {
       ctx.panel.show('gate');
       ctx.sim.setNow(at(9, 52));
       let alertId = null;
-      const off = ctx.sim.subscribe((kind, a) => { if (kind === 'alert') alertId = a.id; });
+      // Its own car's alert only (an Unknown car sent from the Gate tab meanwhile had the visitor's car denied).
+      const off = ctx.sim.subscribe((kind, a) => { if (kind === 'alert' && a.plate === STORY.unknown.plate) alertId = a.id; });
       const arrival = ctx.traffic.arrive({plate: STORY.unknown.plate, province: STORY.unknown.province, color: STORY.unknown.color, fromX: -52});
       try {
         await s.until(() => alertId, 40000);
       } finally { off(); }
       const alert = () => ctx.sim.state.alerts.find(a => a.id === alertId);
       await s.wait(900);
-      await s.userAction({cue: 'deny', hint: t('story.hint.alert'), done: () => alert()?.status !== 'open', perform: () => ctx.actions.resolveAlert(alertId, 'deny'), delay: 3200});
+      await s.userAction({cue: 'deny', hint: 'story.hint.alert', done: () => alert()?.status !== 'open', perform: () => ctx.actions.resolveAlert(alertId, 'deny'), delay: 3200});
       await Promise.race([arrival, s.wait(4500)]); s.alive();
     }, hold: 1500},
     {key: 's8', cam: 'lot', async run(s) {
@@ -184,8 +190,9 @@ export function createStory(ctx) {
         ctx.fly(step.cam, 1600);
         await step.run(s);
         s.alive();
-        if (auto) await s.wait(step.hold);
-        else { await new Promise(r => { nextWaiter = r; }); nextWaiter = null; s.alive(); }
+        // Auto-advance turned off during the hold: it waits for Next from there (it went on to the next step).
+        if (auto) await s.wait(step.hold, () => !auto);
+        if (!auto) { await new Promise(r => { nextWaiter = r; }); nextWaiter = null; s.alive(); }
       }
       running = false; index = -1;
       ctx.caption(null);

@@ -131,7 +131,9 @@ try {
   controls = new OrbitControls(camera, canvas);
   if (debug) window.__controls = controls;
   controls.enableDamping = false;
-  controls.screenSpacePanning = true;
+  // Panning slides the view across the ground at the height it has (two fingers, a touchpad scroll, Shift-drag, the
+  // arrow keys): up and down on the screen go forward and back, not up and down in the air.
+  controls.screenSpacePanning = false;
   controls.zoomToCursor = true;
   controls.listenToKeyEvents(canvas);
   // OrbitControls zooms by a percentage of the distance to its pivot, so steps shrink as you close in and
@@ -305,8 +307,12 @@ try {
     return bounds;
   }
 
+  // `closeView`: the lift or a room's view, which a resize keeps (a phone turned on its side threw the visitor out).
+  let closeView = false;
   function frameVisible() {
     if (!model) return;
+    // Its label too (Reset view or R from the lift or stairs left theirs up).
+    closeView = false; document.querySelector('#view-label').textContent = floorLabel(currentFloor);
     camera.fov=38;camera.updateProjectionMatrix();
     const bounds = visibleBounds();
     if (bounds.isEmpty()) return;
@@ -384,7 +390,7 @@ try {
     const b=new THREE.Box3().setFromObject(door),target=b.getCenter(new THREE.Vector3());
     camera.fov=50;camera.updateProjectionMatrix();
     controls.target.copy(target);camera.position.copy(target).add(new THREE.Vector3(.1,.4,3.1));
-    controls.minDistance=.5;controls.update();schedule();
+    controls.minDistance=.5;controls.update();schedule();closeView=true;
     document.querySelector('#view-label').textContent=`${L('ลิฟต์','Lift')} · ${floorLabel(currentFloor)}`;
   });
   function interiorCamera(kind){
@@ -395,7 +401,7 @@ try {
     const target=preset?.target||(kind==='services'?[-4,.4,-4]:kind==='parking'?[-13.5,.3,3.5]:kind==='stairs'?[9.4,1.3,-4.85]:kind==='courtyard'?[23.5,1,-2.5]:[3.7,.6,6.6]);
     camera.fov=58;camera.position.copy(root.localToWorld(new THREE.Vector3(...eye)));
     controls.target.copy(root.localToWorld(new THREE.Vector3(...target)));controls.minDistance=.4;
-    camera.updateProjectionMatrix();controls.update();schedule();
+    camera.updateProjectionMatrix();controls.update();schedule();closeView=true;
     document.querySelector('#view-label').textContent={services:L('ห้องบริการ','Service rooms'),parking:L(`ที่จอดรถ · ${root.userData.parking?.count||6} คัน`,`Parking · ${root.userData.parking?.count||6} spaces`),courtyard:L('บ่อปลา','Fish pond'),office:L('สำนักงาน','Offices'),arrival:L('ลานวนรถ','Drop-off'),reception:L('ต้อนรับ','Reception'),stairs:L('บันได','Stairs')}[kind]+(kind==='parking'?'':` · ${floorLabel(currentFloor)}`);
   }
   courtyardButton.addEventListener('click',()=>interiorCamera('courtyard'));
@@ -437,7 +443,7 @@ try {
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height, false);
-    if (model && !isShowcase && Math.abs(lastAspect - camera.aspect) > 0.25) frameVisible();
+    if (model && !isShowcase && !closeView && Math.abs(lastAspect - camera.aspect) > 0.25) frameVisible();
     lastAspect = camera.aspect;
     // Resizing clears the canvas: redraw before this frame is painted, or the view shows empty for a frame (the car
     // park's layout change resizes it as the flight sets off).
@@ -606,7 +612,9 @@ try {
        function applyDestination(id){
         currentFloor=['overview','energy','parking'].includes(id)?'all':id==='meeting'?String(meetingRoom.floor):'1';exploded=false;cutaway=id==='meeting';interiorView=id;exteriorEnabled=true;cameraSide=false;
         updateView({reframe:false});if(id==='meeting')for(const device of deviceMeshes)device.visible=true;
-        renderKit.ground.visible=true;controls.minDistance=.4;controls.maxDistance=500;
+        renderKit.ground.visible=true;controls.minDistance=.4;
+        // Zooming out stops a little past the whole-site view (at 500 m the world was a disc floating in the sky colour).
+        const c=contextPose();controls.maxDistance=Math.max(130,1.2*Math.hypot(c.eye[0]-c.target[0],c.eye[1]-c.target[1],c.eye[2]-c.target[2]));
        }
        // The parking access demo adds its own lot, cars and UI to this scene (src/parking).
        const parkingModule=await import('osd/parking/index.js');
@@ -773,14 +781,17 @@ try {
        const ORBIT_DEG_PER_S=3.5,IDLE_FREE_MS=20000,IDLE_TOUR_MS=2500;
        function stopOrbit(){if(orbitFrame)cancelAnimationFrame(orbitFrame);orbitFrame=0;}
        const onView=target=>Boolean(target.closest?.('#viewport'))&&!target.closest('#view-orbit, #parking-layer');
-       for(const type of ['pointerdown','wheel','keydown'])document.addEventListener(type,event=>{if(!onView(event.target))return;lastInput=performance.now();stopOrbit();},{capture:true,signal:abort.signal});
-       if(debug)window.__idleNow=()=>{lastInput=-Infinity;}; // tests: idle from now on, without waiting 20 s
+       // A drag counts all along (one longer than 20 s had the orbit start under the finger).
+       for(const type of ['pointerdown','pointermove','wheel','keydown'])document.addEventListener(type,event=>{if(!onView(event.target)||(type==='pointermove'&&!event.buttons))return;lastInput=performance.now();stopOrbit();},{capture:true,signal:abort.signal});
+       // Tests: idle from now on, without waiting 20 s (a landing the watch below has yet to see no longer counts).
+       if(debug)window.__idleNow=()=>{lastInput=-Infinity;if(!flight.running)flightWasRunning=false;};
        const orbitAllowed=()=>{const st=showcase.getState();if(!orbitEnabled||disposed||document.hidden||isPaused()||flight.running||st.traveling||parking?.story.running)return false;return performance.now()-lastInput>(st.touring?IDLE_TOUR_MS:IDLE_FREE_MS);};
        let flightWasRunning=false;
        const orbitWatch=setInterval(()=>{
-        // A tour stop counts as idle only from the moment its flight lands.
+        // Idle counts from the moment a flight lands: a tour stop's, and the visitor's own (a dock tap, outside the
+        // view, is use too: it orbited the moment it landed).
         if(flight.running){flightWasRunning=true;return;}
-        if(flightWasRunning){flightWasRunning=false;if(showcase.getState().touring)lastInput=performance.now();}
+        if(flightWasRunning){flightWasRunning=false;lastInput=performance.now();}
         if(orbitFrame||!orbitAllowed())return;
         let last=performance.now();const up=new THREE.Vector3(0,1,0);
         const tick=time=>{

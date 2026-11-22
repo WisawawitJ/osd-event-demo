@@ -15,8 +15,11 @@ for (const anchor of document.querySelectorAll('a[href]')) {
   if (href === '/' || href === '/explore') {
     const target = href === '/' ? '#showcase' : '#explore';
     anchor.href = target;
-    anchor.addEventListener('click', event => { event.preventDefault(); location.hash = target; location.reload(); });
+    // Not while the kiosk runs: the explore page has no kiosk, and a reload loses one switched on by its checkbox.
+    anchor.addEventListener('click', event => { event.preventDefault(); if (document.body.classList.contains('kiosk-on')) return; location.hash = target; location.reload(); });
   }
 }
+// Back and Forward between the two pages change only the hash: the page follows (the old one stayed on screen).
+addEventListener('hashchange', () => { if ((location.hash === '#explore' ? 'explore' : 'showcase') !== mode) location.reload(); });
 
 await import('osd/viewer/main.js');

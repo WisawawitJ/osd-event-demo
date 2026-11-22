@@ -249,6 +249,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   }});
 
   const actions = {
+    storyRunning: () => story.running,
     interact: () => onInteract(),
     feedChanged: () => schedule(),
     toast: text => overlays.toast(esc(text)),
@@ -305,7 +306,8 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     // request or reason being worked on).
     if (kind === 'alert') { overlays.showAlert(payload.id); if (!story.running && !payload.ambient) panel.show('gate'); }
     if (kind === 'entry' || kind === 'exit') panel.flash(payload.id);
-    if (kind === 'email') overlays.toast(`${icon('check')}<span>${esc(t('req.emailSent'))}</span>`, 'ok');
+    // Which email went (a rejection or revocation said "Ticket emailed" too).
+    if (kind === 'email') overlays.toast(`${icon('check')}<span>${esc(t(payload.kind === 'approved' ? 'req.emailSent' : `req.emailSent.${payload.kind}`))}</span>`, 'ok');
     panel.render();
   });
 
@@ -315,8 +317,9 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     sim, panel, phone, overlays, traffic, actions,
     fly: (name, ms) => fly(PARKING_POSES[name], ms),
     cue(name) { panel.setCue(name); overlays.setCue(name); },
-    hint(text) { currentHint = text; if (currentCaption) overlays.caption({...currentCaption, hint: text}); },
-    caption(c) { currentCaption = c; overlays.caption(c ? {...c, hint: currentHint} : null); },
+    // A hint is a text key, put in the language on show each time (it stayed in the old one after a switch).
+    hint(key) { currentHint = key; if (currentCaption) overlays.caption({...currentCaption, hint: key && t(key)}); },
+    caption(c) { currentCaption = c; overlays.caption(c ? {...c, hint: currentHint && t(currentHint)} : null); },
     tap() { for (const el of document.querySelectorAll('[data-cue="true"]')) { el.classList.remove('pk-tapped'); void el.offsetWidth; el.classList.add('pk-tapped'); } },
     // The story starts from the seeded 09:00 car park, so the clock goes to 09:00 first (the seed would otherwise
     // leave out whatever lies after an earlier time).
@@ -336,7 +339,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     if (story.running && !releaseClock) releaseClock = world.hold();
     if (!story.running && releaseClock) { releaseClock(); releaseClock = null; }
     if (storyWasRunning && !story.running) { phone.setCue(null); phone.cancelRead(); }
-    storyWasRunning = story.running; renderBar();
+    storyWasRunning = story.running; renderBar(); panel.render(); // the Gate tab's test buttons
   });
 
   // Story bar below the viewport -----------------------------------------

@@ -106,7 +106,7 @@ export function createPanel({root, sim, actions}) {
     <div class="pk-gate-status ${g}"><div class="pk-gate-icon">${icon('gate')}</div><div><span class="metric-label">${t('gate.status')}</span><strong>${t(`gate.${g}`)}</strong><small><i class="pk-dot"></i>${t('gate.online')}</small></div>${pill(t(`gate.${g}`), tone)}</div>
     <div class="pk-cams">${['in', 'out'].map(k => `<figure>${ui.snapshots[k] ? `<img src="${ui.snapshots[k]}" alt="">` : `<div class="pk-cam-empty">${icon('camera')}</div>`}<figcaption>${t(k === 'in' ? 'gate.camIn' : 'gate.camOut')}</figcaption></figure>`).join('')}</div>
     <div class="dashboard-section"><h3>${t('gate.manual')}</h3><p class="pk-hint">${t('gate.manual.note')}</p><div class="pk-manual"><select data-focus="manual-reason" aria-label="${t('gate.reason')}">${REASONS.map(r => `<option value="${r}"${ui.manualReason === r ? ' selected' : ''}>${t(r)}</option>`).join('')}</select><button class="pk-btn primary" data-act="manual-open"${g !== 'closed' || open.length ? ' disabled' : ''}>${t('gate.openOnce')}</button></div>${open.length ? `<p class="pk-hint">${t('gate.manual.alertFirst')}</p>` : ''}</div>
-    <div class="dashboard-section"><h3>${t('gate.sim')} · ${t('sim')}</h3><div class="pk-sim-grid">${[['registered', 'car'], ['visitor', 'user'], ['unknown', 'alert'], ['exit', 'arrowOut']].map(([k, ic]) => `<button class="pk-btn" data-sim="${k}"${cue(`sim:${k}`)}>${icon(ic)}${t(`gate.sim.${k}`)}</button>`).join('')}</div></div>
+    <div class="dashboard-section"><h3>${t('gate.sim')} · ${t('sim')}</h3><div class="pk-sim-grid">${[['registered', 'car'], ['visitor', 'user'], ['unknown', 'alert'], ['exit', 'arrowOut']].map(([k, ic]) => `<button class="pk-btn" data-sim="${k}"${cue(`sim:${k}`)}${actions.storyRunning?.() ? ' disabled' : ''}>${icon(ic)}${t(`gate.sim.${k}`)}</button>`).join('')}</div></div>
     <div class="dashboard-section"><h3>${t('gate.log')}</h3>${sim.state.events.slice(0, 14).map(eventRow).join('')}</div>`;
   }
   function alertCard(a) {
@@ -179,7 +179,8 @@ export function createPanel({root, sim, actions}) {
     }
     if (d.alertOpen) { actions.resolveAlert(d.alertOpen, 'open', ui.alertReason[d.alertOpen] || REASONS[1]); return; }
     if (d.alertDeny) { actions.resolveAlert(d.alertDeny, 'deny'); return; }
-    if (d.sim) { actions.simulate(d.sim); return; }
+    // Not while the story plays: a car sent then got into its steps (the visitor's car denied in the stray's place).
+    if (d.sim) { if (!actions.storyRunning?.()) actions.simulate(d.sim); return; }
     if (d.retry) { sim.retrySync(d.retry); return; }
     if (d.toggle) { const v = sim.state.vehicles.find(v => v.id === d.toggle); if (v) sim.setEnabled(v.id, !v.enabled); return; }
     switch (d.act) {
@@ -188,7 +189,8 @@ export function createPanel({root, sim, actions}) {
       case 'reject': ui.rejecting = true; ui.rejectText = t('req.reject.default'); render(); break;
       case 'reject-cancel': ui.rejecting = false; render(); break;
       case 'reject-confirm': sim.reject(ui.selected, ui.rejectText.trim()); ui.rejecting = false; break;
-      case 'revoke': if (confirm(t('req.revoke.confirm'))) sim.revoke(ui.selected); break;
+      // Says whether an email goes: only once the ticket has been emailed (as in the real app).
+      case 'revoke': if (confirm(t(sim.state.requests.find(q => q.id === ui.selected)?.history.some(h => h.key === 'h.email') ? 'req.revoke.confirm' : 'req.revoke.confirmNoMail'))) sim.revoke(ui.selected); break;
       case 'manual-open': actions.manualOpen(ui.manualReason); break;
       case 'import': { const n = sim.importCsv(); actions.toast?.(n ? t('veh.import.done', {n}) : t('veh.import.none')); break; }
       case 'csv-events': download(`osd-parking-events-${getLang()}.csv`, [['time', 'kind', 'plate', 'province', 'type', 'camera', 'by', 'reason'], ...sim.state.events.map(e => [fmtDateTime(e.at), t(KIND_KEY[e.kind]), e.plate, e.province, typeLabel(e.type), e.camera, e.by ? t(e.by) : '', e.reason ? t(e.reason) : ''])]); break;

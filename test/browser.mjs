@@ -161,8 +161,8 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
     // Pages open with the world clock at real speed (`day=0`, from 09:00) unless the path sets `day` itself: checks of
     // one scene then see the morning they expect, and only the day-cycle checks run the time-lapse. In software
     // rendering they also draw the 3D view at half resolution (`render=0.5`), the bulk of the CPU's work.
+    // The console log is the runner's to clear, per check: cleared here, errors on a check's earlier pages went unseen.
     async goto(path) {
-      logs.length = 0;
       let url = path.replace(/^\//, '');
       const add = (name, value) => { if (new RegExp(`[?&]${name}=`).test(url)) return; const [before, hash = ''] = url.split('#'); url = `${before}${before.includes('?') ? '&' : '?'}${name}=${value}${hash ? '#' + hash : ''}`; };
       add('day', 0);

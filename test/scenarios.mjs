@@ -76,6 +76,73 @@ export const scenarios = [
     expect(r.denied, 'unknown car was denied');
   }},
 
+  {name: 'the Gate tab\'s test cars are off while the story plays, on again after', async run(p, expect) {
+    // An Unknown car sent during the story got into its steps: step 7 denied the visitor's car in the stray's place, and
+    // the story's own unknown car then held the barrier unanswered.
+    await p.goto(parking('&story=1'));
+    await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
+    await p.until(`__parking.story.index===5 && document.querySelector('[data-sim="unknown"]')`, {timeout: 60000, what: 'step 6 with the Gate tab'});
+    const off = await p.eval(`[...document.querySelectorAll('[data-sim]')].every(b=>b.disabled)`);
+    const alerts = await p.eval('__parking.sim.state.alerts.length');
+    await p.eval(`document.querySelector('[data-sim="unknown"]').dispatchEvent(new MouseEvent('click',{bubbles:true}))`);
+    await p.sleep(1500);
+    const strays = await p.eval(`__parking.sim.state.alerts.filter(a=>a.plate!==${JSON.stringify(STORY_PLATE)}&&a.plate!=='2ฒษ 9077').length`);
+    expect(off && strays === 0, `test cars off during the story (disabled ${off}, ${strays} stray alerts of ${alerts})`);
+    await p.click('[data-bar="free"]');
+    await p.until(`!__parking.story.running`, {timeout: 5000, what: 'free play'});
+    await p.click('[data-tab="gate"]');
+    expect(await p.eval(`[...document.querySelectorAll('[data-sim]')].every(b=>!b.disabled)`), 'on again in free play');
+  }},
+  {name: 'story: unticking Auto-advance at the Approve cue leaves the approval to the presenter', async run(p, expect) {
+    // It approved anyway some 2.6 s later: Auto was read once, when the cue went up.
+    await p.goto(parking('&story=1'));
+    await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
+    // At once when the cue lights (at speed 30 the auto pause is under 0.1 s).
+    await p.eval(`new MutationObserver((m,o)=>{if(document.querySelector('[data-act="approve"][data-cue="true"]')){__parking.story.setAuto(false);o.disconnect()}}).observe(document.body,{subtree:true,childList:true,attributes:true})`);
+    await p.until('!__parking.story.auto', {timeout: 60000, what: 'the approve cue'});
+    await p.sleep(1500);
+    const before = await p.eval(`${STORY_REQUEST}?.status`);
+    expect(before === 'pending' && await p.eval('__parking.story.waitingForNext'), `still pending, waiting for Next (${before})`);
+    await p.click('[data-bar="next"]');
+    await p.until(`${STORY_REQUEST}?.status==='approved'`, {timeout: 5000, what: 'Next approving'});
+  }},
+  {name: 'guided story: a tap on the cued Send, New request on the phone and a language switch keep the story whole', async run(p, expect) {
+    // The cued Send sent the request twice (a new receipt, a random colour); New request left step 5's ticket caption
+    // over an empty form; the step 4 hint stayed in Thai after a switch to English.
+    await p.goto(parking('&story=1&auto=0'));
+    await p.until('window.__parking && __parking.story.running', {timeout: 40000});
+    await p.until('__parking.story.waitingForNext', {timeout: 30000, what: 'step 1'}); await p.click('[data-bar="next"]');
+    // Tapped the moment it lights (it is lit for 0.9 s, some 30 ms at speed 30).
+    await p.eval(`new MutationObserver((m,o)=>{const b=document.querySelector('[data-ph="submit"][data-cue="true"]');if(b){o.disconnect();window.__tapped=true;b.click()}}).observe(document.body,{subtree:true,childList:true,attributes:true})`);
+    await p.until('window.__tapped', {timeout: 30000, what: 'the Send cue'});
+    await p.until('__parking.story.index===1 && __parking.story.waitingForNext', {timeout: 30000, what: 'request sent'});
+    const sent = JSON.parse(await p.eval(`JSON.stringify(__parking.sim.state.requests.filter(q=>q.visitor.name===${JSON.stringify(VISITOR)}).map(q=>q.color))`));
+    expect(sent.length === 1 && sent[0] === 4, `one request, in the story's colour (${JSON.stringify(sent)})`);
+    await p.click('[data-bar="next"]');
+    await p.until('__parking.story.index===2 && __parking.story.waitingForNext', {timeout: 30000, what: 'step 3'});
+    await p.click('[data-ph="new"]');
+    await p.click('[data-bar="next"]');
+    await p.until(`document.querySelector('.pk-caption-hint')`, {timeout: 30000, what: 'the step 4 hint'});
+    await p.click('#lang-toggle');
+    await p.until(`document.documentElement.lang==='en'`, {timeout: 3000, what: 'the page in English'});
+    const hint = await p.eval(`document.querySelector('.pk-caption-hint')?.textContent`);
+    expect(/Approve/.test(hint), `the hint in English too (${hint})`);
+    await p.click('[data-bar="next"]');
+    await p.until('__parking.story.index===3 && __parking.story.waitingForNext', {timeout: 30000, what: 'approved'});
+    await p.click('[data-bar="next"]');
+    await p.until('__parking.story.index===4 && __parking.story.waitingForNext', {timeout: 30000, what: 'step 5'});
+    expect(await p.eval(`!!document.querySelector('#pk-phone .ph-ticket')`), 'the phone shows the ticket at step 5');
+    const toasts = await p.eval(`[...document.querySelectorAll('.pk-toast')].map(t=>t.textContent).join(' | ')`);
+    expect(/Ticket emailed/.test(toasts), `the ticket email's toast (${toasts})`);
+  }},
+  {name: 'email toasts say which email went: a rejection is not "ticket emailed"', async run(p, expect) {
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`(()=>{const q=__parking.sim.state.requests.find(q=>q.status==='pending');__parking.sim.reject(q.id,'ทดสอบ')})()`);
+    await p.until(`document.querySelector('.pk-toast')`, {timeout: 3000, what: 'a toast'});
+    const toasts = await p.eval(`[...document.querySelectorAll('.pk-toast')].map(t=>t.textContent).join(' | ')`);
+    expect(/ไม่อนุมัติ/.test(toasts) && !/ยืนยัน/.test(toasts), `the rejection's toast (${toasts})`);
+  }},
   {name: 'guided story: Free play at the approve cue does not approve', async run(p, expect) {
     await p.goto(parking('&story=1&auto=0'));
     await p.until('window.__parking && __parking.story.running', {timeout: 40000});
@@ -175,6 +242,7 @@ export const scenarios = [
     const before = await p.eval(vips);
     await p.eval('__world.jumpTo(60)');
     const after = await p.eval(vips);
+    // Not always none: a VIP still driving in at the jump parks after it.
     expect(before > 0 && after < before, `VIPs parked ${before} -> ${after} after the night`);
   }},
   {name: 'the report\'s peak counts the cars parked overnight', async run(p, expect) {
@@ -582,9 +650,16 @@ export const scenarios = [
     await p.click('#lang-toggle');
     await p.until(`document.documentElement.lang==='en'`, {timeout: 3000, what: 'the page in English'});
     await p.sleep(300);
-    const thai = JSON.parse(await p.eval(`JSON.stringify((()=>{const out=new Set();const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){const t=n.textContent.trim();const el=n.parentElement;if(!/[\\u0E00-\\u0E7F]/.test(t)||!el||el.offsetParent===null||el.closest('[hidden],#legacy-controls,.pk-plate-chip,.pk-plate-big,.ph-ticket-plate,.pk-feed-plate,option,.pk-attention small,.pk-row-main,.pk-vrow small'))continue;out.add(t.slice(0,40));}return [...out]})())`));
+    const scan = `JSON.stringify((()=>{const out=new Set();const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){const t=n.textContent.trim();const el=n.parentElement;if(!/[\\u0E00-\\u0E7F]/.test(t.replace(/\\d?[\\u0E01-\\u0E2E]{1,3} \\d{1,4}/g,''))||!el||el.offsetParent===null||el.closest('[hidden],#legacy-controls,.pk-plate-chip,.pk-plate-big,.ph-ticket-plate,.pk-feed-plate,option,.pk-attention small,.pk-row-main,.pk-vrow small'))continue;out.add(t.slice(0,40));}return [...out]})())`;
+    // Every tab of the console and the phone, not only the overview on show.
+    const thai = new Set(JSON.parse(await p.eval(scan)));
+    await p.click('[data-bar="phone"]');
+    for (const tab of ['requests', 'vehicles', 'gate', 'reports']) {
+      await p.click(`[data-tab="${tab}"]`); await p.sleep(150);
+      for (const t of JSON.parse(await p.eval(scan))) thai.add(`${tab}: ${t}`);
+    }
     await p.click('#lang-toggle');
-    expect(thai.length === 0, `no stray Thai UI text (found: ${thai.join(' | ')})`);
+    expect(thai.size === 0, `no stray Thai UI text (found: ${[...thai].join(' | ')})`);
   }},
 
   {quick: true, name: 'night: page goes dark, phone text stays dark on white', async run(p, expect) {
@@ -611,6 +686,35 @@ export const scenarios = [
     expect(await p.eval(`!document.querySelector('a[download]')`), 'no model download link (the demo runs locally)');
   }},
 
+  {name: 'explore page: Reset view from the stairs puts back the floor\'s label; turning the screen keeps the stairs view', async run(p, expect) {
+    // Reset view (or R) framed the floor under the stairs' label; a turned phone threw the visitor out of the stairs.
+    await p.goto(EXPLORE);
+    await p.until(LOADED, {timeout: 40000, what: 'model ready'});
+    await p.click('#stairs');
+    const stairs = await p.eval(`document.querySelector('#view-label').textContent`);
+    await viewport(p, 1000, 1600);
+    await p.sleep(400);
+    expect(await p.eval(`document.querySelector('#view-label').textContent`) === stairs && await p.eval('__camera.fov') !== 38, `the stairs view kept on a turned screen (${stairs})`);
+    await viewport(p);
+    await p.click('#reset');
+    const label = await p.eval(`document.querySelector('#view-label').textContent`);
+    expect(label !== stairs && !/บันได|Stairs/.test(label), `the floor's label after Reset view (${stairs} -> ${label})`);
+  }},
+  {name: 'browser Back from the explore page shows the showcase again; the kiosk keeps the showcase', async run(p, expect) {
+    // Back changed only the hash and left the explore page on screen; in the kiosk, Explore left for a page with no kiosk.
+    await p.goto(`?${FAST}`);
+    await p.until(LOADED, {timeout: 40000, what: 'showcase'});
+    await p.click('.explore-link');
+    await p.until(`location.hash==='#explore' && !!document.querySelector('#view-label') && ${LOADED}`, {timeout: 40000, what: 'the explore page'});
+    await p.eval('history.back()');
+    await p.until(`document.body.classList.contains('showcase-page') && ${LOADED}`, {timeout: 40000, what: 'the showcase after Back'});
+    await p.goto(`?kiosk=1&${FAST}`);
+    await p.until(`${LOADED} && document.body.classList.contains('kiosk-on')`, {timeout: 40000, what: 'the kiosk'});
+    expect(await p.eval(`!document.querySelector('.explore-link').offsetParent`), 'no Explore link in the kiosk');
+    await p.eval(`document.querySelector('.tour-brand').click()`);
+    await p.sleep(500);
+    expect(await p.eval(`document.body.classList.contains('kiosk-on')`), 'the logo leaves the kiosk on');
+  }},
   {name: 'explore page follows the English choice', async run(p, expect) {
     await p.goto(EXPLORE);
     await p.eval(`localStorage.setItem('osd-demo-language','en')`);
@@ -668,10 +772,13 @@ export const scenarios = [
     await p.until(ready, {timeout: 40000});
     await p.click('[data-bar="phone"]');
     await p.click('[data-ph="photo"]'); // free play: reads a sample plate after ~1.5 s
+    // Nor does the free-play read land in the story's form on the way (step 2's own read wrote over it after).
+    await p.eval(`(()=>{window.__plates=new Set();const t=setInterval(()=>{const v=document.querySelector('#pk-phone input[name=plate]')?.value;if(v)__plates.add(v);if(${STORY_REQUEST})clearInterval(t)},20)})()`);
     await p.click('[data-bar="play"]');
     await p.until(`!!${STORY_REQUEST}`, {timeout: 40000, what: 'story request submitted'});
-    const plate = await p.eval(`${STORY_REQUEST}.plate`);
+    const plate = await p.eval(`${STORY_REQUEST}.plate`), seen = await p.eval('[...__plates]');
     expect(plate === STORY_PLATE, `story request has the story plate (${plate})`);
+    expect(seen.every(v => v === STORY_PLATE), `only the story plate in its form (${seen.join(', ')})`);
   }},
 
   {name: 'the room-colour bar shows at the meeting room and the pond only', async run(p, expect) {
@@ -917,6 +1024,34 @@ export const scenarios = [
       const built = await p.eval(`__renderer.info.programs.slice(${before}).map(x=>x.name)`);
       expect(!built.length, `${time}: no shader built during the flights (${built.join(', ') || 'none'})`);
     }
+  }},
+  {name: 'idle orbit: a stop the visitor picks counts as use (no orbit the moment it lands); zooming out stops past the whole site', async run(p, expect) {
+    // The dock is outside the 3D view: after 20 s without touching the view, the camera circled as soon as it landed.
+    // And zooming out went on to 500 m, the world a disc floating in the sky.
+    await p.goto(`?debug=1&dest=energy`);
+    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='energy'`, {timeout: 40000, what: 'at the energy stop'});
+    await p.eval('__idleNow()');
+    await p.click('[data-destination="pond"]');
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='pond'`, {timeout: 20000, what: 'landed at the pond'});
+    await p.sleep(300);
+    const a = await p.eval('__controls.object.position.toArray()'); await p.sleep(1500); const b = await p.eval('__controls.object.position.toArray()');
+    expect(Math.hypot(...a.map((v, i) => v - b[i])) < 1e-3, 'still after landing');
+    await p.click('[data-destination="overview"]');
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='overview'`, {timeout: 20000, what: 'landed at the overview'});
+    const r = JSON.parse(await p.eval(`JSON.stringify({d:__camera.position.distanceTo(__controls.target),max:__controls.maxDistance})`));
+    expect(r.max >= r.d * 1.15 && r.max <= Math.max(140, r.d * 1.3), `zoom out stops a little past the overview (${r.d.toFixed(0)} m, max ${r.max.toFixed(0)} m)`);
+  }},
+  {name: 'narrow screens: the story caption stays readable with the visitor\'s phone open', async run(p, expect) {
+    // Beside the phone it had a 40–66 px column on phones and upright tablets: one word a line, cut off at the top.
+    for (const [w, h] of [[390, 844], [768, 1024]]) {
+      await viewport(p, w, h);
+      await p.goto(parking('&story=1&auto=0'));
+      await p.until('window.__parking && __parking.story.running', {timeout: 40000});
+      await p.until(`__parking.story.waitingForNext && document.body.classList.contains('phone-open') && document.querySelector('.pk-caption:not([hidden])')`, {timeout: 30000, what: 'step 1 with the phone'});
+      const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const c=document.querySelector('.pk-caption').getBoundingClientRect(),v=document.querySelector('#viewport').getBoundingClientRect();return {w:c.width,vw:v.width,top:c.top-v.top,bottom:v.bottom-c.bottom}})())`));
+      expect(r.w > r.vw * .8 && r.top >= 0 && r.bottom >= 0, `${w}×${h}: the caption across the view (${Math.round(r.w)} of ${Math.round(r.vw)} px), inside it`);
+    }
+    await viewport(p);
   }},
   {name: 'idle orbit: scrolling the panel leaves it turning; a wheel on the 3D view stops it', async run(p, expect) {
     await p.goto('?debug=1&dest=energy');
@@ -1440,7 +1575,8 @@ export const scenarios = [
     const paused = await p.eval(temp);
     expect(paused !== 27.4, `no scenario while paused (room at ${paused} °C, the scenario's start is 27.4)`);
     await p.click('#day-pause');
-    await p.until(`${temp}===27.4 || ${temp}<${paused}`, {timeout: 5000, what: 'the scenario on Resume'});
+    // The scenario's own note (the room cools by its schedule anyway, and a falling reading passed without it).
+    await p.until(`document.querySelector('.scenario-note')?.textContent.includes('กำลังจำลองการทำความเย็น')`, {timeout: 5000, what: 'the scenario on Resume'});
     expect(true, 'the scenario started on Resume');
   }},
   {name: 'kiosk: a flight cut short by leaving the page is flown again on return', async run(p, expect) {
@@ -1485,8 +1621,9 @@ export const scenarios = [
     await p.until('window.__parking && __parking.story.running && !!document.querySelector(\'[data-bar="pause"]\')', {timeout: 60000, what: 'the morning story with its Pause'});
     await p.click('[data-bar="pause"]');
     await p.sleep(300);
-    const r = JSON.parse(await p.eval(`JSON.stringify({running:__parking.story.running,paused:__parking.story.paused})`));
+    const r = JSON.parse(await p.eval(`JSON.stringify({running:__parking.story.running,paused:__parking.story.paused,following:document.querySelector('#day-play').getAttribute('aria-pressed')})`));
     expect(r.running && r.paused, `the story paused, not ended (running ${r.running}, paused ${r.paused})`);
+    expect(r.following === 'true', `the kiosk still following the day (${r.following})`);
   }},
   {name: 'kiosk: Stop following stops the flight under way too', async run(p, expect) {
     // It turned Follow off but left the flight Follow had started to land, and the panel moved on to its stop.
@@ -1725,9 +1862,10 @@ export const scenarios = [
     const start = await scroll(0, 0);
     const far = await scroll(40, 400);
     expect(far <= 91, `400 big sideways scrolls leave the view's pivot ${far.toFixed(0)} m from the site's middle (started ${start.toFixed(0)} m)`);
+    const back = await scroll(-40, 40);
+    await scroll(40, 400);
     const round = await p.eval(`(()=>{const c=document.querySelector('#viewport canvas');for(let i=0;i<200;i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:400,clientY:300,deltaX:0,deltaY:-8}));const t=__controls.target;return Math.hypot(t.x,t.z);})()`);
     expect(round <= 91, `scrolling the other way round the site does not creep out either (${round.toFixed(0)} m)`);
-    const back = await scroll(-40, 40);
     // Slower further out: one sideways scroll's outward step at 30 m and at 80 m from the site's middle (the hard 90 m
     // limit alone would pass the checks above).
     const outward = r => p.eval(`(()=>{const c=document.querySelector('#viewport canvas'),t=__controls.target,step=dx=>{t.set(${r},0,0);__camera.position.set(${r},20,60);__controls.update();
@@ -1735,12 +1873,13 @@ export const scenarios = [
     const [near, far2] = [await outward(30), await outward(80)];
     expect(near > 0 && far2 < near * .5, `an outward scroll moves the view ${near.toFixed(2)} m at 30 m out, ${far2.toFixed(2)} m at 80 m`);
     expect(back < far - 20, `scrolling back is not slowed (${far.toFixed(0)} m to ${back.toFixed(0)} m in 40 scrolls)`);
-    // Up and down: from a low view, scroll far down then far up. It went under the ground, or off into the sky.
+    // Up and down on the screen slide the view forward and back at the height it has (it went up into the air, or
+    // under the ground).
     const vertical = JSON.parse(await p.eval(`JSON.stringify((()=>{__controls.target.set(0,5,0);__camera.position.set(0,8,60);__controls.update();
-      const c=document.querySelector('#viewport canvas'),go=d=>{for(let i=0;i<300;i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:400,clientY:300,deltaX:0,deltaY:d}));return {pivot:+__controls.target.y.toFixed(2),camera:+__camera.position.y.toFixed(2)}};
+      const c=document.querySelector('#viewport canvas'),go=d=>{for(let i=0;i<30;i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:400,clientY:300,deltaX:0,deltaY:d}));return {pivot:+__controls.target.y.toFixed(2),camera:+__camera.position.y.toFixed(2),z:+__controls.target.z.toFixed(1)}};
       return {down:go(40),up:go(-40)}})())`));
-    expect(vertical.down.pivot >= 0 && vertical.down.camera > 0, `panning down stops at the ground (pivot ${vertical.down.pivot} m, camera ${vertical.down.camera} m up)`);
-    expect(vertical.up.pivot <= 35, `panning up stops at 35 m (pivot ${vertical.up.pivot} m)`);
+    expect(vertical.down.pivot === 5 && vertical.down.camera === 8 && vertical.up.pivot === 5 && vertical.up.camera === 8, `panning keeps the height (pivot ${vertical.down.pivot}/${vertical.up.pivot} m, camera ${vertical.down.camera}/${vertical.up.camera} m)`);
+    expect(vertical.down.z !== vertical.up.z, `up and down on the screen go forward and back (${vertical.down.z} / ${vertical.up.z})`);
     // Orbiting down to below the horizon: the camera stays above its pivot.
     const orbit = await p.eval(`(()=>{__controls.target.set(0,2,0);__camera.position.set(0,-20,40);__controls.update();return +(__camera.position.y-__controls.target.y).toFixed(2)})()`);
     expect(orbit > 0, `the camera cannot orbit under the ground (${orbit} m above its pivot)`);
@@ -1748,7 +1887,8 @@ export const scenarios = [
     expect(fog.far < fog.ground, `the world is gone in the fog (${fog.far} m) before the ground ends (${fog.ground} m)`);
     // Pixels: the road by the gate shows, its far end has faded into the sky. (Fog worked out per vertex blended
     // across the road's few big triangles, whose corners lie 100 m out: the whole road and ground vanished.)
-    const px = JSON.parse(await p.eval(`JSON.stringify((()=>{__controls.target.set(0,0,0);__camera.position.set(60,90,140);__controls.update();
+    // From further out than zooming goes (the fog's whole width in view).
+    const px = JSON.parse(await p.eval(`JSON.stringify((()=>{__controls.maxDistance=500;__controls.target.set(0,0,0);__camera.position.set(60,90,140);__controls.update();
       const r=__renderer,gl=r.getContext(),w=gl.drawingBufferWidth,h=gl.drawingBufferHeight;r.render(__scene,__camera);
       const at=(x,z)=>{const v=new __camera.position.constructor(x,.3,z).project(__camera),b=new Uint8Array(4);gl.readPixels(Math.round((v.x+1)/2*w),Math.round((v.y+1)/2*h),1,1,gl.RGBA,gl.UNSIGNED_BYTE,b);return [...b].slice(0,3)};
       const sky=new Uint8Array(4);gl.readPixels(2,h-3,1,1,gl.RGBA,gl.UNSIGNED_BYTE,sky);
@@ -2256,8 +2396,13 @@ export const scenarios = [
     await p.until(ready, {timeout: 40000});
     await p.click('[data-bar="play"]');
     await p.until('__parking.story.running && __parking.story.index >= 1', {timeout: 30000, what: 'story step 2'});
-    const a = await p.eval('__world.now()'); await p.sleep(1000); const b = await p.eval('__world.now()');
-    expect((b - a) / 1000 < SPEED * 3, `world clock at real speed during the story (${((b - a) / 1000).toFixed(0)} s in 1 s at speed ${SPEED})`);
+    // A sample within one step: a step that sets the story's time (09:41) jumps the clock by itself.
+    let a, b;
+    for (let i = 0; i < 4; i++) {
+      const s0 = await p.eval('__parking.story.index'); a = await p.eval('__world.now()'); await p.sleep(500); b = await p.eval('__world.now()');
+      if (await p.eval('__parking.story.index') === s0) break;
+    }
+    expect((b - a) / 1000 < SPEED * 1.5, `world clock at real speed during the story (${((b - a) / 1000).toFixed(0)} s in 0.5 s at speed ${SPEED})`);
     await p.click('[data-bar="free"]');
     const c = await p.eval('__world.now()'); await p.sleep(1000); const d = await p.eval('__world.now()');
     expect((d - c) / 60000 > 20, `time-lapse again after the story (${((d - c) / 60000).toFixed(0)} min in 1 s)`);

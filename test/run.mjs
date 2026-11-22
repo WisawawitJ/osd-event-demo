@@ -52,6 +52,7 @@ async function worker() {
       // Each check starts with nothing saved in the page's storage (a check that failed with English on, or the idle
       // orbit off, left it so for the next one).
       await page.cdp('Storage.clearDataForOrigin', {origin, storageTypes: 'local_storage'}).catch(() => {});
+      page.logs.length = 0;
       try { await scenario.run(page, expect); } catch (error) { problems.push(error.message); }
       problems.push(...page.logs.filter(line => !NOISE.test(line)));
       const shot = problems.length ? await page.shot(scenario.name.replace(/\W+/g, '-')).catch(() => '') : '';

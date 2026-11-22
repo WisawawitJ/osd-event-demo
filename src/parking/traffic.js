@@ -274,8 +274,12 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     gateLanes[lane] = run.catch(() => {});
     return run;
   }
-  // Plate reads take turns: the camera card shows one car at a time.
-  function readPlate(...args) { const run = plateReads.then(() => hooks.readPlate?.(...args)); plateReads = run.catch(() => {}); return run; }
+  // Plate reads take turns: the camera card shows one car at a time. One still waiting its turn at a reset is skipped
+  // (it showed a removed car's card after the restart, and its flow, ended, never hid it).
+  function readPlate(...args) {
+    const gen = generation, run = plateReads.then(() => (gen === generation ? hooks.readPlate?.(...args) : undefined));
+    plateReads = run.catch(() => {}); return run;
+  }
   // Up for a car passing under the arm until `passedUnder`, after which it comes down `ms` later unless another car is
   // under it by then.
   async function raiseFor(gen) { if (gen !== generation) throw ABORT; under++; await openBoom(gen); }

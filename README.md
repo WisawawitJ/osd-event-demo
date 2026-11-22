@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (164), about 115 s: run before a commit
+npm test                 # all behaviour checks (172), about 120 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -49,13 +49,13 @@ different area (load, language, night, flights, lights, pond, clock, car park, s
 (`/usr/lib/chromium/chromium` itself where it exists, so the desktop's own Chromium flags and extensions stay out;
 `CHROMIUM=` names another binary). Browser profiles go in `$TEST_TMP` (default the system temp folder) under
 `osd-demo-test`, named after the runner's process; each is removed once its browser has exited, and at the next start
-any whose runner is gone (killed outright) is removed, its browser killed if still running. Each check starts with the page's saved settings (language, idle orbit) cleared. A filter
+any whose runner is gone (killed outright) is removed, its browser killed if still running. Each check starts with the page's saved settings (language, idle orbit) and console log cleared, and every browser runs at low CPU priority. A filter
 that matches no check fails. There are no npm dependencies; the tests need Node 22 or newer for its built-in
 WebSocket. **It never uses the Intel iGPU by itself**: on this laptop headless Chromium on the iGPU hung it twice (i915
 GPU hang, then a failed reset), and since the iGPU drives the display the whole desktop froze. By default it renders on
 the NVIDIA GPU (only NVIDIA's EGL library is loaded) with 6 browsers; with 8 the suite, grown to over 100 checks, began failing timing checks under the load.
 It closes any hardware browser found holding the iGPU open, falling back to software. Without the NVIDIA driver it
-renders in software (SwiftShader, 3 browsers at low CPU priority, the 3D view at half resolution with `?render=0.5`):
+renders in software (SwiftShader, 3 browsers, the 3D view at half resolution with `?render=0.5`):
 about 9½ minutes, and some timing-sensitive checks fail at those frame rates. `GPU=nvidia|software|vulkan|egl` forces
 one (`egl` is the iGPU: don't).
 
@@ -122,19 +122,25 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 ## At the booth
 
 - **Kiosk mode** (bottom-left checkbox, or `?kiosk=1`) follows the day. When a visitor touches the screen it stops and
-  they can explore. After a quiet minute it follows the day again. **Start tour** still plays the fixed tour.
+  they can explore. After a quiet minute it follows the day again. **Start tour** still plays the fixed tour. While it
+  runs the Explore link is hidden and the logo does nothing, so the screen never leaves the showcase.
 - On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance** and
   **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
+  Unticking auto-advance mid-step stops right there, at the cue or the step's pause. A drag on the 3D view, Esc or
+  **Exit story** leaves the story.
 - **EN / TH** in the header switches the whole showcase page (building and parking) between Thai and English. Names, plates and provinces stay as entered. The `#explore` page opens in the language last chosen (room names included).
 - **Night** / **Day** in the header moves the world clock on to 20:00 or 07:30 (showcase and explore).
 - **Moving the view**: drag to rotate; Shift-drag (or Ctrl-drag), right-drag, the arrow keys or, on a touchpad, a
-  two-finger scroll to pan; the mouse wheel or a pinch to zoom. Close in, zooming in walks forward instead of stalling.
+  two-finger scroll to pan; the mouse wheel or a pinch to zoom. Panning slides across the ground at the height the
+  camera has (up and down on the screen go forward and back); zooming and tilting change the height. Close in,
+  zooming in walks forward instead of stalling.
   Panning slows the further the view goes from the site and stops 90 m out (coming back is never slowed), and keeps
   between the ground and 35 m up; orbiting stops just above the horizon, so the camera never goes under the ground. The world
-  fades into the background from 65 m to 95 m out from the site's middle, so the ground's edge never shows. The ground
+  fades into the background from 65 m to 95 m out from the site's middle, so the ground's edge never shows, and zooming
+  out stops a little past the whole-site view. The ground
   is a field of mown grass with light and dark patches (a grass texture sampled twice at different sizes and angles, blended with patches worked out per pixel, so it never repeats).
-- **View controls** at the bottom right of the 3D view: zoom in, zoom out, **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
+- **View controls** at the bottom right of the 3D view: zoom in, zoom out, **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input (a flight to a stop the visitor picked counts as input) the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
 
 ### The parking story (10 steps, about 2½ minutes on auto)
 

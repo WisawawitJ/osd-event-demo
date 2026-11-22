@@ -101,6 +101,7 @@ const S = {
   'req.reject.reason': ['เหตุผล (ส่งให้ผู้ติดต่อ)', 'Reason (sent to the contact)'],
   'req.reject.default': ['วันที่ขอตรงกับวันปิดซ่อมบำรุงลานจอด กรุณาเลือกวันใหม่', 'The car park is closed for maintenance that day; please choose another date'],
   'req.revoke.confirm': ['ยกเลิกสิทธิ์ทันที และแจ้งทั้งสองฝ่ายทางอีเมล?', 'End access now and email both parties?'],
+  'req.revoke.confirmNoMail': ['ยกเลิกสิทธิ์ทันที? (ยังไม่ได้ส่งบัตรจอดทางอีเมล จึงไม่มีอีเมลแจ้ง)', 'End access now? (No ticket was emailed yet, so no email goes out.)'],
   'req.approve.confirm': ['อนุมัติแล้วระบบจะลงทะเบียนรถใน ATOM ออก QR และส่งอีเมลยืนยัน', 'Approving registers the car in ATOM, issues a QR code and emails the ticket'],
   'req.history': ['ประวัติ', 'History'],
   'req.flag.today': ['มาถึงวันนี้', 'Arrives today'],
@@ -111,6 +112,8 @@ const S = {
   'req.registered': ['ลงทะเบียนใน ATOM แล้ว', 'Registered in ATOM'],
   'req.registering': ['กำลังลงทะเบียนใน ATOM…', 'Registering in ATOM…'],
   'req.emailSent': ['ส่งอีเมลยืนยันแล้ว', 'Ticket emailed'],
+  'req.emailSent.rejected': ['ส่งอีเมลแจ้งผลไม่อนุมัติแล้ว', 'Rejection emailed'],
+  'req.emailSent.revoked': ['ส่งอีเมลแจ้งยกเลิกสิทธิ์แล้ว', 'Revocation emailed'],
 
   // history actions
   'h.submitted': ['ส่งคำขอจากหน้าเว็บสาธารณะ', 'Submitted on the public page'],
