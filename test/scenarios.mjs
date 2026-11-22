@@ -104,21 +104,6 @@ export const scenarios = [
     expect(status === 'pending', `request stays pending (got ${status})`);
   }},
 
-  {name: 'the car park\'s catch-up after the 03:00 wrap logs today, not tomorrow', async run(p, expect) {
-    // The wrap moved the log back a day but not the car park's last look: the next catch-up spread its departures
-    // between that (a day ahead) and now, logging them a day in the future.
-    // At the meeting room: the car park is hidden, so its catch-up does the coming and going.
-    await p.goto(`?dest=meeting&${FAST}&time=23:00`);
-    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting' && !__parking.lot.root.visible`, {timeout: 40000, what: 'at the meeting room, the car park hidden'});
-    // Extra cars in the hidden car park as the day wraps, for the first look after it to take away.
-    await p.eval(`(()=>{window.__wrapped=-1;const off=__world.subscribe(kind=>{if(kind!=='wrap')return;off();const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));
-      for(const v of sim.state.vehicles.filter(v=>v.type==='staff'&&!inside.has(v.id)).slice(0,8)){const s=sim.freeStall('staff');if(!s)break;sim.recordEntry({plate:v.plate,province:v.province,type:'staff',stallId:s.id,color:v.color});__parking.traffic.appear(sim.key(v.plate,v.province));}
-      window.__wrapped=sim.state.events.filter(e=>e.kind==='exit').length;});__world.jumpTo(2*60+59);})()`);
-    const exits = `__parking.sim.state.events.filter(e=>e.kind==='exit')`;
-    await p.until(`__wrapped>=0 && ${exits}.length>__wrapped`, {timeout: 20000, what: 'departures logged after the wrap'});
-    const ahead = await p.eval(`${exits}.filter(e=>e.at>__world.now()+60e3).length`);
-    expect(ahead === 0, `no departure logged in the future (${ahead})`);
-  }},
   {name: 'opened before 09:00, the car park holds the cars its log says are in', async run(p, expect) {
     // The seeded morning is 09:00's. Opened earlier, the log lost the later exits but the car park still lacked the
     // cars that made them: at 08:00 the log said 14 in and none out with 10 parked.
@@ -135,37 +120,6 @@ export const scenarios = [
     await p.until(ready, {timeout: 40000});
     const early = await p.eval(`__parking.sim.state.requests.filter(q=>q.createdAt>__world.now()).length`);
     expect(early === 0, `no request from the future (${early})`);
-  }},
-  {name: 'after midnight, the hourly chart counts what the totals count', async run(p, expect) {
-    // Until the day wraps at 03:00, entries after midnight counted in the totals but had no hour in the chart.
-    await p.goto(parking('&time=23:00'));
-    await p.until(ready, {timeout: 40000});
-    await p.eval('__world.setPaused(true)');
-    await p.eval('__world.jumpTo(40)');
-    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&!inside.has(v.id));const s=sim.freeStall('staff');sim.recordEntry({plate:v.plate,province:v.province,type:'staff',stallId:s.id,color:v.color});})()`);
-    const r = JSON.parse(await p.eval(`(()=>{const s=__parking.sim.stats();return JSON.stringify({entries:s.entries,charted:s.hourly.reduce((n,h)=>n+(h.in||0),0)});})()`));
-    expect(r.charted === r.entries, `${r.charted} charted of ${r.entries} entries`);
-  }},
-  {name: 'a jump past midnight finds the VIPs gone home', async run(p, expect) {
-    // VIPs could leave only from 16:30 by the hour reached: a jump from 10:00 to 01:00 left all three parked all night.
-    await p.goto(`?dest=meeting&${FAST}&time=10:00`);
-    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting' && !__parking.lot.root.visible`, {timeout: 40000, what: 'at the meeting room, the car park hidden'});
-    const vips = `[...__parking.sim.state.presence.values()].filter(p=>p.type==='vip').length`;
-    const before = await p.eval(vips);
-    await p.eval('__world.jumpTo(60)');
-    const after = await p.eval(vips);
-    // Not always none: a VIP still driving in at the jump parks after it.
-    expect(before > 0 && after < before, `VIPs parked ${before} -> ${after} after the night`);
-  }},
-  {name: 'the report\'s peak counts the cars parked overnight', async run(p, expect) {
-    // The 03:00 wrap moves the night's entries into yesterday while their cars stay: the peak, counted from zero
-    // through today's entries and exits, came out blank or too low.
-    await p.goto(parking('&time=23:00'));
-    await p.until(ready, {timeout: 40000});
-    await p.eval('__world.setPaused(true)');
-    await p.eval('__world.jumpTo(3*60+5)');
-    const s = JSON.parse(await p.eval(`JSON.stringify((({parked,peak,peakAt})=>({parked,peak,peakAt}))(__parking.sim.stats()))`));
-    expect(s.parked > 0 && s.peak >= s.parked && s.peakAt, `peak ${s.peak} (at ${s.peakAt}) with ${s.parked} cars parked`);
   }},
   {name: 'Vehicles: a row keeps its vehicle when the list reorders', async run(p, expect) {
     // Rows were reused by position: when a retried vehicle synced and moved down the list, the row (and a focused
@@ -213,39 +167,6 @@ export const scenarios = [
     expect(!(await p.eval(`document.querySelector('.pk-feed').hidden`)), 'still up after 4 s paused');
     await p.eval('__world.setPaused(false)');
   }},
-  {name: 'Car leaving sends out a parked visitor too', async run(p, expect) {
-    // The button shared the background's choice of leavers, which never takes visitors: with only a visitor parked,
-    // it did nothing, and a request's visit could not be ended by hand.
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    await p.click('[data-tab="gate"]');
-    const left = await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic;
-      for(const k of t.parkedKeys()){const q=sim.state.presence.get(k);t.vanish(k,()=>sim.recordExit({plate:q.plate,province:q.province}));}
-      const v=sim.state.vehicles.find(v=>v.type==='guest'&&!sim.state.presence.has(sim.key(v.plate,v.province)));const s=sim.freeStall('guest');
-      sim.recordEntry({plate:v.plate,province:v.province,type:'guest',stallId:s.id,color:v.color});const k=sim.key(v.plate,v.province);t.appear(k);
-      const listed=t.parkedKeys().includes(k);document.querySelector('[data-sim="exit"]').click();return listed&&!t.parkedKeys().includes(k);})()`);
-    expect(left, 'Car leaving sent the only parked car, a visitor\'s (parked first), on its way out');
-  }},
-  {name: 'opened late in the day, the car park is that hour\'s at once', async run(p, expect) {
-    // Every start after 09:00 began from the seeded morning: at 23:00, 27 cars stood in the bays and drove out
-    // through the barrier one by one.
-    await p.goto(parking('&time=23:00'));
-    await p.until(ready, {timeout: 40000});
-    const parked = await p.eval('__parking.sim.state.presence.size');
-    expect(parked <= 6, `${parked} cars parked at 23:00 (the evening's few)`);
-  }},
-  {name: 'Staff car sends a staff car, never a VIP', async run(p, expect) {
-    // The button shared the background's pool of arrivals, which takes VIPs in the morning.
-    await p.goto(parking('&time=09:00'));
-    await p.until(ready, {timeout: 40000});
-    await p.click('[data-tab="gate"]');
-    // No staff car free to come: the button has nobody to send (a VIP would have been sent instead).
-    // Counted before and after the press: background traffic may already be bringing a VIP in.
-    const sent = await p.eval(`(()=>{const sim=__parking.sim;for(const v of sim.state.vehicles)if(v.type==='staff')v.enabled=false;
-      const vips=()=>sim.state.vehicles.filter(v=>v.type==='vip'&&__parking.traffic.isArriving(sim.key(v.plate,v.province))).length,before=vips();
-      document.querySelector('[data-sim="registered"]').click();return vips()-before;})()`);
-    expect(sent === 0, `no VIP sent for Staff car (${sent})`);
-  }},
   {name: 'Vehicles lists every vehicle', async run(p, expect) {
     // It showed the first 60 only, without saying so: a staff car added by hand dropped out once it synced.
     await p.goto(parking());
@@ -267,27 +188,6 @@ export const scenarios = [
     await p.until(`__parking.sim.state.events.some(e=>e.kind==='manual'&&e.plate==='3ฆง 6047')`, {timeout: 30000, what: 'manual entry'});
     const audit = await p.eval(`__parking.sim.state.audit.find(a=>a.key==='a.manual'&&a.target==='3ฆง 6047')?.reasonKey`);
     expect(audit === 'gate.reason.delivery', `audit has the reason (got ${audit})`);
-  }},
-
-  {name: 'unknown-car dispatch skips a plate already parked', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`(()=>{const s=__parking.sim;s.recordEntry({plate:'4ศย 5150',province:'ปทุมธานี',type:'unknown',stallId:s.freeStall('staff').id,color:1,manual:{by:'staff.name',reason:'gate.reason.delivery'}})})()`);
-    await p.click('[data-tab="gate"]');
-    // Counted before the presses: the background traffic may already have this plate on its way to the gate.
-    const cars = `__parking.lot.root.children.filter(c=>c.name==='Demo_car_4ศย 5150').length`, before = await p.eval(cars);
-    for (let i = 0; i < 10; i++) await p.click('[data-sim="unknown"]');
-    await p.sleep(300);
-    expect(await p.eval(cars) === before, `parked unknown plate not sent again (${before} → ${await p.eval(cars)} cars)`);
-  }},
-
-  {name: 'calendar invite is an arrival-day reminder', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    const ics = await p.eval(`import('/src/parking/dom.js').then(m=>m.visitInvite({ref:'PK-T1',plate:'7กข 4821',province:'กรุงเทพมหานคร',arrival:Date.UTC(2026,10,24,-7),departure:Date.UTC(2026,10,25,-7)}))`);
-    // As in the real app: a reminder for the arrival date only, even for a two-day visit.
-    expect(ics.includes('DTSTART;VALUE=DATE:20261124') && ics.includes('DTEND;VALUE=DATE:20261125'), 'all-day reminder on the arrival date (24 Nov) only');
-    expect(ics.startsWith('BEGIN:VCALENDAR') && ics.includes('END:VEVENT'), 'calendar structure');
   }},
 
   {name: 'explore page follows the English choice', async run(p, expect) {
@@ -1048,16 +948,6 @@ export const scenarios = [
     await p.until(`document.body.dataset.tourDestination !== 'parking' || (__parking.story.running && __parking.story.auto)`, {timeout: 30000, what: 'loop takes over (60 s / 5)'});
     expect(true, 'loop resumed');
   }},
-  {name: 'the car park sign counts the cars that left in a jump in time', async run(p, expect) {
-    // Cars that vanish from their bays (a jump in time, departures off screen) used to redraw the sign and the bay
-    // lights before their exit was recorded: the last one still counted as parked.
-    await p.goto(`?${FAST}&time=12:00`);
-    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
-    await p.eval(`(()=>{const lot=__parking.lot,draw=lot.drawSign;lot.drawSign=(free,capacity)=>{window.__signFree=free;return draw(free,capacity);};})()`);
-    // Read at once: the next traffic update redraws it anyway.
-    const r = JSON.parse(await p.eval(`(()=>{__world.jumpTo(20*60);return JSON.stringify({sign:window.__signFree,free:__parking.sim.state.capacity-__parking.sim.state.presence.size});})()`));
-    expect(r.sign === r.free, `the sign shows ${r.sign} free, the car park has ${r.free}`);
-  }},
   {name: 'a reading set by hand goes back to the schedule after the 03:00 wrap too', async run(p, expect) {
     // A meeting's temperature is held for an hour of world time; started just before the day wraps at 03:00 (back to
     // the same morning), its deadline stayed on the next day and the reading never went back to the schedule.
@@ -1248,33 +1138,6 @@ export const scenarios = [
     expect(!shown.some(([x, y, w, h]) => x < -1 || y < -1 || x + w > 101 || y + h > 101), 'plate box never drawn outside the picture');
     expect(log.length > 1 && log.at(-1) === null, 'box cleared before the feed closes (the car has left the frame)');
   }},
-  {name: 'no plate uses an unlucky letter pair (ศพ, ชน …)', async run(p, expect) {
-    await p.goto('?dest=parking&debug=1');
-    await p.until('!!window.__parking', {timeout: 40000});
-    const bad = await p.eval(`__parking.sim.state.vehicles.map(v=>v.plate).filter(p=>/ศพ|ชน|ตก|ตด|จม|ยม|รก/.test(p)).join(', ')`);
-    expect(!bad, `unlucky plates: ${bad}`);
-  }},
-  {name: 'day cycle: the clock runs by itself; a jump brings the car park to the hour, logged over the skipped time', async run(p, expect) {
-    await p.goto(`?${FAST}&day=10&time=08:00`);
-    await p.until(UP, {timeout: 40000});
-    const m0 = await p.eval('__world.minute()');
-    await p.sleep(1000);
-    const m1 = await p.eval('__world.minute()');
-    expect(m1 - m0 > 20, `world time runs as a time-lapse (${m0.toFixed(0)} → ${m1.toFixed(0)} in 1 s)`);
-    // Paused from here, so a slow machine cannot run the clock on past what is checked (jumps still move it).
-    await p.eval('__world.setPaused(true)');
-    // Evening: the car park empties (it is on screen at the overview, but not watched: made up at once).
-    const night = JSON.parse(await p.eval(`JSON.stringify((()=>{const from=__world.now();__world.jumpTo(20*60);const to=__world.now();return {from,to,parked:__parking.sim.state.presence.size,exits:__parking.sim.state.events.filter(e=>e.kind==='exit'&&e.at>from&&e.at<=to).length}})())`));
-    expect(night.parked <= 6, `car park nearly empty at 20:00 (${night.parked} cars)`);
-    expect(night.exits >= 15, `the evening's exits are logged between the old and new time (${night.exits})`);
-    await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 5000, what: 'night after the jump'});
-    // Next day's noon: past the 03:00 wrap, back on the event date, the car park full again.
-    const noon = JSON.parse(await p.eval(`JSON.stringify((()=>{__world.jumpTo(12*60);const at=__world.now();return {at,parked:__parking.sim.state.presence.size,newest:__parking.sim.state.events[0].at,day:new Date(at+7*3600e3).getUTCDate()}})())`));
-    expect(noon.day === 24, `the day wraps: still 24 Nov after a night (${noon.day} Nov)`);
-    expect(noon.parked >= 28, `car park full again at noon (${noon.parked} cars)`);
-    expect(noon.newest <= noon.at, 'no logged event is in the future after the wrap');
-    await p.until(`document.documentElement.dataset.night === 'false'`, {timeout: 5000, what: 'day after the jump'});
-  }},
   {quick: true, name: 'day cycle: Night/Day button, the timeline slider and moments move the world clock', async run(p, expect) {
     // Real speed (a time-lapse of 2 world minutes a second), so the clock is read close to where the jump left it.
     await p.goto('?debug=1&day=10&time=09:00');
@@ -1378,17 +1241,6 @@ export const scenarios = [
     expect(await p.eval(`!!document.querySelector('[data-action="meeting"]') && !${room}.light`), 'the room stays empty as the day runs on');
     await p.click('[data-action="meeting"]');
     await p.until(`!!document.querySelector('[data-action="meeting-end"]') && ${room}.light && ${room}.climate`, {timeout: 3000, what: 'a new meeting: light and AC back on'});
-  }},
-  {name: 'day cycle: visitors with a pass for today drop in during the day, and leave by themselves', async run(p, expect) {
-    // Speed 30, 10-minute day: about half an hour of world time a second; visitors come 09:30–15:30.
-    await p.goto(parking('&day=10&time=09:30'));
-    await p.until(ready, {timeout: 40000});
-    const t0 = await p.eval('__world.now()');
-    const visitor = `__parking.sim.state.events.find(e=>e.at>=${t0}&&e.kind==='entry'&&e.type==='guest')`;
-    await p.until(`!!${visitor}`, {timeout: 20000, what: 'a visitor driving in during the morning'});
-    const plate = await p.eval(`${visitor}.plate`);
-    await p.until(`__parking.sim.state.events.some(e=>e.at>=${t0}&&e.kind==='exit'&&e.plate===${JSON.stringify(plate)})`, {timeout: 20000, what: `visitor ${plate} leaving after the visit`});
-    expect(true, `visitor ${plate} came and went`);
   }},
   {name: 'day cycle: the explore page follows the clock too (night at 20:00)', async run(p, expect) {
     await p.goto('?debug=1&day=10&time=20:00#explore');

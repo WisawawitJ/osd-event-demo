@@ -13,7 +13,8 @@ export function standInLot() {
   let angle = 0, target = 0;
   return {
     root: new THREE.Group(),
-    setBays() {}, drawSign() {}, setNight() {},
+    // The sign's count, for tests.
+    free: null, setBays() {}, drawSign(free) { this.free = free; }, setNight() {},
     setBoom(open) { target = open ? Math.PI / 2 * .96 : 0; },
     get boomMoving() { return angle !== target; },
     update(dt) {
