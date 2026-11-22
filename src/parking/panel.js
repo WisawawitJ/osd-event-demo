@@ -55,7 +55,7 @@ export function createPanel({root, sim, actions}) {
     <div class="dashboard-section"><h3>${t('ov.hourly')}</h3>${hourlyChart(s.hourly)}</div>
     <div class="dashboard-section"><h3>${t('ov.zones')}</h3>${['P1', 'P2'].map(z => `<div class="pk-zone"><div><span>${t(`zone.${z}`)}</span><strong>${s.zones[z].used} / ${s.zones[z].total}</strong></div><i><b style="width:${(s.zones[z].used / s.zones[z].total) * 100}%"></b></i></div>`).join('')}</div>
     <div class="dashboard-section"><h3>${t('ov.recent')}</h3>${sim.state.events.slice(0, 5).map(eventRow).join('')}</div>
-    <p class="scenario-note">${t('ov.lastReset')} · ${t('sim.data')}</p>`;
+    <p class="scenario-note">${t('ov.lastReset')}</p>`;
   }
 
   // Requests -------------------------------------------------------------
@@ -79,7 +79,7 @@ export function createPanel({root, sim, actions}) {
     <div class="pk-detail-head"><div><h3>${esc(r.visitor.name)}</h3><small>${t('req.receipt')} ${esc(r.ref)}</small></div>${pill(t(`req.status.${r.status}`), statusTone[r.status])}</div>
     <div class="pk-plate-big">${esc(r.plate)}<small>${esc(r.province)}</small></div>
     ${flags.length && r.status === 'pending' ? `<div class="pk-flags">${flags.map(f => pill(t(f), f === 'req.flag.today' ? 'info' : 'warn')).join('')}</div>` : ''}
-    ${r.status === 'pending' ? `<div class="pk-atom">${icon('shield')}<div><strong>${t('req.atom')} · ${t('sim')}</strong><span>${existing.length ? t('req.atom.found') : t('req.atom.none')}</span></div></div>` : ''}
+    ${r.status === 'pending' ? `<div class="pk-atom">${icon('shield')}<div><strong>${t('req.atom')}</strong><span>${existing.length ? t('req.atom.found') : t('req.atom.none')}</span></div></div>` : ''}
     ${r.status === 'approved' ? `<div class="pk-atom ok">${icon(r.syncing ? 'sync' : 'check')}<div><strong>${r.syncing ? t('req.registering') : t('req.registered')}</strong><span>${r.history.some(h => h.key === 'h.email') ? t('req.emailSent') : '…'}</span></div></div>` : ''}
     ${actionsHtml}
     <div class="dashboard-section">
@@ -93,7 +93,7 @@ export function createPanel({root, sim, actions}) {
       ${r.notes ? field(t('req.notes'), esc(r.notes)) : ''}
       ${r.reason ? field(t('req.reject.reason'), esc(r.reason)) : ''}
     </div>
-    ${r.status === 'approved' && r.qr ? `<div class="dashboard-section pk-qr-row">${fakeQr(r.qr)}<div><strong>${t('req.qr')}</strong><small>${esc(r.qr)} · ${t('sim')}</small></div></div>` : ''}
+    ${r.status === 'approved' && r.qr ? `<div class="dashboard-section pk-qr-row">${fakeQr(r.qr)}<div><strong>${t('req.qr')}</strong><small>${esc(r.qr)}</small></div></div>` : ''}
     <div class="dashboard-section"><h3>${t('req.history')}</h3>${[...r.history].reverse().map(h => `<div class="event-row"><time>${fmtDateTime(h.at)}</time><p>${t(h.key)}${h.by ? ` · ${t(h.by)}` : ''}</p></div>`).join('')}</div>`;
   }
 
@@ -106,7 +106,7 @@ export function createPanel({root, sim, actions}) {
     <div class="pk-gate-status ${g}"><div class="pk-gate-icon">${icon('gate')}</div><div><span class="metric-label">${t('gate.status')}</span><strong>${t(`gate.${g}`)}</strong><small><i class="pk-dot"></i>${t('gate.online')}</small></div>${pill(t(`gate.${g}`), tone)}</div>
     <div class="pk-cams">${['in', 'out'].map(k => `<figure>${ui.snapshots[k] ? `<img src="${ui.snapshots[k]}" alt="">` : `<div class="pk-cam-empty">${icon('camera')}</div>`}<figcaption>${t(k === 'in' ? 'gate.camIn' : 'gate.camOut')}</figcaption></figure>`).join('')}</div>
     <div class="dashboard-section"><h3>${t('gate.manual')}</h3><p class="pk-hint">${t('gate.manual.note')}</p><div class="pk-manual"><select data-focus="manual-reason" aria-label="${t('gate.reason')}">${REASONS.map(r => `<option value="${r}"${ui.manualReason === r ? ' selected' : ''}>${t(r)}</option>`).join('')}</select><button class="pk-btn primary" data-act="manual-open"${g !== 'closed' || open.length || actions.storyRunning?.() ? ' disabled' : ''}>${t('gate.openOnce')}</button></div>${open.length ? `<p class="pk-hint">${t('gate.manual.alertFirst')}</p>` : ''}</div>
-    <div class="dashboard-section"><h3>${t('gate.sim')} · ${t('sim')}</h3><div class="pk-sim-grid">${[['registered', 'car'], ['visitor', 'user'], ['unknown', 'alert'], ['exit', 'arrowOut']].map(([k, ic]) => `<button class="pk-btn" data-sim="${k}"${cue(`sim:${k}`)}${actions.storyRunning?.() ? ' disabled' : ''}>${icon(ic)}${t(`gate.sim.${k}`)}</button>`).join('')}</div></div>
+    <div class="dashboard-section"><h3>${t('gate.sim')}</h3><div class="pk-sim-grid">${[['registered', 'car'], ['visitor', 'user'], ['unknown', 'alert'], ['exit', 'arrowOut']].map(([k, ic]) => `<button class="pk-btn" data-sim="${k}"${cue(`sim:${k}`)}${actions.storyRunning?.() ? ' disabled' : ''}>${icon(ic)}${t(`gate.sim.${k}`)}</button>`).join('')}</div></div>
     <div class="dashboard-section"><h3>${t('gate.log')}</h3>${sim.state.events.slice(0, 14).map(eventRow).join('')}</div>`;
   }
   function alertCard(a) {
@@ -154,7 +154,7 @@ export function createPanel({root, sim, actions}) {
       const r = ui.selected && sim.state.requests.find(q => q.id === ui.selected);
       body = r ? requestDetail(r) : requestList();
     } else body = {overview, gate, vehicles, reports}[ui.tab]();
-    patch(root, `<div class="pk-console-head"><span>${icon('shield')}${t('console.title')}</span><small>ATOM Parking Access · ${t('sim')}</small></div>${tabs()}<div class="pk-tab-body" data-tab-body="${ui.tab}">${body}</div>`);
+    patch(root, `<div class="pk-console-head"><span>${icon('shield')}${t('console.title')}</span><small>ATOM Parking Access</small></div>${tabs()}<div class="pk-tab-body" data-tab-body="${ui.tab}">${body}</div>`);
     // Opening the Gate tab takes fresh pictures from both cameras: the exit camera has none until a car leaves.
     if (ui.tab === 'gate' && shownTab !== 'gate') actions.gateShown?.();
     shownTab = ui.tab;

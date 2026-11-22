@@ -24,7 +24,7 @@ export function createOverlays({layer, sim, actions}) {
     // Live: the box is placed each frame and keeps its last place when the card redraws (no blink).
     const b = state.box, place = b ? ` style="left:${b.x * 100}%;top:${b.y * 100}%;width:${b.w * 100}%;height:${b.h * 100}%"` : '';
     const box = f.live ? `<i class="pk-feed-box ${f.phase}"${place}${b ? '' : ' hidden'}></i>` : '';
-    feed.innerHTML = `<div class="pk-feed-head"><span><i class="pk-rec"></i>${f.which === 'in' ? 'LPR-IN' : 'LPR-OUT'} · ${t('sim')}</span><time>${fmtTime(sim.now(), true)}</time></div>
+    feed.innerHTML = `<div class="pk-feed-head"><span><i class="pk-rec"></i>${f.which === 'in' ? 'LPR-IN' : 'LPR-OUT'}</span><time>${fmtTime(sim.now(), true)}</time></div>
       <div class="pk-feed-img${f.live ? ' live' : ''}">${!f.live && f.snapshot ? `<img src="${f.snapshot}" alt="">` : ''}${box}</div>
       <div class="pk-feed-result"><div class="pk-feed-plate${f.phase === 'reading' ? ' reading' : ''}"><b>${f.phase === 'reading' ? '· · ·' : esc(f.plate)}</b><small>${f.phase === 'reading' ? t('lpr.read') + '…' : esc(f.province)}</small></div><div class="pk-feed-meta">${f.phase === 'reading' ? '' : `<small>${t('lpr.confidence')} ${Math.round(f.confidence * 100)}%</small>`}${verdict}${v.vehicle?.validTo && f.phase !== 'reading' && !v.exit ? `<small>${t('lpr.validUntil')} ${validUntil(v.vehicle.validTo, sim.now())}</small>` : ''}</div></div>`;
   }

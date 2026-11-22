@@ -312,7 +312,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     else return;
     renderControls();
     updateModel();
-    feedback.textContent = L(`${room.label} · ${deviceName[kind]()}${enabled ? 'เปิด' : 'ปิด'}แล้ว (จำลอง)`, `${roomName(room)} · ${deviceName[kind]()} turned ${enabled ? 'on' : 'off'} (simulated)`);
+    feedback.textContent = L(`${room.label} · ${deviceName[kind]()}${enabled ? 'เปิด' : 'ปิด'}แล้ว`, `${roomName(room)} · ${deviceName[kind]()} turned ${enabled ? 'on' : 'off'}`);
   }
   listen(devices, 'click', event => {
     const button = event.target.closest('button[data-device]');

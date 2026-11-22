@@ -20,9 +20,8 @@ const S = {
   // destination + general
   'parking.dock': ['ที่จอดรถ', 'Parking'],
   'parking.panel': ['ระบบที่จอดรถ', 'Parking access'],
-  'parking.chip': ['ลานจอด 50 คัน · ไม้กั้นและกล้องอ่านทะเบียนจำลอง', '50-space car park · simulated barrier and plate cameras'],
+  'parking.chip': ['ลานจอด 50 คัน · ไม้กั้นและกล้องอ่านทะเบียน', '50-space car park · barrier and plate cameras'],
   'parking.floor': ['ลานจอดรถ', 'Car park'],
-  'sim': ['จำลอง', 'Simulated'],
   'sim.data': ['ข้อมูลจำลอง', 'Simulated data'],
   'sim.disclosure': ['ข้อมูลและเหตุการณ์เพื่อสาธิต · ไม่เชื่อมต่ออุปกรณ์จริง', 'Demo data and events · no real devices connected'],
   'back': ['ย้อนกลับ', 'Back'],
@@ -34,8 +33,8 @@ const S = {
   'none': ['ไม่มีรายการ', 'Nothing here'],
   'cars': ['คัน', 'cars'],
   'today': ['วันนี้', 'Today'],
-  'staff.name': ['เจ้าหน้าที่ อรุณี (ตัวอย่าง)', 'Staff: Arunee (sample)'],
-  'staff.guard': ['รปภ. ประตูหลัก (ตัวอย่าง)', 'Main-gate guard (sample)'],
+  'staff.name': ['เจ้าหน้าที่ อรุณี', 'Staff: Arunee'],
+  'staff.guard': ['รปภ. ประตูหลัก', 'Main-gate guard'],
 
   // tabs
   'tab.overview': ['ภาพรวม', 'Overview'],
@@ -130,7 +129,7 @@ const S = {
   'gate.opening': ['กำลังเปิด', 'Opening'],
   'gate.open': ['เปิด', 'Open'],
   'gate.closing': ['กำลังปิด', 'Closing'],
-  'gate.online': ['ออนไลน์ · จำลอง', 'Online · simulated'],
+  'gate.online': ['ออนไลน์', 'Online'],
   'gate.camIn': ['กล้องขาเข้า LPR-IN', 'Entry camera LPR-IN'],
   'gate.camOut': ['กล้องขาออก LPR-OUT', 'Exit camera LPR-OUT'],
   'gate.manual': ['เปิดไม้กั้นด้วยตนเอง', 'Open the barrier manually'],
@@ -144,7 +143,7 @@ const S = {
   'gate.full': ['ที่จอดเต็ม · {plate} ถูกแจ้งให้กลับรถ', 'Car park full · {plate} was turned away'],
   'gate.openOnce': ['เปิดหนึ่งครั้ง', 'Open once'],
   'gate.log': ['บันทึกการเข้าออก', 'Entry and exit log'],
-  'gate.sim': ['จำลองรถมาที่ไม้กั้น', 'Send a car to the barrier'],
+  'gate.sim': ['ส่งรถมาที่ไม้กั้น', 'Send a car to the barrier'],
   'gate.sim.registered': ['รถพนักงาน', 'Staff car'],
   'gate.sim.visitor': ['รถผู้มาติดต่อ', 'Approved visitor'],
   'gate.sim.unknown': ['รถไม่รู้จัก', 'Unknown car'],
@@ -174,7 +173,7 @@ const S = {
   'alert.open': ['เปิดให้เข้า', 'Open'],
   'alert.deny': ['ไม่ให้เข้า', 'Deny'],
   'alert.openReason': ['เลือกเหตุผลก่อนเปิด', 'Pick a reason to open'],
-  'alert.notify': ['แจ้งเตือนส่งถึง LINE กลุ่ม รปภ. (จำลอง)', 'Alert also sent to the guards’ LINE group (simulated)'],
+  'alert.notify': ['แจ้งเตือนส่งถึง LINE กลุ่ม รปภ.', 'Alert also sent to the guards’ LINE group'],
 
   // LPR feed
   'lpr.read': ['อ่านทะเบียน', 'Plate read'],
@@ -204,7 +203,7 @@ const S = {
 
   // reports
   'rep.summary': ['สรุปประจำวัน', 'Daily summary'],
-  'rep.summary.note': ['ส่งอีเมลถึงกลุ่มผู้ดูแลทุกวัน 08:00 (จำลอง)', 'Emailed to the admin group daily at 08:00 (simulated)'],
+  'rep.summary.note': ['ส่งอีเมลถึงกลุ่มผู้ดูแลทุกวัน 08:00', 'Emailed to the admin group daily at 08:00'],
   'rep.yesterday': ['เมื่อวาน', 'Yesterday'],
   'rep.entries': ['รถเข้า', 'Entries'],
   'rep.exits': ['รถออก', 'Exits'],
@@ -219,7 +218,7 @@ const S = {
   'rep.csv.audit': ['ดาวน์โหลดบันทึก CSV', 'Download audit CSV'],
 
   // audit actions
-  'a.login': ['เข้าสู่ระบบด้วย Keycloak (จำลอง)', 'Signed in with Keycloak (simulated)'],
+  'a.login': ['เข้าสู่ระบบด้วย Keycloak', 'Signed in with Keycloak'],
   'a.approve': ['อนุมัติคำขอ', 'Approved a request'],
   'a.reject': ['ไม่อนุมัติคำขอ', 'Rejected a request'],
   'a.revoke': ['ยกเลิกสิทธิ์', 'Revoked access'],

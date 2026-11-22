@@ -29,7 +29,7 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
   $('#replay-time').textContent=formatTime(minute);
   if(!dragging)range.value=String(Math.floor(minute));
   range.setAttribute('aria-valuetext',L(`${formatTime(minute)} นาฬิกา · เวลาจำลอง`,`${formatTime(minute)} · simulated time`));
-  $('#replay-mode').textContent=world.held?L('เวลาจริง · เรื่องราวกำลังเล่น','Real time · story playing'):world.paused?L('หยุดชั่วคราว · ทุกอย่างหยุดนิ่ง','Paused · everything stands still'):following()?L('ตามวันในอาคาร · จำลอง','Following the day · simulated'):L('เวลาจำลอง · เดินตลอด','Simulated time · always running');
+  $('#replay-mode').textContent=world.held?L('เวลาจริง · เรื่องราวกำลังเล่น','Real time · story playing'):world.paused?L('หยุดชั่วคราว · ทุกอย่างหยุดนิ่ง','Paused · everything stands still'):following()?L('ตามวันในอาคาร','Following the day'):L('เวลาจำลอง · เดินตลอด','Simulated time · always running');
   $('#day-pause').textContent=world.paused?L('เล่นต่อ','Resume'):L('หยุดชั่วคราว','Pause');$('#day-pause').setAttribute('aria-pressed',String(world.paused));
   $('#day-speed').textContent=world.dayLength?L(`${world.dayLength} นาที/วัน`,`${world.dayLength} min/day`):L('เวลาจริง','Real time');
   $('#day-play').textContent=following()?L('หยุดตามวัน','Stop following'):L('ตามวันในอาคาร','Follow the day');$('#day-play').setAttribute('aria-pressed',String(following()));
@@ -74,7 +74,7 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
   layers.update({layer,roomData:data,states:sim.rooms,floor,hidden:traveling||floor!==sim.view.currentFloor});
   const incidents=incidentsFor(state,sim.rooms);
   $('#incident-count').textContent=String(incidents.length);
-  const html=incidents.length?incidents.map(i=>`<button class="incident-item" data-key="${i.id}" data-incident="${i.id}" data-target="${i.destination}" data-insight-layer="${i.layer}"><span class="incident-mark" aria-hidden="true">!</span><span><strong>${i.title}</strong><small>${i.detail}</small><small>${i.hint}</small></span><span aria-hidden="true">↗</span></button>`).join(''):`<p class="incident-clear"><span aria-hidden="true">✓</span> ${L('สถานะตัวอย่างอยู่ในช่วงปกติ','Sample readings are within normal range')}</p>`;
+  const html=incidents.length?incidents.map(i=>`<button class="incident-item" data-key="${i.id}" data-incident="${i.id}" data-target="${i.destination}" data-insight-layer="${i.layer}"><span class="incident-mark" aria-hidden="true">!</span><span><strong>${i.title}</strong><small>${i.detail}</small><small>${i.hint}</small></span><span aria-hidden="true">↗</span></button>`).join(''):`<p class="incident-clear"><span aria-hidden="true">✓</span> ${L('สถานะอยู่ในช่วงปกติ','Readings are within normal range')}</p>`;
   morph(incidentList,html);
   $('#insight-room').hidden=layer==='none'||destination!=='meeting';
   $('#insight-room').textContent=`${L('ห้องประชุมย่อย 2 ชั้น 4','Meeting room 2, floor 4')} · ${layer==='temperature'?state.temp.toFixed(1)+' °C':layer==='occupancy'?(state.occupied?L('มีคน 6 คน','6 people'):L('ไม่มีคน','Empty')):sim.rooms['f4_meeting_2'].light?L('ไฟเปิด','Lights on'):L('ไฟปิด','Lights off')}`;
@@ -98,7 +98,7 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
  sync({all:true});
  return {update,hold,jumpTo,relabel,paint,
   history:key=>dayHistory(world.minute(),simulation.rooms,key),
-  timeLabel:()=>L(`ข้อมูลจำลอง ณ เวลา ${formatTime(world.minute())}`,`Simulated data at ${formatTime(world.minute())}`),
+  timeLabel:()=>L(`ข้อมูล ณ เวลา ${formatTime(world.minute())}`,`Data at ${formatTime(world.minute())}`),
   getState:()=>({minute:world.minute(),layer,following:following()}),
   dispose(){disposed=true;offClock();abort.abort();layers.dispose();}
  };

@@ -6,7 +6,8 @@ ATOM Parking Access app does: the request, the approval, plate-read entry at the
 alert, occupancy, and reports.
 
 Nothing here connects to a real system. Plates, names, emails (`@example.com`, `@osd.example`),
-camera images and ATOM, Keycloak and LINE responses are all made up and labelled as simulated.
+camera images and ATOM, Keycloak and LINE responses are all made up. The page says so once (the header's
+"Simulated data" label and the footer's disclosure), not on each item.
 
 ## Run
 
@@ -175,7 +176,8 @@ The visitor's phone form can be filled in by hand. The car photo reads a sample 
 Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street (the first just clear of a car backing out of the entry, the rest a car and 2 m apart), and leaving cars wait in their bay until the one ahead is out.
 Cars also come and go by themselves, following the hour (see above). The car park is set back from the street: a
 short two-way entrance road links the barrier to the street at a T-junction, so a car waiting at the barrier stands
-wholly off the street, and through-traffic drives down the middle of each lane. Through-traffic drives both lanes of the
+wholly off the street, and through-traffic drives down the middle of each lane. Lane arrows follow one rule for
+traffic that keeps left: a pair side by side on every two-way stretch (the entrance road, the driveway, each aisle's mouth). Through-traffic drives both lanes of the
 street whenever it is in view; it keeps to one speed per lane and gives way to cars turning in or pulling out.
 About a third of the cars coming in arrive along the far lane: the near lane has right of way, so they wait at the
 turn, signalling right, for a gap in it and a clear gate mouth, then turn in across it. About a third of the cars

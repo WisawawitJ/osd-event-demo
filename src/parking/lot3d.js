@@ -58,8 +58,8 @@ export function createLot({scene, stalls, schedule}) {
   ]), kerb);
 
   // Road paint matches the building model's own markings: warm white #f7f4df, lit like the ground, thin strokes.
-  // Line marking: bay separators, street centre dashes, and the gate mouth (lane divider, stop lines, loops).
-  const lines = [], darkLines = [];
+  // Line marking: bay separators, street centre dashes, and the gate mouth (lane divider, stop lines).
+  const lines = [];
   const line = (x0, z0, x1, z1, w = .1, list = lines, y = Y.road + .012) => {
     const len = Math.hypot(x1 - x0, z1 - z0);
     list.push(new THREE.PlaneGeometry(w, len).rotateX(-Math.PI / 2).rotateY(Math.atan2(x1 - x0, z1 - z0)).translate((x0 + x1) / 2, y, (z0 + z1) / 2));
@@ -82,10 +82,6 @@ export function createLot({scene, stalls, schedule}) {
   }
   line(GATE.west + .1, GATE.entryStopZ - 2.45, divide - .15, GATE.entryStopZ - 2.45, .25);   // entry stop line, outside the boom
   line(divide + .15, GATE.exitStopZ + 2.45, GATE.east - .1, GATE.exitStopZ + 2.45, .25);     // exit stop line, inside the boom
-  // Detector loops: one rectangle per lane, under where each car stops.
-  const loop = (cx, cz) => { const w = .7, d = 1.1; line(cx - w, cz - d, cx + w, cz - d, .07, darkLines); line(cx - w, cz + d, cx + w, cz + d, .07, darkLines); line(cx - w, cz - d, cx - w, cz + d, .07, darkLines); line(cx + w, cz - d, cx + w, cz + d, .07, darkLines); };
-  loop(GATE.entryX, GATE.entryStopZ - .2);
-  loop(GATE.exitX, GATE.exitStopZ + .2);
   // Arrows in the model's style: a 1.6 m shaft and two 0.6 m head strokes at 45°, 9 cm wide, slightly raised.
   const strokeArrow = (x, z, heading) => {
     const box = (len, cx, cz, angle) => new THREE.BoxGeometry(.09, .012, len).rotateY(angle).translate(cx, 0, cz);
@@ -93,19 +89,20 @@ export function createLot({scene, stalls, schedule}) {
     return mergeGeometries([box(1.6, 0, 0, 0), box(.6, .21, -.59, Math.PI / 4), box(.6, -.21, -.59, -Math.PI / 4)])
       .rotateY(heading - Math.PI).translate(x, Y.road + .006, z);
   };
-  const arrows = [];
-  for (const x of [-31, -43, -55]) arrows.push(strokeArrow(x, 17.6, -Math.PI / 2));   // westbound, into the lot
-  for (const x of [-27, -39, -51]) arrows.push(strokeArrow(x, 14.8, Math.PI / 2));    // eastbound, towards the exit
-  // Each P2 aisle opens onto the driveway: an arrow in (north) and an arrow out (south) at its mouth.
-  for (const x of new Set(stalls.filter(s => s.zone === 'P2').map(s => s.aisleX))) {
-    arrows.push(strokeArrow(x - 1.3, DRIVE.north - 2.2, Math.PI));
-    arrows.push(strokeArrow(x + 1.3, DRIVE.north - 2.2, 0));
-  }
-  arrows.push(strokeArrow(GATE.entryX, DRIVE.south - 1.5, Math.PI));                    // entry lane, just past the boom
-  arrows.push(strokeArrow(GATE.exitX, STREET.north - 1.2, 0));                          // exit lane, out to the street
+  // One rule throughout, for traffic that keeps left (as in Thailand): every two-way stretch has a pair of arrows side
+  // by side, each on the side its way keeps to. (They were staggered at odd spacings, with a lone arrow here and there.)
+  const arrows = [], WEST = -Math.PI / 2, EAST = Math.PI / 2, NORTH = Math.PI, SOUTH = 0;
+  // The driveway: westbound, into the lot, on its south half; eastbound, towards the exit, on its north half. Between
+  // the gate and the first aisle, and between the aisles. (East of the gate, the way to P1, has none: cars bound for P1
+  // drive in along the exit lane.)
+  for (const x of [-28.5, -42]) arrows.push(strokeArrow(x, 17.6, WEST), strokeArrow(x, 14.8, EAST));
+  // Each P2 aisle's mouth: in (north) on its west side, out (south) on its east side.
+  for (const x of new Set(stalls.filter(s => s.zone === 'P2').map(s => s.aisleX))) arrows.push(strokeArrow(x - 1.3, DRIVE.north - 2.2, NORTH), strokeArrow(x + 1.3, DRIVE.north - 2.2, SOUTH));
+  // The entrance road, near the street where drivers turn in: in on its west half, out on its east half.
+  const roadZ = STREET.north - 2.3;
+  arrows.push(strokeArrow(GATE.entryX, roadZ, NORTH), strokeArrow(GATE.exitX, roadZ, SOUTH));
   put(mergeGeometries([...lines, ...arrows]), paint);
-  put(mergeGeometries(darkLines), decal({color: '#2b3236'}, 2));
-  for (const g of [...lines, ...darkLines, ...arrows]) g.dispose();
+  for (const g of [...lines, ...arrows]) g.dispose();
   // Visitor bays in row A are tinted and labelled.
   const visitorFill = decal({color: '#3d8fb0', transparent: true, opacity: .22, depthWrite: false}, 1);
   put(mergeGeometries(stalls.filter(s => s.reserved === 'guest').map(s => rect(s.x - 2.4, s.x + 2.4, s.z - 1.15, s.z + 1.15, Y.road + .011))), visitorFill);
