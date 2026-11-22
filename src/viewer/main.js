@@ -221,6 +221,11 @@ try {
   controls.maxPolarAngle = Math.PI * .49;
   const boundShift = new THREE.Vector3();
   controls.addEventListener('change', () => {
+    // A pivot a zoom took under the ground (toward the lower screen in a flat view, or the close zoom's walk forward)
+    // slides back along the line of sight to the ground: the camera stays, so the picture does too. (Lifted below
+    // with the camera, it threw the picture hundreds of pixels, two ▼ presses into a stop.)
+    const t0 = controls.target;
+    if (t0.y < 0 && camera.position.y > 0) t0.lerpVectors(camera.position, t0, camera.position.y / (camera.position.y - t0.y));
     const t = controls.target, r = Math.hypot(t.x, t.z), out = r > PAN_LIMIT ? PAN_LIMIT / r - 1 : 0;
     boundShift.set(t.x * out, THREE.MathUtils.clamp(t.y, 0, PAN_TOP) - t.y, t.z * out);
     if (boundShift.lengthSq()) { t.add(boundShift); camera.position.add(boundShift); }
@@ -448,7 +453,8 @@ try {
     // (An on-screen keyboard may send no key place: then the character.)
     const zoomOut = viewKey(event) === 'out', zoomIn = viewKey(event) === 'in';
     if (viewKey(event) === 'reset') { if (showcase) showcase.resetView(); else frameVisible(); }
-    else if (viewKey(event) === 'up' || viewKey(event) === 'down') { event.preventDefault(); camera.position.y += heightStep(viewKey(event) === 'up' ? 1 : -1); controls.update(); schedule(); }
+    // Its matrix at once too: a zoom toward the cursor before the next frame worked from the view before the step.
+    else if (viewKey(event) === 'up' || viewKey(event) === 'down') { event.preventDefault(); camera.position.y += heightStep(viewKey(event) === 'up' ? 1 : -1); controls.update(); camera.updateMatrixWorld(); schedule(); }
     else if (zoomIn || zoomOut) {
       event.preventDefault();
       const offset = camera.position.clone().sub(controls.target);
@@ -798,7 +804,7 @@ try {
        function liftBy(sign){
         userMove();cancelAnimationFrame(zoomFrame);
         const from=camera.position.y,to=from+heightStep(sign),start=performance.now();
-        const step=time=>{const t=Math.min(1,(time-start)/260),e=t*(2-t);camera.position.y=from+(to-from)*e;controls.update();schedule();if(t<1)zoomFrame=requestAnimationFrame(step);};
+        const step=time=>{const t=Math.min(1,(time-start)/260),e=t*(2-t);camera.position.y=from+(to-from)*e;controls.update();camera.updateMatrixWorld();schedule();if(t<1)zoomFrame=requestAnimationFrame(step);};
         zoomFrame=requestAnimationFrame(step);
        }
        document.querySelector('#view-up').addEventListener('click',()=>liftBy(1),{signal:abort.signal});

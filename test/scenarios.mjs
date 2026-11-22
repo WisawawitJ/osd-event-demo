@@ -26,6 +26,11 @@ const LEAVE_STAFF = `(()=>{const k=__parking.traffic.parkedKeys().find(k=>__park
 const ONLY = plates => `(async()=>{const t=__parking.traffic,arrive=t.arrive,ok=new Set(${JSON.stringify(plates)});t.passBy=()=>false;t.__leave=t.leave;t.leave=()=>Promise.resolve();
   t.arrive=o=>ok.has(o.plate)?arrive(o):Promise.resolve('blocked');
   for(let i=0;i<400;i++){const s=t.inspect();if(!s.entryPending&&!s.westOnStreet&&!s.outbound&&!s.gateHolders&&!t.leaving&&__parking.sim.state.gate==='closed')return true;await new Promise(r=>setTimeout(r,50))}return false})()`;
+// The ground point under a cursor 60% down the view: how far it slides on screen with four wheel notches toward it.
+const DRIFT = `(()=>{__camera.updateMatrixWorld();const c=document.querySelector('#viewport canvas'),r=c.getBoundingClientRect(),V=__camera.position.constructor,nx=0,ny=-.6;
+      const ground=()=>{const a=new V(nx,ny,.5).unproject(__camera),d=a.sub(__camera.position).normalize(),t=-__camera.position.y/d.y;return __camera.position.clone().addScaledVector(d,t)};
+      const p0=ground();for(let i=0;i<4;i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:r.left+r.width*(nx+1)/2,clientY:r.top+r.height*(1-ny)/2,deltaY:-100,deltaMode:0}));
+      __controls.update();__camera.updateMatrixWorld();const q=p0.clone().project(__camera);return Math.hypot((q.x-nx)*r.width/2,(q.y-ny)*r.height/2)})()`;
 const viewport = (p, width = 1600, height = 1000) => p.cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
 
 export const scenarios = [
@@ -237,8 +242,8 @@ export const scenarios = [
     const r = JSON.parse(await p.eval(`JSON.stringify({ambient:__parking.sim.state.alerts.find(a=>a.plate==='2ฒษ 9077').ambient,tab:document.querySelector('[data-tab][aria-selected="true"]')?.dataset.tab})`));
     expect(r.ambient === true && r.tab === 'vehicles', `a background car, the console left on its tab (ambient ${r.ambient}, tab ${r.tab})`);
   }},
-  {name: 'a tap on the plate camera card or a toast leaves an auto story playing', async run(p, expect) {
-    // Neither is the 3D view, but a tap on either ended the story (toasts caught taps meant for the view under them).
+  {name: 'a tap on the plate camera card leaves an auto story playing; toasts let taps through to the view', async run(p, expect) {
+    // The card is not the 3D view, but a tap on it ended the story. Toasts caught taps meant for the view under them.
     await p.goto(parking('&story=1'));
     await p.until(`window.__parking && __parking.story.running && document.querySelector('.pk-feed:not([hidden])')`, {timeout: 90000, what: 'the plate camera card in the story'});
     await p.eval(`document.querySelector('.pk-feed').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`);
@@ -416,6 +421,9 @@ export const scenarios = [
     // Its dismissal ran on wall-clock time: paused as a car cleared the barrier, the picture went anyway.
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
+    // Only this car (another closing the barrier first paused the world at the wrong moment).
+    const plate = await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));return __parking.sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(__parking.sim.key(v.plate,v.province))).plate})()`);
+    expect(await p.eval(ONLY([plate])), 'the car park quiet first');
     await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const v=__parking.sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(__parking.sim.key(v.plate,v.province)));
       window.__k=__parking.sim.key(v.plate,v.province);void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-40});})()`);
     // Paused as the arm starts down behind the car: past the gate, so the picture's dismissal is already counting.
@@ -1253,12 +1261,19 @@ export const scenarios = [
   {name: 'zooming toward the lower screen at the car park keeps the point under the cursor in place', async run(p, expect) {
     // The pivot went under the ground with the zoom, and the limit lifting it back slid the picture (some 200 px).
     await p.goto(parking());
-    await p.until(`${ready} && ${STILL}`, {timeout: 40000, what: 'at the car park'});
-    const drift = await p.eval(`(()=>{const c=document.querySelector('#viewport canvas'),r=c.getBoundingClientRect(),V=__camera.position.constructor,nx=0,ny=-.6;
-      const ground=()=>{const a=new V(nx,ny,.5).unproject(__camera),d=a.sub(__camera.position).normalize(),t=-__camera.position.y/d.y;return __camera.position.clone().addScaledVector(d,t)};
-      const p0=ground();for(let i=0;i<4;i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:r.left+r.width*(nx+1)/2,clientY:r.top+r.height*(1-ny)/2,deltaY:-100,deltaMode:0}));
-      __controls.update();const q=p0.clone().project(__camera);return Math.hypot((q.x-nx)*r.width/2,(q.y-ny)*r.height/2)})()`);
+    await p.until(`${ready} && ${STILL} && document.body.dataset.tourDestination==='parking'`, {timeout: 40000, what: 'at the car park'});
+    await p.sleep(300);
+    const drift = await p.eval(DRIFT);
     expect(drift < 8, `the ground point under the cursor stays put (${drift.toFixed(1)} px)`);
+    // Two ▼ flatten the view under 20° below the horizon: it threw the picture hundreds of pixels there.
+    // A fresh page (the wait for one could pass on the old page, already zoomed, before the reload took).
+    await p.eval('window.__old = 1');
+    await p.goto(parking());
+    await p.until(`!window.__old && ${ready} && ${STILL} && document.body.dataset.tourDestination==='parking'`, {timeout: 40000, what: 'at the car park again'});
+    await p.sleep(1000);
+    await p.eval(`(()=>{const c=document.querySelector('#viewport canvas');for(let i=0;i<2;i++)c.dispatchEvent(new KeyboardEvent('keydown',{key:'PageDown',code:'PageDown',bubbles:true,cancelable:true}))})()`);
+    const low = await p.eval(DRIFT);
+    expect(low < 8, `after ▼▼ too (${low.toFixed(1)} px)`);
   }},
   {name: 'camera up and down: the ▲ ▼ buttons and Page Up / Page Down change the height, still looking at the same point', async run(p, expect) {
     // Panning keeps the height, so the height has its own control.

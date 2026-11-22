@@ -401,8 +401,9 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   const viewport = $('#viewport');
   const takeOver = event => {
     if (!active || !story.running || !story.auto) return;
-    // Nor the plate camera card or a toast (they are not the view: a tap on them ended the story).
-    if (event.target.closest?.('#pk-phone, .pk-caption, .pk-alert-pop, .pk-feed, .pk-toasts, #view-orbit')) return;
+    // Nor the plate camera card (it is not the view: a tap on it ended the story). A toast lets taps through to the view
+    // under it, so a tap there is one on the view.
+    if (event.target.closest?.('#pk-phone, .pk-caption, .pk-alert-pop, .pk-feed, #view-orbit')) return;
     leaveStory();
   };
   viewport.addEventListener('pointerdown', takeOver, {capture: true});
