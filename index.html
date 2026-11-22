@@ -1,25 +1,27 @@
 <!doctype html>
 <html lang="th">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light">
-<title>OSD · Building Demo</title>
-<link rel="icon" href="data:,">
-<!-- Event demo: every figure, plate, name and camera image here is simulated. No live building or parking connections. -->
-<link rel="stylesheet" href="./src/styles/app.css">
-<link rel="stylesheet" href="./src/styles/parking.css">
-<link rel="stylesheet" href="./src/styles/night.css">
-<script type="importmap">
-{"imports":{
-  "osd/viewer/": "./src/viewer/",
-  "osd/parking/": "./src/parking/",
-  "osd/node_modules/three/": "./vendor/three/"
-}}
-</script>
-</head>
-<body>
-<div id="app"></div>
-<script type="module" src="./src/boot.js"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>OSD · Building Demo</title>
+    <link rel="icon" href="data:," />
+    <!-- Event demo: every figure, plate, name and camera image here is simulated. No live building or parking connections. -->
+    <link rel="stylesheet" href="./src/styles/app.css" />
+    <link rel="stylesheet" href="./src/styles/parking.css" />
+    <link rel="stylesheet" href="./src/styles/night.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "osd/viewer/": "./src/viewer/",
+          "osd/parking/": "./src/parking/",
+          "osd/node_modules/three/": "./vendor/three/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./src/boot.js"></script>
+  </body>
 </html>

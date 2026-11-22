@@ -5,46 +5,95 @@ import {realNow, ramp} from 'osd/parking/clock.js';
 
 // Texts follow the saved TH/EN choice. The device map names rooms in Thai; English names are kept here by room id.
 const ROOM_EN = {
-  f1_meeting_1: 'Small meeting room 1', f1_meeting_2: 'Small meeting room 2', f1_guest: 'Guest lounge', f1_lobby: 'Waiting lobby', f1_billing: 'Billing and cheques',
-  f2_admin_manager: 'Admin manager', f2_admin: 'Administration', f2_sales: 'Sales', f2_sales_manager_1: 'Sales manager 1', f2_sales_manager_2: 'Sales manager 2',
-  f2_customer: 'Customer relations', f2_executive_1: 'Executive office 1', f2_executive_2: 'Executive office 2', f2_guest_meeting: 'Guest and small meetings',
-  f2_documents: 'Document store', f2_secretary: 'Secretary', f3_rnd: 'R&D', f3_monitor: 'Monitor room', f3_server: 'Server room', f3_engineering: 'Engineering',
-  f3_tech_manager_1: 'Engineering manager 1', f3_tech_manager_2: 'Engineering manager 2', f3_lab: 'Equipment test lab', f3_tech_manager_3: 'Engineering manager 3',
-  f3_director: 'Director, floor 3', f3_meeting: 'Meeting room, floor 3', f4_seminar: 'Seminar room', f4_accounting: 'Accounting',
-  f4_accounting_manager_2: 'Accounting manager 2', f4_accounting_manager_1: 'Accounting manager 1', f4_director: 'Director, floor 4', f4_meeting_2: 'Meeting room 2',
-  f4_recreation: 'Recreation area', f4_kids: "Children's room", roof_stair: 'Stair hall', roof_gym: 'Gym',
+  f1_meeting_1: 'Small meeting room 1',
+  f1_meeting_2: 'Small meeting room 2',
+  f1_guest: 'Guest lounge',
+  f1_lobby: 'Waiting lobby',
+  f1_billing: 'Billing and cheques',
+  f2_admin_manager: 'Admin manager',
+  f2_admin: 'Administration',
+  f2_sales: 'Sales',
+  f2_sales_manager_1: 'Sales manager 1',
+  f2_sales_manager_2: 'Sales manager 2',
+  f2_customer: 'Customer relations',
+  f2_executive_1: 'Executive office 1',
+  f2_executive_2: 'Executive office 2',
+  f2_guest_meeting: 'Guest and small meetings',
+  f2_documents: 'Document store',
+  f2_secretary: 'Secretary',
+  f3_rnd: 'R&D',
+  f3_monitor: 'Monitor room',
+  f3_server: 'Server room',
+  f3_engineering: 'Engineering',
+  f3_tech_manager_1: 'Engineering manager 1',
+  f3_tech_manager_2: 'Engineering manager 2',
+  f3_lab: 'Equipment test lab',
+  f3_tech_manager_3: 'Engineering manager 3',
+  f3_director: 'Director, floor 3',
+  f3_meeting: 'Meeting room, floor 3',
+  f4_seminar: 'Seminar room',
+  f4_accounting: 'Accounting',
+  f4_accounting_manager_2: 'Accounting manager 2',
+  f4_accounting_manager_1: 'Accounting manager 1',
+  f4_director: 'Director, floor 4',
+  f4_meeting_2: 'Meeting room 2',
+  f4_recreation: 'Recreation area',
+  f4_kids: "Children's room",
+  roof_stair: 'Stair hall',
+  roof_gym: 'Gym',
 };
-const roomName = room => L(room.label, ROOM_EN[room.id] || room.label);
+const roomName = (room) => L(room.label, ROOM_EN[room.id] || room.label);
 const deviceName = {light: () => L('ไฟ', 'Light'), climate: () => L('แอร์', 'AC'), door: () => L('ประตู', 'Door')};
-const nightText = night => night ? L('กลางคืน · เปิดอยู่', 'Night · on') : L('กลางคืน', 'Night');
+const nightText = (night) => (night ? L('กลางคืน · เปิดอยู่', 'Night · on') : L('กลางคืน', 'Night'));
 
-export async function createSimulation({ THREE, scene, model, floorRoots, renderer, camera, schedule,
-  onSelectFloor, onNightChange, onNightRequest, spotLights, shadowSpots }) {
-  const response = await fetch("./model/device-map.json");
+export async function createSimulation({
+  THREE,
+  scene,
+  model,
+  floorRoots,
+  renderer,
+  camera,
+  schedule,
+  onSelectFloor,
+  onNightChange,
+  onNightRequest,
+  spotLights,
+  shadowSpots,
+}) {
+  const response = await fetch('./model/device-map.json');
   if (!response.ok) throw new Error('Simulation map unavailable');
   const map = await response.json();
   if (map.mode !== 'simulation' || !Array.isArray(map.rooms) || !map.rooms.length) {
     throw new Error('Invalid simulation map');
   }
   const rooms = map.rooms;
-  const listeners=new Set();let interactionFilter=()=>true;
-  const byId = new Map(rooms.map(room => [room.id, room]));
-  const states = new Map(rooms.map(room => [room.id, {
-    light: room.capabilities?.light !== false, climate: false,
-    doors: Object.fromEntries((room.doorIds || []).map(id => [id, false]))
-  }]));
+  const listeners = new Set();
+  let interactionFilter = () => true;
+  const byId = new Map(rooms.map((room) => [room.id, room]));
+  const states = new Map(
+    rooms.map((room) => [
+      room.id,
+      {
+        light: room.capabilities?.light !== false,
+        climate: false,
+        doors: Object.fromEntries((room.doorIds || []).map((id) => [id, false])),
+      },
+    ]),
+  );
   const floors = new Map(floorRoots.map((root, index) => [String(index + 1), root]));
-  const fixtures = new Map(rooms.map(room => [room.id, []]));
+  const fixtures = new Map(rooms.map((room) => [room.id, []]));
   const hinges = new Map();
   const originals = new Map();
   const ownedMaterials = new Set();
   const initialAngles = new Map();
-  let selectedId = rooms[0].id, night = false, disposed = false;
-  let view = { currentFloor: 'all', cutaway: false, exploded: false };
+  let selectedId = rooms[0].id,
+    night = false,
+    disposed = false;
+  let view = {currentFloor: 'all', cutaway: false, exploded: false};
   const abort = new AbortController();
-  const listen = (element, event, handler) => element.addEventListener(event, handler, { signal: abort.signal });
+  const listen = (element, event, handler) => element.addEventListener(event, handler, {signal: abort.signal});
 
-  model.traverse(object => {
+  model.traverse((object) => {
     const data = object.userData;
     if (data.deviceKind === 'door' && data.doorId && !object.isMesh) {
       if (!hinges.has(data.doorId)) hinges.set(data.doorId, []);
@@ -53,7 +102,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     }
     if (!object.isMesh || !fixtures.has(data.roomId) || !['light', 'climate'].includes(data.deviceKind)) return;
     originals.set(object, object.material);
-    const materials = [].concat(object.material).map(material => {
+    const materials = [].concat(object.material).map((material) => {
       const clone = material.clone();
       ownedMaterials.add(clone);
       return clone;
@@ -81,13 +130,14 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     </details>`;
   const main = document.querySelector('main');
   if (!main) throw new Error('Simulation requires a main element');
-  const stage=main.querySelector('#viewport');stage.parentElement.insertBefore(panel,stage);
+  const stage = main.querySelector('#viewport');
+  stage.parentElement.insertBefore(panel, stage);
   const roomSelect = panel.querySelector('select');
   const devices = panel.querySelector('.simulation-devices');
   const summary = panel.querySelector('.simulation-room-summary');
   const feedback = panel.querySelector('.simulation-feedback');
   const nightButton = panel.querySelector('.simulation-night');
-  const floorLabel = floor => String(floor) === '5' ? L('ดาดฟ้า', 'Rooftop') : L(`ชั้น ${floor}`, `Floor ${floor}`);
+  const floorLabel = (floor) => (String(floor) === '5' ? L('ดาดฟ้า', 'Rooftop') : L(`ชั้น ${floor}`, `Floor ${floor}`));
   for (const room of rooms) {
     const option = document.createElement('option');
     option.value = room.id;
@@ -101,27 +151,43 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   // frame: its fittings' glow and its spot light follow its level (0 off … 1 on), which runs toward the switch on the
   // demo's clock (clock.js ramp: the same at the same moment however many frames are drawn; paused, it holds).
   const LIGHT_FADE_MS = 350;
-  const lightLevel = new Map(rooms.map(room => [room.id, ramp(LIGHT_FADE_MS, states.get(room.id).light ? 1 : 0)]));
+  const lightLevel = new Map(rooms.map((room) => [room.id, ramp(LIGHT_FADE_MS, states.get(room.id).light ? 1 : 0)]));
   let lightFrame = 0;
   function paintLights(now = realNow(), redraw = true) {
     for (const room of rooms) {
       const level = lightLevel.get(room.id).value(now);
       for (const object of fixtures.get(room.id)) {
         if (object.userData.deviceKind !== 'light') continue;
-        for (const material of [].concat(object.material)) if (material.emissive) { material.emissive.set(0xffdc9b); material.emissiveIntensity = (night ? 2.7 : .6) * level; }
+        for (const material of [].concat(object.material))
+          if (material.emissive) {
+            material.emissive.set(0xffdc9b);
+            material.emissiveIntensity = (night ? 2.7 : 0.6) * level;
+          }
       }
     }
-    lights.forEach((light, i) => { const d = dealt[i]; light.intensity = d.at ? SPOT_INTENSITY * lightLevel.get(d.at.room.id).value(now) * d.presence.value(now) : 0; });
+    lights.forEach((light, i) => {
+      const d = dealt[i];
+      light.intensity = d.at ? SPOT_INTENSITY * lightLevel.get(d.at.room.id).value(now) * d.presence.value(now) : 0;
+    });
     if (redraw) schedule();
   }
-  function relight() { updateLighting(); renderer.shadowMap.needsUpdate = true; schedule(); }
+  function relight() {
+    updateLighting();
+    renderer.shadowMap.needsUpdate = true;
+    schedule();
+  }
   // Brings the lights to `now`: a spot whose fade out (before a move) has ended moves to its new room then, and fades in
   // from that moment. Returns whether anything is still on its way.
   function animateLights(now) {
     let moving = false;
     lights.forEach((light, i) => {
       const d = dealt[i];
-      if (d.next !== undefined && d.presence.target === 0 && d.presence.done(now)) { const at = d.presence.endsAt; place(light, d, d.next); d.next = undefined; d.presence.set(d.at ? 1 : 0, at); }
+      if (d.next !== undefined && d.presence.target === 0 && d.presence.done(now)) {
+        const at = d.presence.endsAt;
+        place(light, d, d.next);
+        d.next = undefined;
+        d.presence.set(d.at ? 1 : 0, at);
+      }
       if (d.next !== undefined || !d.presence.done(now)) moving = true;
     });
     for (const level of lightLevel.values()) if (!level.done(now)) moving = true;
@@ -129,7 +195,8 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   }
   function lightStep() {
     lightFrame = 0;
-    const now = realNow(), moving = animateLights(now);
+    const now = realNow(),
+      moving = animateLights(now);
     paintLights(now);
     if (moving && !disposed) lightFrame = requestAnimationFrame(lightStep);
   }
@@ -138,20 +205,28 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     for (const room of rooms) lightLevel.get(room.id).set(states.get(room.id).light ? 1 : 0);
     if (document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) {
       for (const room of rooms) lightLevel.get(room.id).jump(states.get(room.id).light ? 1 : 0);
-      lights.forEach((light, i) => { const d = dealt[i]; if (d.next !== undefined) { place(light, d, d.next); d.next = undefined; } d.presence.jump(d.at ? 1 : 0); });
-      paintLights(); return;
+      lights.forEach((light, i) => {
+        const d = dealt[i];
+        if (d.next !== undefined) {
+          place(light, d, d.next);
+          d.next = undefined;
+        }
+        d.presence.jump(d.at ? 1 : 0);
+      });
+      paintLights();
+      return;
     }
     if (!lightFrame) lightFrame = requestAnimationFrame(lightStep);
   }
-  const lights = Array.from({ length: spotLights }, (_, index) => {
-    const light = new THREE.SpotLight(0xffdda0, SPOT_INTENSITY, 14, Math.PI * .31, .8, 2);
+  const lights = Array.from({length: spotLights}, (_, index) => {
+    const light = new THREE.SpotLight(0xffdda0, SPOT_INTENSITY, 14, Math.PI * 0.31, 0.8, 2);
     light.name = `Simulation_spot_${index + 1}`;
     light.visible = false;
     light.shadow.mapSize.set(512, 512);
-    light.shadow.camera.near = .15;
+    light.shadow.camera.near = 0.15;
     light.shadow.camera.far = 15;
-    light.shadow.bias = -.0004;
-    light.shadow.normalBias = .025;
+    light.shadow.bias = -0.0004;
+    light.shadow.normalBias = 0.025;
     light.shadow.radius = 4;
     // In the scene from the start (hidden until night), with its shadow setting fixed: the viewer's warm-up can then
     // compile the night's shaders before anyone sees the first dusk (main.js).
@@ -159,7 +234,8 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     scene.add(light, light.target);
     return light;
   });
-  const DEAL_MS = 220, dealt = lights.map(() => ({ presence: ramp(DEAL_MS, 0), at: null, next: undefined }));
+  const DEAL_MS = 220,
+    dealt = lights.map(() => ({presence: ramp(DEAL_MS, 0), at: null, next: undefined}));
   let dealtOnce = false;
   const worldPoint = new THREE.Vector3();
   function isVisible(object) {
@@ -171,51 +247,81 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     // Spots go to rooms whether or not their light is on; a switched-off room keeps its spot at zero intensity.
     // Toggling one room's light then changes only that room, instead of the pool re-dealing spots to other rooms,
     // and the number of active lights stays the same (no shader recompile on every switch).
-    const visibleRooms = night ? rooms.filter(room =>
-      room.capabilities?.light !== false && floors.has(String(room.floor)) &&
-      isVisible(floors.get(String(room.floor))) &&
-      (view.currentFloor === 'all' || String(room.floor) === String(view.currentFloor))) : [];
-    const selected = byId.get(selectedId), selectedRoot = selected && floors.get(String(selected.floor));
-    const anchor = selected && selectedRoot ? selectedRoot.localToWorld(new THREE.Vector3(selected.center[0], 2, selected.center[2])) : new THREE.Vector3();
-    const candidates = visibleRooms.flatMap(room => {
+    const visibleRooms = night
+      ? rooms.filter(
+          (room) =>
+            room.capabilities?.light !== false &&
+            floors.has(String(room.floor)) &&
+            isVisible(floors.get(String(room.floor))) &&
+            (view.currentFloor === 'all' || String(room.floor) === String(view.currentFloor)),
+        )
+      : [];
+    const selected = byId.get(selectedId),
+      selectedRoot = selected && floors.get(String(selected.floor));
+    const anchor =
+      selected && selectedRoot
+        ? selectedRoot.localToWorld(new THREE.Vector3(selected.center[0], 2, selected.center[2]))
+        : new THREE.Vector3();
+    const candidates = visibleRooms.flatMap((room) => {
       const root = floors.get(String(room.floor));
-      const positions = room.lightPositions?.length ? room.lightPositions :
-        [room.lightPosition || [room.center[0], 2.65, room.center[2]]];
-      return positions.map(position => {
+      const positions = room.lightPositions?.length
+        ? room.lightPositions
+        : [room.lightPosition || [room.center[0], 2.65, room.center[2]]];
+      return positions.map((position) => {
         worldPoint.fromArray(position);
         root.localToWorld(worldPoint);
         // Rank by distance from the selected room, not from the camera: the set (and its shadows) then stays
         // put while the camera moves, instead of lights hopping between rooms on every drag or zoom.
-        return { room, position, distance: worldPoint.distanceToSquared(anchor) };
+        return {room, position, distance: worldPoint.distanceToSquared(anchor)};
       });
     });
-    candidates.sort((a, b) => Number(b.room.id === selectedId) - Number(a.room.id === selectedId) || a.distance - b.distance);
+    candidates.sort(
+      (a, b) => Number(b.room.id === selectedId) - Number(a.room.id === selectedId) || a.distance - b.distance,
+    );
     // At night every spot of the pool is in the scene, unused ones dark at the scene's root: the number of lights stays
     // the same whatever the view shows (fewer rooms on one floor, a floor hidden), and with it every shader. A change
     // in that count rebuilt them all, a freeze of 0.1–0.2 s on the first night flight to a stop.
     // A spot dealt to another room (the view changed floors, another room was selected) fades out where it is, moves,
     // and fades in at its new room (DEAL_MS each way): moved at once, rooms lit up and went dark in one frame.
     lights.forEach((light, index) => {
-      const emitter = candidates[index] || null, d = dealt[index];
+      const emitter = candidates[index] || null,
+        d = dealt[index];
       light.visible = night;
-      const same = d.at === emitter || (d.at && emitter && d.at.room === emitter.room && d.at.position.every((v, k) => v === emitter.position[k]));
-      if (same) { if (d.next !== undefined) { d.next = undefined; d.presence.set(d.at ? 1 : 0); } return; }
+      const same =
+        d.at === emitter ||
+        (d.at && emitter && d.at.room === emitter.room && d.at.position.every((v, k) => v === emitter.position[k]));
+      if (same) {
+        if (d.next !== undefined) {
+          d.next = undefined;
+          d.presence.set(d.at ? 1 : 0);
+        }
+        return;
+      }
       d.next = emitter;
-      if (d.presence.value() === 0 || !dealtOnce || !night) { place(light, d, emitter); d.next = undefined; d.presence.jump(dealtOnce && night ? 0 : emitter ? 1 : 0); d.presence.set(d.at ? 1 : 0); }
-      else d.presence.set(0); // fades out where it is, then moves (animateLights)
+      if (d.presence.value() === 0 || !dealtOnce || !night) {
+        place(light, d, emitter);
+        d.next = undefined;
+        d.presence.jump(dealtOnce && night ? 0 : emitter ? 1 : 0);
+        d.presence.set(d.at ? 1 : 0);
+      } else d.presence.set(0); // fades out where it is, then moves (animateLights)
     });
     dealtOnce = true;
-    paintLights(); fadeLights();
+    paintLights();
+    fadeLights();
   }
   function place(light, d, emitter) {
     d.at = emitter;
-    if (!emitter) { if (light.parent !== scene) scene.add(light, light.target); light.userData.roomId = null; return; }
-    const { room, position } = emitter;
+    if (!emitter) {
+      if (light.parent !== scene) scene.add(light, light.target);
+      light.userData.roomId = null;
+      return;
+    }
+    const {room, position} = emitter;
     floors.get(String(room.floor)).add(light, light.target);
     light.position.fromArray(position);
-    light.position.y -= .12; // Emit below the modeled diffuser, without self-occlusion.
-    light.angle = Math.min(1.16, Math.max(.68, Math.atan((room.lightRadius || 3.7) / Math.max(light.position.y, 1))));
-    light.target.position.set(position[0], .05, position[2]);
+    light.position.y -= 0.12; // Emit below the modeled diffuser, without self-occlusion.
+    light.angle = Math.min(1.16, Math.max(0.68, Math.atan((room.lightRadius || 3.7) / Math.max(light.position.y, 1))));
+    light.target.position.set(position[0], 0.05, position[2]);
     light.userData.roomId = room.id;
     // Moved once it has faded out, long after the selection asked for its shadows: they follow it here.
     if (light.castShadow) renderer.shadowMap.needsUpdate = true;
@@ -225,8 +331,14 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   const swinging = new Map();
   let swingFrame = 0;
   function swingDoor(hinge, angle) {
-    if (Math.abs(hinge.rotation.y - angle) < 1e-4) { swinging.delete(hinge); return; }
-    if (disposed || matchMedia('(prefers-reduced-motion: reduce)').matches) { hinge.rotation.y = angle; return; }
+    if (Math.abs(hinge.rotation.y - angle) < 1e-4) {
+      swinging.delete(hinge);
+      return;
+    }
+    if (disposed || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      hinge.rotation.y = angle;
+      return;
+    }
     // On demo time: a swing stands still while the demo is paused, like everything else.
     swinging.set(hinge, {from: hinge.rotation.y, to: angle, start: realNow()});
     if (!swingFrame) swingFrame = requestAnimationFrame(swingStep);
@@ -236,8 +348,13 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     const time = realNow();
     let moved = false;
     for (const [hinge, s] of swinging) {
-      const t = Math.min(1, (time - s.start) / 600), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2, angle = s.from + (s.to - s.from) * e;
-      if (angle !== hinge.rotation.y) { hinge.rotation.y = angle; moved = true; }
+      const t = Math.min(1, (time - s.start) / 600),
+        e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2,
+        angle = s.from + (s.to - s.from) * e;
+      if (angle !== hinge.rotation.y) {
+        hinge.rotation.y = angle;
+        moved = true;
+      }
       if (t === 1) swinging.delete(hinge);
     }
     if (swinging.size) swingFrame = requestAnimationFrame(swingStep);
@@ -267,10 +384,11 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     updateLighting();
     renderer.shadowMap.needsUpdate = true;
     schedule();
-    for(const listener of listeners)listener();
+    for (const listener of listeners) listener();
   }
   function renderControls() {
-    const room = byId.get(selectedId), state = states.get(selectedId);
+    const room = byId.get(selectedId),
+      state = states.get(selectedId);
     roomSelect.value = selectedId;
     summary.textContent = `${roomName(room)} · ${floorLabel(room.floor)}`;
     devices.replaceChildren();
@@ -291,10 +409,14 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     };
     if (room.capabilities?.light !== false) add('light', deviceName.light(), state.light);
     if (room.capabilities?.climate !== false) add('climate', deviceName.climate(), state.climate);
-    if (room.capabilities?.door !== false) (room.doorIds || []).forEach((id, index, all) => add('door', all.length > 1 ? `${deviceName.door()} ${index + 1}` : deviceName.door(), state.doors[id], id));
+    if (room.capabilities?.door !== false)
+      (room.doorIds || []).forEach((id, index, all) =>
+        add('door', all.length > 1 ? `${deviceName.door()} ${index + 1}` : deviceName.door(), state.doors[id], id),
+      );
   }
   function toggle(kind, doorId) {
-    const state = states.get(selectedId), room = byId.get(selectedId);
+    const state = states.get(selectedId),
+      room = byId.get(selectedId);
     if (room.capabilities?.[kind] === false) return;
     let enabled;
     if (kind === 'door') {
@@ -305,15 +427,21 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     else return;
     renderControls();
     updateModel();
-    feedback.textContent = L(`${room.label} · ${deviceName[kind]()}${enabled ? 'เปิด' : 'ปิด'}แล้ว`, `${roomName(room)} · ${deviceName[kind]()} turned ${enabled ? 'on' : 'off'}`);
+    feedback.textContent = L(
+      `${room.label} · ${deviceName[kind]()}${enabled ? 'เปิด' : 'ปิด'}แล้ว`,
+      `${roomName(room)} · ${deviceName[kind]()} turned ${enabled ? 'on' : 'off'}`,
+    );
   }
-  listen(devices, 'click', event => {
+  listen(devices, 'click', (event) => {
     const button = event.target.closest('button[data-device]');
     if (!button) return;
-    const kind = button.dataset.device, door = button.dataset.door;
+    const kind = button.dataset.device,
+      door = button.dataset.door;
     toggle(kind, door);
     // Preserve keyboard focus when state labels are refreshed.
-    [...devices.children].find(item => item.dataset.device === kind && item.dataset.door === door)?.focus({ preventScroll: true });
+    [...devices.children]
+      .find((item) => item.dataset.device === kind && item.dataset.door === door)
+      ?.focus({preventScroll: true});
   });
   listen(roomSelect, 'change', () => {
     selectedId = roomSelect.value;
@@ -333,51 +461,76 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   }
   // A light/climate/door patch for one room. A shared doorway keeps a single pose across the rooms it opens into.
   function patchRoom(id, patch) {
-    const room = byId.get(id), state = states.get(id);
-    for (const key of ['light', 'climate']) if (typeof patch[key] === 'boolean' && room.capabilities?.[key] !== false) state[key] = patch[key];
-    for (const [door, value] of Object.entries(patch.doors || {})) if (typeof value === 'boolean' && Object.hasOwn(state.doors, door)) for (const other of states.values()) if (Object.hasOwn(other.doors, door)) other.doors[door] = value;
+    const room = byId.get(id),
+      state = states.get(id);
+    for (const key of ['light', 'climate'])
+      if (typeof patch[key] === 'boolean' && room.capabilities?.[key] !== false) state[key] = patch[key];
+    for (const [door, value] of Object.entries(patch.doors || {}))
+      if (typeof value === 'boolean' && Object.hasOwn(state.doors, door))
+        for (const other of states.values()) if (Object.hasOwn(other.doors, door)) other.doors[door] = value;
   }
 
   // Ray picking only follows a short, stationary, single-pointer gesture.
-  const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
+  const raycaster = new THREE.Raycaster(),
+    pointer = new THREE.Vector2();
   const canvas = renderer.domElement;
   let press = null;
   const pointers = new Set();
-  listen(canvas, 'pointerdown', event => {
+  listen(canvas, 'pointerdown', (event) => {
     pointers.add(event.pointerId);
-    if (pointers.size !== 1 || event.button !== 0) { press = null; return; }
-    press = { x: event.clientX, y: event.clientY, id: event.pointerId, time: performance.now(), moved: false };
+    if (pointers.size !== 1 || event.button !== 0) {
+      press = null;
+      return;
+    }
+    press = {x: event.clientX, y: event.clientY, id: event.pointerId, time: performance.now(), moved: false};
   });
-  listen(canvas, 'pointermove', event => {
+  listen(canvas, 'pointermove', (event) => {
     if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 6) press.moved = true;
   });
-  const release = event => { pointers.delete(event.pointerId); press = null; };
+  const release = (event) => {
+    pointers.delete(event.pointerId);
+    press = null;
+  };
   listen(canvas, 'pointercancel', release);
-  listen(window, 'pointerup', event => {
+  listen(window, 'pointerup', (event) => {
     const start = press;
     pointers.delete(event.pointerId);
     press = null;
-    if (event.target !== canvas || !start || start.id !== event.pointerId || start.moved || performance.now() - start.time > 500 ||
-      Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) return;
+    if (
+      event.target !== canvas ||
+      !start ||
+      start.id !== event.pointerId ||
+      start.moved ||
+      performance.now() - start.time > 500 ||
+      Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6
+    )
+      return;
     const rect = canvas.getBoundingClientRect();
-    pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
+    pointer.set(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      (-(event.clientY - rect.top) / rect.height) * 2 + 1,
+    );
     model.updateWorldMatrix(true, true);
     raycaster.setFromCamera(pointer, camera);
     // Respect occlusion and cut planes: never operate a device through an opaque wall.
-    const hit = raycaster.intersectObject(model, true).find(item => {
+    const hit = raycaster.intersectObject(model, true).find((item) => {
       if (!isVisible(item.object) || !item.object.isMesh) return false;
       const materials = [].concat(item.object.material || []);
       const material = materials[item.face?.materialIndex || 0];
-      return material && material.visible && !(material.transparent && material.opacity < .3) &&
-        !(material.clippingPlanes || []).some(plane => plane.distanceToPoint(item.point) < 0);
+      return (
+        material &&
+        material.visible &&
+        !(material.transparent && material.opacity < 0.3) &&
+        !(material.clippingPlanes || []).some((plane) => plane.distanceToPoint(item.point) < 0)
+      );
     });
     if (!hit) return;
     let device = hit.object;
     while (device && !device.userData.deviceKind) device = device.parent;
     if (!device) return;
     const data = device.userData;
-    const room = byId.get(data.roomId) || rooms.find(item => item.doorIds?.includes(data.doorId));
-    if (!room||!interactionFilter(room)) return;
+    const room = byId.get(data.roomId) || rooms.find((item) => item.doorIds?.includes(data.doorId));
+    if (!room || !interactionFilter(room)) return;
     selectedId = room.id;
     panel.querySelector('details').open = true;
     toggle(data.deviceKind, data.doorId);
@@ -387,28 +540,50 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
 
   return {
     rooms,
-    setInteractionFilter(filter){interactionFilter=filter;},
-    reset(){for(const room of rooms){const state=states.get(room.id);state.light=room.capabilities?.light!==false;state.climate=false;for(const id of Object.keys(state.doors))state.doors[id]=false;}renderControls();updateModel();},
-    subscribe(listener){listeners.add(listener);return ()=>listeners.delete(listener);},
-    applySnapshot(snapshot){
-      if(disposed)return;
-      for(const [id,patch] of Object.entries(snapshot.rooms||{}))if(byId.has(id))patchRoom(id,patch);
-      renderControls();updateModel();
+    setInteractionFilter(filter) {
+      interactionFilter = filter;
+    },
+    reset() {
+      for (const room of rooms) {
+        const state = states.get(room.id);
+        state.light = room.capabilities?.light !== false;
+        state.climate = false;
+        for (const id of Object.keys(state.doors)) state.doors[id] = false;
+      }
+      renderControls();
+      updateModel();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    applySnapshot(snapshot) {
+      if (disposed) return;
+      for (const [id, patch] of Object.entries(snapshot.rooms || {})) if (byId.has(id)) patchRoom(id, patch);
+      renderControls();
+      updateModel();
     },
     // The night's spot lights are dealt around the selected room: deal them again now, not at the next switch (that
     // moved several of them between rooms at once, long after the selection).
-    selectRoom(id){if(!byId.has(id))return;const changed=selectedId!==id;selectedId=id;renderControls();if(changed)relight();},
-    setRoom(id,patch){
-      if(!byId.has(id))return;
-      patchRoom(id,patch);
-      renderControls();updateModel();
+    selectRoom(id) {
+      if (!byId.has(id)) return;
+      const changed = selectedId !== id;
+      selectedId = id;
+      renderControls();
+      if (changed) relight();
+    },
+    setRoom(id, patch) {
+      if (!byId.has(id)) return;
+      patchRoom(id, patch);
+      renderControls();
+      updateModel();
     },
     setNight,
     setView(next) {
       if (disposed) return;
-      view = { ...view, ...next, currentFloor: String(next.currentFloor ?? view.currentFloor) };
+      view = {...view, ...next, currentFloor: String(next.currentFloor ?? view.currentFloor)};
       if (view.currentFloor !== 'all' && String(byId.get(selectedId).floor) !== view.currentFloor) {
-        const room = rooms.find(item => String(item.floor) === view.currentFloor);
+        const room = rooms.find((item) => String(item.floor) === view.currentFloor);
         if (room) selectedId = room.id;
       }
       feedback.textContent = '';
@@ -416,10 +591,17 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       updateModel();
     },
     // Before every draw: the lights as they are at this moment (the benchmark and the screenshots draw between frames).
-    beforeDraw() { const now = realNow(); animateLights(now); paintLights(now, false); },
+    beforeDraw() {
+      const now = realNow();
+      animateLights(now);
+      paintLights(now, false);
+    },
     getState() {
-      return { night, view: { ...view },
-        rooms: Object.fromEntries([...states].map(([id, state]) => [id, { ...state, doors: { ...state.doors } }])) };
+      return {
+        night,
+        view: {...view},
+        rooms: Object.fromEntries([...states].map(([id, state]) => [id, {...state, doors: {...state.doors}}])),
+      };
     },
     dispose() {
       cancelAnimationFrame(lightFrame);
@@ -429,12 +611,16 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       abort.abort();
       listeners.clear();
       panel.remove();
-      for (const light of lights) { light.removeFromParent(); light.target.removeFromParent(); light.dispose(); }
+      for (const light of lights) {
+        light.removeFromParent();
+        light.target.removeFromParent();
+        light.dispose();
+      }
       for (const [object, material] of originals) object.material = material;
       for (const material of ownedMaterials) material.dispose();
       for (const [object, angle] of initialAngles) object.rotation.y = angle;
       renderer.shadowMap.needsUpdate = true;
       schedule();
-    }
+    },
   };
 }

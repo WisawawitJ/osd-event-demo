@@ -7,7 +7,9 @@ import {daySnapshot} from 'osd/viewer/building-day.js';
 import {createReadings, HOLD_MINUTES} from 'osd/viewer/readings.js';
 
 const rooms = JSON.parse(readFileSync(new URL('../../model/device-map.json', import.meta.url))).rooms;
-const at = minute => { world.jumpTo(minute); };
+const at = (minute) => {
+  world.jumpTo(minute);
+};
 const plan = () => daySnapshot(world.minute(), rooms).telemetry;
 
 test('a temperature set by hand stays an hour of world time, then the schedule takes it back', () => {
@@ -18,7 +20,7 @@ test('a temperature set by hand stays an hour of world time, then the schedule t
   at(10 * 60 + HOLD_MINUTES - 5);
   assert.ok(!('temp' in r.scheduled()), 'still held after 55 minutes');
   at(10 * 60 + HOLD_MINUTES + 5);
-  assert.equal(r.scheduled().temp, plan().temp, 'the schedule\'s again after the hour');
+  assert.equal(r.scheduled().temp, plan().temp, "the schedule's again after the hour");
   r.dispose();
 });
 
@@ -38,9 +40,9 @@ test('"low water" set by hand stays while the day runs on, until the schedule ch
   const r = createReadings(rooms);
   r.hold(['pondAlert', 'water']);
   at(13 * 60);
-  assert.ok(!('water' in r.scheduled()), 'still the hand-set level at 13:00 (the schedule\'s unchanged)');
+  assert.ok(!('water' in r.scheduled()), "still the hand-set level at 13:00 (the schedule's unchanged)");
   at(15 * 60); // the schedule's own low water (14:50–16:00)
-  assert.equal(r.scheduled().water, plan().water, 'the schedule\'s own change takes over');
+  assert.equal(r.scheduled().water, plan().water, "the schedule's own change takes over");
   r.dispose();
 });
 

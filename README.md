@@ -32,6 +32,7 @@ npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, d
 ```
 
 **The tests run the demo without a browser.** Its logic is separate from its page:
+
 - `src/parking/clock.js`, the engine: simulation time moves only when stepped, in ticks of at most 50 ms; each tick
   fires the timers due in it in order, then the per-tick systems (cars moving, the world clock). The browser steps it
   every frame by the real time elapsed; pausing stops the stepping. Dice come from a seeded generator, so a run can be

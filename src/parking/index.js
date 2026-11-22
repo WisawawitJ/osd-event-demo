@@ -12,61 +12,91 @@ import {createParkingWorld} from './world.js';
 import {CAR, disposeCars} from './cars.js';
 
 export const PARKING_POSES = {
-  lot: {eye: [-4, 30, 52], target: [-33, .5, 3], fov: 42},
+  lot: {eye: [-4, 30, 52], target: [-33, 0.5, 3], fov: 42},
   // From across the street: the road, its junction with the entrance road, and the barrier.
   gate: {eye: [-4, 12, 45], target: [-24, 1, 21], fov: 40},
-  rowA: {eye: [-14, 13, 24], target: [-30.5, .5, 7], fov: 44},
+  rowA: {eye: [-14, 13, 24], target: [-30.5, 0.5, 7], fov: 44},
 };
 
 export function createParking({scene, schedule, camera = null, renderer, afterRender, capture, fly}) {
-  const $ = s => document.querySelector(s);
-  const layer = $('#parking-layer'), panelRoot = $('#parking-panel'), phoneRoot = $('#pk-phone'), bar = $('#parking-bar');
+  const $ = (s) => document.querySelector(s);
+  const layer = $('#parking-layer'),
+    panelRoot = $('#parking-panel'),
+    phoneRoot = $('#pk-phone'),
+    bar = $('#parking-bar');
   const sim = createParkingSim();
   const lot = createLot({scene, stalls: sim.state.stalls, schedule, renderer});
   let active = false;
 
   // Plate camera: snapshot plus where the plate sits in the frame, or null when the camera cannot read it: the plate
   // faces away, is behind the lens (projected corners would flip into the frame), or is not wholly in the picture.
-  const corner = new THREE.Vector3(), plateNormal = new THREE.Vector3(), toCamera = new THREE.Vector3();
+  const corner = new THREE.Vector3(),
+    plateNormal = new THREE.Vector3(),
+    toCamera = new THREE.Vector3();
   function plateBox(camera, agent) {
-    agent.car.updateWorldMatrix(true, true); camera.updateWorldMatrix(true, false);
+    agent.car.updateWorldMatrix(true, true);
+    camera.updateWorldMatrix(true, false);
     agent.car.localToWorld(corner.set(0, CAR.plateY, CAR.frontPlateZ));
     camera.getWorldPosition(toCamera).sub(corner);
     plateNormal.set(0, 0, 1).transformDirection(agent.car.matrixWorld);
     if (plateNormal.dot(toCamera) <= 0) return null;
-    let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
-    for (const [dx, dy] of [[-.31, -.15], [.31, -.15], [.31, .15], [-.31, .15]]) {
-      corner.set(dx, CAR.plateY + dy, CAR.frontPlateZ + .02);
+    let x0 = 1,
+      y0 = 1,
+      x1 = 0,
+      y1 = 0;
+    for (const [dx, dy] of [
+      [-0.31, -0.15],
+      [0.31, -0.15],
+      [0.31, 0.15],
+      [-0.31, 0.15],
+    ]) {
+      corner.set(dx, CAR.plateY + dy, CAR.frontPlateZ + 0.02);
       agent.car.localToWorld(corner).project(camera);
       if (corner.z < -1 || corner.z > 1) return null;
-      const x = (corner.x + 1) / 2, y = (1 - corner.y) / 2;
+      const x = (corner.x + 1) / 2,
+        y = (1 - corner.y) / 2;
       if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      y0 = Math.min(y0, y);
+      y1 = Math.max(y1, y);
     }
-    const pad = .02;
+    const pad = 0.02;
     return {x: x0 - pad, y: y0 - pad, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2};
   }
-  const snap = which => capture(lot.cameras[which]);
+  const snap = (which) => capture(lot.cameras[which]);
   // The car each plate camera is reading.
   const reading = {in: null, out: null};
 
   // Live LPR feed: after each 3D frame, draw the gate camera into the pop-up's picture area of the same canvas
   // (a scissored viewport), and place the plate box from that camera. Costs one extra render while it shows.
   let live = null;
-  const liveSize = new THREE.Vector2(), liveViewport = new THREE.Vector4(), liveScissor = new THREE.Vector4();
+  const liveSize = new THREE.Vector2(),
+    liveViewport = new THREE.Vector4(),
+    liveScissor = new THREE.Vector4();
   function drawLiveFeed() {
     const area = active && live ? overlays.feedView() : null;
     if (!area) return;
-    const canvas = renderer.domElement, c = canvas.getBoundingClientRect(), r = area.getBoundingClientRect();
+    const canvas = renderer.domElement,
+      c = canvas.getBoundingClientRect(),
+      r = area.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) return;
-    const x = r.left - c.left, y = c.bottom - r.bottom; // three.js viewports count from the bottom, in CSS pixels
+    const x = r.left - c.left,
+      y = c.bottom - r.bottom; // three.js viewports count from the bottom, in CSS pixels
     const {camera, agent} = live;
-    camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
-    renderer.getViewport(liveViewport); renderer.getScissor(liveScissor); renderer.getSize(liveSize);
+    camera.aspect = r.width / r.height;
+    camera.updateProjectionMatrix();
+    renderer.getViewport(liveViewport);
+    renderer.getScissor(liveScissor);
+    renderer.getSize(liveSize);
     const scissorTest = renderer.getScissorTest();
-    renderer.setViewport(x, y, r.width, r.height); renderer.setScissor(x, y, r.width, r.height); renderer.setScissorTest(true);
+    renderer.setViewport(x, y, r.width, r.height);
+    renderer.setScissor(x, y, r.width, r.height);
+    renderer.setScissorTest(true);
     renderer.render(scene, camera);
-    renderer.setViewport(liveViewport); renderer.setScissor(liveScissor); renderer.setScissorTest(scissorTest);
+    renderer.setViewport(liveViewport);
+    renderer.setScissor(liveScissor);
+    renderer.setScissorTest(scissorTest);
     overlays.setFeedBox(agent.car.parent ? plateBox(camera, agent) : null);
   }
   afterRender.add(drawLiveFeed);
@@ -76,64 +106,116 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   const panel = createPanel({root: panelRoot, sim, actions});
   const phone = createPhone({root: phoneRoot, sim, actions: {openChanged: () => renderBar()}});
   const overlays = createOverlays({layer: $('#pk-overlays'), sim, actions});
-  const say = (ic, key, vars, tone, queued) => overlays.toast(`${icon(ic)}<span>${esc(t(key, vars))}${queued ? ` · ${esc(t('gate.sim.queued'))}` : ''}</span>`, tone);
+  const say = (ic, key, vars, tone, queued) =>
+    overlays.toast(
+      `${icon(ic)}<span>${esc(t(key, vars))}${queued ? ` · ${esc(t('gate.sim.queued'))}` : ''}</span>`,
+      tone,
+    );
 
-  const parking = createParkingWorld({lot, sim, camera, phone, watched: () => active, ui: {
-    panel, overlays, schedule, snapshot: snap,
-    fly: (name, ms) => fly(PARKING_POSES[name], ms),
-    caption(c, hint) { overlays.caption(c ? {...c, hint: hint && t(hint)} : null); },
-    tap() { for (const el of document.querySelectorAll('[data-cue="true"]')) { el.classList.remove('pk-tapped'); void el.offsetWidth; el.classList.add('pk-tapped'); } },
-    toast: say,
-    // The plate camera reads: the pop-up shows the gate camera live (the 3D view draws it into its picture area).
-    plateRead(which, agent, verdict, confidence) {
-      reading[which] = agent;
-      live = {camera: lot.cameras[which], agent};
-      overlays.showFeed({which, phase: 'reading', plate: agent.plate, province: agent.province, verdict, confidence});
-      schedule();
+  const parking = createParkingWorld({
+    lot,
+    sim,
+    camera,
+    phone,
+    watched: () => active,
+    ui: {
+      panel,
+      overlays,
+      schedule,
+      snapshot: snap,
+      fly: (name, ms) => fly(PARKING_POSES[name], ms),
+      caption(c, hint) {
+        overlays.caption(c ? {...c, hint: hint && t(hint)} : null);
+      },
+      tap() {
+        for (const el of document.querySelectorAll('[data-cue="true"]')) {
+          el.classList.remove('pk-tapped');
+          void el.offsetWidth;
+          el.classList.add('pk-tapped');
+        }
+      },
+      toast: say,
+      // The plate camera reads: the pop-up shows the gate camera live (the 3D view draws it into its picture area).
+      plateRead(which, agent, verdict, confidence) {
+        reading[which] = agent;
+        live = {camera: lot.cameras[which], agent};
+        overlays.showFeed({which, phase: 'reading', plate: agent.plate, province: agent.province, verdict, confidence});
+        schedule();
+      },
+      // Read: the Gate tab's picture from that camera is this capture, the car at the line with its plate in view, kept
+      // until the next car (as a plate camera shows its last capture). Taken as the read began, the car was still rolling
+      // up, half out of the picture; retaken after each car had gone, it showed an empty road or the arm mid-swing.
+      // Not of a car no longer there (a reset during the read removes every car at once: its capture landed in the new
+      // run, of a car from the old one), nor with the car park hidden (another floor shown during the read: the camera saw
+      // only grass); the last capture stays then.
+      plateDone(which) {
+        if (reading[which]?.car.parent === lot.root && lot.root.visible) panel.setSnapshot(which, snap(which));
+        reading[which] = null;
+        overlays.updateFeed({phase: 'done'});
+      },
+      full(plate) {
+        say('alert', 'gate.full', {plate});
+      },
+      leftGate() {
+        overlays.hideFeed(3200);
+      },
+      event(kind, payload) {
+        if (kind === 'request' && payload?.status === 'pending' && payload.history.length === 1) {
+          panel.markNew(payload.id);
+          overlays.toast(
+            `${icon('inbox')}<span><b>${esc(t('att.pending'))}</b> ${esc(payload.visitor.name)} · ${esc(payload.plate)}</span>`,
+            'info',
+          );
+        }
+        // A presenter's own unknown car brings up the Gate tab; a background one does not (every few minutes it closed
+        // the request or reason being worked on).
+        if (kind === 'alert') {
+          overlays.showAlert(payload.id);
+          if (!story.running && !payload.ambient) panel.show('gate');
+        }
+        if (kind === 'entry' || kind === 'exit') panel.flash(payload.id);
+        if (kind === 'alertReason') overlays.refresh(); // the pop-up shows the card's pick
+        // Which email went (a rejection or revocation said "Ticket emailed" too).
+        if (kind === 'email')
+          overlays.toast(
+            `${icon('check')}<span>${esc(t(payload.kind === 'approved' ? 'req.emailSent' : `req.emailSent.${payload.kind}`))}</span>`,
+            'ok',
+          );
+        panel.render();
+      },
+      storyChanged() {
+        renderBar();
+        panel.render();
+      }, // the Gate tab's test buttons too
     },
-    // Read: the Gate tab's picture from that camera is this capture, the car at the line with its plate in view, kept
-    // until the next car (as a plate camera shows its last capture). Taken as the read began, the car was still rolling
-    // up, half out of the picture; retaken after each car had gone, it showed an empty road or the arm mid-swing.
-    // Not of a car no longer there (a reset during the read removes every car at once: its capture landed in the new
-    // run, of a car from the old one), nor with the car park hidden (another floor shown during the read: the camera saw
-    // only grass); the last capture stays then.
-    plateDone(which) {
-      if (reading[which]?.car.parent === lot.root && lot.root.visible) panel.setSnapshot(which, snap(which));
-      reading[which] = null;
-      overlays.updateFeed({phase: 'done'});
-    },
-    full(plate) { say('alert', 'gate.full', {plate}); },
-    leftGate() { overlays.hideFeed(3200); },
-    event(kind, payload) {
-      if (kind === 'request' && payload?.status === 'pending' && payload.history.length === 1) {
-        panel.markNew(payload.id);
-        overlays.toast(`${icon('inbox')}<span><b>${esc(t('att.pending'))}</b> ${esc(payload.visitor.name)} · ${esc(payload.plate)}</span>`, 'info');
-      }
-      // A presenter's own unknown car brings up the Gate tab; a background one does not (every few minutes it closed
-      // the request or reason being worked on).
-      if (kind === 'alert') { overlays.showAlert(payload.id); if (!story.running && !payload.ambient) panel.show('gate'); }
-      if (kind === 'entry' || kind === 'exit') panel.flash(payload.id);
-      if (kind === 'alertReason') overlays.refresh(); // the pop-up shows the card's pick
-      // Which email went (a rejection or revocation said "Ticket emailed" too).
-      if (kind === 'email') overlays.toast(`${icon('check')}<span>${esc(t(payload.kind === 'approved' ? 'req.emailSent' : `req.emailSent.${payload.kind}`))}</span>`, 'ok');
-      panel.render();
-    },
-    storyChanged() { renderBar(); panel.render(); }, // the Gate tab's test buttons too
-  }});
+  });
   const {traffic, story} = parking;
   Object.assign(actions, parking.actions, {
     feedChanged: () => schedule(),
-    toast: text => overlays.toast(esc(text)),
+    toast: (text) => overlays.toast(esc(text)),
     // A camera with no car read yet shows what it sees now; one that has read a car keeps that capture.
-    gateShown() { for (const which of ['in', 'out']) if (!panel.hasSnapshot(which)) panel.setSnapshot(which, snap(which)); },
+    gateShown() {
+      for (const which of ['in', 'out']) if (!panel.hasSnapshot(which)) panel.setSnapshot(which, snap(which));
+    },
   });
   // A presenter working the console or the alert during the story: a cue on auto-advance waits for them.
-  for (const el of [panelRoot, $('#pk-overlays')]) for (const type of ['pointerdown', 'keydown']) el.addEventListener(type, () => { if (story.running) story.touched(); }, {capture: true});
+  for (const el of [panelRoot, $('#pk-overlays')])
+    for (const type of ['pointerdown', 'keydown'])
+      el.addEventListener(
+        type,
+        () => {
+          if (story.running) story.touched();
+        },
+        {capture: true},
+      );
 
   // Story bar below the viewport -----------------------------------------
   function renderBar() {
     const s = story;
-    const dots = Array.from({length: s.total}, (_, i) => `<i class="${i < s.index ? 'done' : i === s.index ? 'now' : ''}"></i>`).join('');
+    const dots = Array.from(
+      {length: s.total},
+      (_, i) => `<i class="${i < s.index ? 'done' : i === s.index ? 'now' : ''}"></i>`,
+    ).join('');
     const main = !s.running
       ? `<button class="primary-button" data-bar="play">${icon('play')}<span>${t('story.play')}</span></button>`
       : s.auto
@@ -144,7 +226,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
       <div class="pk-bar-progress">${s.running ? `<span>${t('story.step', {n: s.index + 1, total: s.total})}</span><div class="pk-dots">${dots}</div>` : `<span class="pk-bar-idle">${t('story.idle')}</span>`}</div>
       <button class="pk-phone-toggle" data-bar="phone" aria-pressed="${phone.isOpen}">${icon('phone')}<span>${phone.isOpen ? t('ph.hide') : t('ph.show')}</span></button>`;
   }
-  bar.addEventListener('click', e => {
+  bar.addEventListener('click', (e) => {
     const b = e.target.closest('[data-bar]');
     if (!b || b.dataset.bar === 'auto') return;
     const what = b.dataset.bar;
@@ -158,7 +240,9 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     if (what === 'phone') phone.setOpen(!phone.isOpen);
     renderBar();
   });
-  bar.addEventListener('change', e => { if (e.target.dataset.bar === 'auto') story.setAuto(e.target.checked); });
+  bar.addEventListener('change', (e) => {
+    if (e.target.dataset.bar === 'auto') story.setAuto(e.target.checked);
+  });
 
   // Leaving the story. A playing story also ends as soon as the visitor takes over:
   // dragging or zooming the 3D view, or picking a console tab (on auto-advance; in Next mode the presenter may
@@ -171,7 +255,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     renderBar();
   }
   const viewport = $('#viewport');
-  const takeOver = event => {
+  const takeOver = (event) => {
     if (!active || !story.running || !story.auto) return;
     // Nor the plate camera card (it is not the view: a tap on it ended the story). A toast lets taps through to the view
     // under it, so a tap there is one on the view.
@@ -183,41 +267,88 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   // A view key on the 3D view too (arrows, + −, Page Up/Down, R): the story's next camera move overrode the presenter.
   // As the view reads them: an arrow with any modifier (Ctrl+arrow turns it), the others without, by key place or, from
   // an on-screen keyboard (no key place), by character.
-  viewport.addEventListener('keydown', event => {
-    if (event.target.tagName !== 'CANVAS') return;
-    if (event.key.startsWith('Arrow')) return takeOver(event);
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (event.key.startsWith('Page') || ['KeyR', 'Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(event.code) || ['r', 'R', '+', '=', '-'].includes(event.key)) takeOver(event);
-  }, {capture: true});
-  panelRoot.addEventListener('click', event => { if (event.target.closest('[data-tab]')) takeOver(event); }, {capture: true});
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && active && story.running) leaveStory(); });
+  viewport.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.target.tagName !== 'CANVAS') return;
+      if (event.key.startsWith('Arrow')) return takeOver(event);
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (
+        event.key.startsWith('Page') ||
+        ['KeyR', 'Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(event.code) ||
+        ['r', 'R', '+', '=', '-'].includes(event.key)
+      )
+        takeOver(event);
+    },
+    {capture: true},
+  );
+  panelRoot.addEventListener(
+    'click',
+    (event) => {
+      if (event.target.closest('[data-tab]')) takeOver(event);
+    },
+    {capture: true},
+  );
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && active && story.running) leaveStory();
+  });
 
-  onLang(() => { panel.render(); phone.render(); overlays.refresh(); story.refreshCaption(); renderBar(); });
+  onLang(() => {
+    panel.render();
+    phone.render();
+    overlays.refresh();
+    story.refreshCaption();
+    renderBar();
+  });
   renderBar();
   panel.render();
 
   return {
-    sim, story, lot, traffic,
+    sim,
+    story,
+    lot,
+    traffic,
     enter() {
       active = true;
       document.body.classList.add('parking-active');
-      layer.hidden = false; panelRoot.hidden = false; bar.hidden = false;
-      panel.render(); renderBar();
+      layer.hidden = false;
+      panelRoot.hidden = false;
+      bar.hidden = false;
+      panel.render();
+      renderBar();
     },
     exit() {
       active = false;
       story.stop();
       document.body.classList.remove('parking-active');
-      layer.hidden = true; panelRoot.hidden = true; bar.hidden = true;
+      layer.hidden = true;
+      panelRoot.hidden = true;
+      bar.hidden = true;
       phone.setOpen(false);
     },
-    get active() { return active; },
+    get active() {
+      return active;
+    },
     // Runs the story once (the `story` option) and resolves when it ends or stops.
-    playStory(options) { return parking.playStory(options); },
-    stopStory() { story.stop(); },
-    setNight(night) { lot.setNight(night); traffic.setNight(night); },
-    toggleLang() { setLang(getLang() === 'en' ? 'th' : 'en'); },
-    dispose() { afterRender.delete(drawLiveFeed); parking.dispose(); lot.dispose(); disposeCars(); },
+    playStory(options) {
+      return parking.playStory(options);
+    },
+    stopStory() {
+      story.stop();
+    },
+    setNight(night) {
+      lot.setNight(night);
+      traffic.setNight(night);
+    },
+    toggleLang() {
+      setLang(getLang() === 'en' ? 'th' : 'en');
+    },
+    dispose() {
+      afterRender.delete(drawLiveFeed);
+      parking.dispose();
+      lot.dispose();
+      disposeCars();
+    },
   };
 }
 
@@ -229,7 +360,14 @@ export function createParkingScene({scene, schedule, camera = null, renderer = n
   const w = createParkingWorld({lot, sim, camera, staffOnly: true, ui: {schedule}});
   return {
     lot,
-    setNight(night) { lot.setNight(night); w.traffic.setNight(night); },
-    dispose() { w.dispose(); lot.dispose(); disposeCars(); },
+    setNight(night) {
+      lot.setNight(night);
+      w.traffic.setNight(night);
+    },
+    dispose() {
+      w.dispose();
+      lot.dispose();
+      disposeCars();
+    },
   };
 }

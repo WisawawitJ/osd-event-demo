@@ -15,15 +15,29 @@ export const IDLE_MS = 60000;
 // `hidden()`: the page is out of sight (another tab).
 // `after(fn, ms)` / `cancel(handle)`: the idle timer (default the engine's clock; the page gives it real time, as a
 // paused day stops the engine's).
-export function createDirector({select, cancelFlight = () => {}, parking = null, building = null, current = () => 'overview', ui = {}, hidden = () => false, after = later, cancel = cancelLater}) {
-  let idleTimer = null, disposed = false;
+export function createDirector({
+  select,
+  cancelFlight = () => {},
+  parking = null,
+  building = null,
+  current = () => 'overview',
+  ui = {},
+  hidden = () => false,
+  after = later,
+  cancel = cancelLater,
+}) {
+  let idleTimer = null,
+    disposed = false;
 
   // Back to the start: what plays stops, the day runs, the camera goes to the overview.
   function rest() {
     idleTimer = null;
     if (disposed) return;
     const s = parking?.story;
-    if (hidden() || (s?.running && s.auto && !s.paused) || (building?.running && !world.paused)) { arm(); return; }
+    if (hidden() || (s?.running && s.auto && !s.paused) || (building?.running && !world.paused)) {
+      arm();
+      return;
+    }
     if (s?.running) parking.stopStory();
     building?.stop();
     ui.stopScenario?.();
@@ -31,16 +45,32 @@ export function createDirector({select, cancelFlight = () => {}, parking = null,
     if (current() !== 'overview') void select('overview', {guided: true});
     ui.render?.();
   }
-  function arm() { cancel(idleTimer); idleTimer = disposed ? null : after(rest, IDLE_MS); }
+  function arm() {
+    cancel(idleTimer);
+    idleTimer = disposed ? null : after(rest, IDLE_MS);
+  }
   arm();
 
   return {
     // Any touch, key or wheel on the page: the quiet minute starts again.
     touch: arm,
     // A jump in time or Night/Day: what plays by itself stops (the stories too: they hold the clock).
-    stopActivity() { building?.stop(); if (parking?.story.running) parking.stopStory(); ui.stopScenario?.(); cancelFlight(); },
+    stopActivity() {
+      building?.stop();
+      if (parking?.story.running) parking.stopStory();
+      ui.stopScenario?.();
+      cancelFlight();
+    },
     // Another tab: a scenario stops (its flight too).
-    hiddenPage() { ui.stopScenario?.(); cancelFlight(); ui.render?.(); },
-    dispose() { disposed = true; cancel(idleTimer); idleTimer = null; },
+    hiddenPage() {
+      ui.stopScenario?.();
+      cancelFlight();
+      ui.render?.();
+    },
+    dispose() {
+      disposed = true;
+      cancel(idleTimer);
+      idleTimer = null;
+    },
   };
 }

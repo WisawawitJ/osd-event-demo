@@ -3,16 +3,27 @@
 
 const KEY = 'osd-demo-language';
 const listeners = new Set();
-let lang = (() => { try { return localStorage.getItem(KEY) === 'en' ? 'en' : 'th'; } catch { return 'th'; } })();
+let lang = (() => {
+  try {
+    return localStorage.getItem(KEY) === 'en' ? 'en' : 'th';
+  } catch {
+    return 'th';
+  }
+})();
 
 export const getLang = () => lang;
 export function setLang(next) {
   lang = next === 'en' ? 'en' : 'th';
-  try { localStorage.setItem(KEY, lang); } catch {}
+  try {
+    localStorage.setItem(KEY, lang);
+  } catch {}
   document.documentElement.lang = lang;
   for (const fn of listeners) fn(lang);
 }
-export const onLang = fn => { listeners.add(fn); return () => listeners.delete(fn); };
+export const onLang = (fn) => {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+};
 document.documentElement.lang = lang;
 
 // [thai, english]
@@ -24,15 +35,15 @@ const S = {
   'parking.floor': ['ลานจอดรถ', 'Car park'],
   'sim.data': ['ข้อมูลจำลอง', 'Simulated data'],
   'sim.disclosure': ['ข้อมูลและเหตุการณ์เพื่อสาธิต · ไม่เชื่อมต่ออุปกรณ์จริง', 'Demo data and events · no real devices connected'],
-  'back': ['ย้อนกลับ', 'Back'],
-  'next': ['ถัดไป', 'Next'],
-  'cancel': ['ยกเลิก', 'Cancel'],
-  'save': ['บันทึก', 'Save'],
-  'search': ['ค้นหาชื่อหรือทะเบียน', 'Search name or plate'],
-  'all': ['ทั้งหมด', 'All'],
-  'none': ['ไม่มีรายการ', 'Nothing here'],
-  'cars': ['คัน', 'cars'],
-  'today': ['วันนี้', 'Today'],
+  back: ['ย้อนกลับ', 'Back'],
+  next: ['ถัดไป', 'Next'],
+  cancel: ['ยกเลิก', 'Cancel'],
+  save: ['บันทึก', 'Save'],
+  search: ['ค้นหาชื่อหรือทะเบียน', 'Search name or plate'],
+  all: ['ทั้งหมด', 'All'],
+  none: ['ไม่มีรายการ', 'Nothing here'],
+  cars: ['คัน', 'cars'],
+  today: ['วันนี้', 'Today'],
   'staff.name': ['เจ้าหน้าที่ อรุณี', 'Staff: Arunee'],
   'staff.guard': ['รปภ. ประตูหลัก', 'Main-gate guard'],
 
@@ -98,10 +109,19 @@ const S = {
   'req.reject': ['ไม่อนุมัติ', 'Reject'],
   'req.revoke': ['ยกเลิกสิทธิ์', 'Revoke'],
   'req.reject.reason': ['เหตุผล (ส่งให้ผู้มาติดต่อและผู้ติดต่อ)', 'Reason (sent to the visitor and the contact)'],
-  'req.reject.default': ['วันที่ขอตรงกับวันปิดซ่อมบำรุงลานจอด กรุณาเลือกวันใหม่', 'The car park is closed for maintenance that day; please choose another date'],
+  'req.reject.default': [
+    'วันที่ขอตรงกับวันปิดซ่อมบำรุงลานจอด กรุณาเลือกวันใหม่',
+    'The car park is closed for maintenance that day; please choose another date',
+  ],
   'req.revoke.confirm': ['ยกเลิกสิทธิ์ทันที และแจ้งทั้งสองฝ่ายทางอีเมล?', 'End access now and email both parties?'],
-  'req.revoke.confirmNoMail': ['ยกเลิกสิทธิ์ทันที? (ยังไม่ได้ส่งบัตรจอดทางอีเมล จึงไม่มีอีเมลแจ้ง)', 'End access now? (No ticket was emailed yet, so no email goes out.)'],
-  'req.approve.confirm': ['อนุมัติแล้วระบบจะลงทะเบียนรถใน ATOM ออก QR และส่งอีเมลยืนยัน', 'Approving registers the car in ATOM, issues a QR code and emails the ticket'],
+  'req.revoke.confirmNoMail': [
+    'ยกเลิกสิทธิ์ทันที? (ยังไม่ได้ส่งบัตรจอดทางอีเมล จึงไม่มีอีเมลแจ้ง)',
+    'End access now? (No ticket was emailed yet, so no email goes out.)',
+  ],
+  'req.approve.confirm': [
+    'อนุมัติแล้วระบบจะลงทะเบียนรถใน ATOM ออก QR และส่งอีเมลยืนยัน',
+    'Approving registers the car in ATOM, issues a QR code and emails the ticket',
+  ],
   'req.history': ['ประวัติ', 'History'],
   'req.flag.today': ['มาถึงวันนี้', 'Arrives today'],
   'req.flag.staff': ['ทะเบียนนี้เป็นรถพนักงาน', 'Plate is a staff car'],
@@ -139,7 +159,10 @@ const S = {
   'gate.reason.delivery': ['รถส่งของ / ผู้รับเหมา', 'Delivery / contractor'],
   'gate.reason.guest': ['แขกที่ยืนยันตัวตนทางโทรศัพท์แล้ว', 'Guest verified by phone'],
   'gate.reason.other': ['อื่น ๆ', 'Other'],
-  'gate.manual.alertFirst': ['มีรถไม่รู้จักรออยู่ · ตอบการแจ้งเตือนด้านบนก่อน', 'An unknown car is waiting · answer the alert above first'],
+  'gate.manual.alertFirst': [
+    'มีรถไม่รู้จักรออยู่ · ตอบการแจ้งเตือนด้านบนก่อน',
+    'An unknown car is waiting · answer the alert above first',
+  ],
   'gate.full': ['ที่จอดเต็ม · {plate} ถูกแจ้งให้กลับรถ', 'Car park full · {plate} was turned away'],
   'gate.openOnce': ['เปิดหนึ่งครั้ง', 'Open once'],
   'gate.log': ['บันทึกการเข้าออก', 'Entry and exit log'],
@@ -151,9 +174,15 @@ const S = {
   'gate.sim.coming': ['{plate} กำลังขับมาที่ไม้กั้น', '{plate} is driving to the barrier'],
   'gate.sim.leaving': ['{plate} กำลังออกจากที่จอด', '{plate} is leaving its bay'],
   'gate.sim.queued': ['ต่อคิวหลังรถคันก่อน', 'queued behind the car ahead'],
-  'gate.sim.noVisitor': ['ไม่มีผู้มาติดต่อที่อนุมัติสำหรับวันนี้และยังไม่มาถึง · ส่งคำขอจากมือถือแล้วกดอนุมัติก่อน', 'No approved visitor is still due today · send a request from the phone and approve it first'],
+  'gate.sim.noVisitor': [
+    'ไม่มีผู้มาติดต่อที่อนุมัติสำหรับวันนี้และยังไม่มาถึง · ส่งคำขอจากมือถือแล้วกดอนุมัติก่อน',
+    'No approved visitor is still due today · send a request from the phone and approve it first',
+  ],
   'gate.sim.noStaff': ['รถพนักงานทุกคันจอดอยู่แล้ว', 'Every staff car is already parked'],
-  'gate.sim.waitingAlert': ['มีรถไม่รู้จักรอการตัดสินใจที่ไม้กั้น · เลือกเปิดหรือไม่ให้เข้าก่อน', 'An unknown car is waiting at the barrier · choose Open or Deny first'],
+  'gate.sim.waitingAlert': [
+    'มีรถไม่รู้จักรอการตัดสินใจที่ไม้กั้น · เลือกเปิดหรือไม่ให้เข้าก่อน',
+    'An unknown car is waiting at the barrier · choose Open or Deny first',
+  ],
 
   // events
   'ev.entry': ['เข้า', 'In'],
@@ -169,7 +198,10 @@ const S = {
 
   // alert
   'alert.title': ['รถไม่รู้จักที่ไม้กั้น', 'Unknown car at the barrier'],
-  'alert.body': ['ไม่พบทะเบียนในรายการที่อนุญาต · ไม้กั้นยังปิดอยู่', 'Plate is not on the allowed list · the barrier stays closed'],
+  'alert.body': [
+    'ไม่พบทะเบียนในรายการที่อนุญาต · ไม้กั้นยังปิดอยู่',
+    'Plate is not on the allowed list · the barrier stays closed',
+  ],
   'alert.open': ['เปิดให้เข้า', 'Open'],
   'alert.deny': ['ไม่ให้เข้า', 'Deny'],
   'alert.openReason': ['เลือกเหตุผลก่อนเปิด', 'Pick a reason to open'],
@@ -242,12 +274,18 @@ const S = {
   'ph.photo.reading': ['กำลังอ่านทะเบียนจากรูป…', 'Reading the plate from the photo…'],
   'ph.photo.done': ['อ่านได้ · ตรวจสอบอีกครั้ง', 'Read · please double-check'],
   'ph.facePhoto': ['รูปใบหน้า (ไม่บังคับ)', 'Face photo (optional)'],
-  'ph.faceConsent': ['ยินยอมให้ใช้ใบหน้าเพื่อเข้าประตูอาคาร ลบภายใน 30 วันหลังเข้าพบ', 'I agree to use my face for building doors; deleted within 30 days after the visit'],
+  'ph.faceConsent': [
+    'ยินยอมให้ใช้ใบหน้าเพื่อเข้าประตูอาคาร ลบภายใน 30 วันหลังเข้าพบ',
+    'I agree to use my face for building doors; deleted within 30 days after the visit',
+  ],
   'ph.consent': ['รับทราบนโยบายความเป็นส่วนตัว (PDPA)', 'I have read the privacy notice (PDPA)'],
   'ph.submit': ['ส่งคำขอ', 'Send request'],
   'ph.sentTitle': ['ส่งคำขอแล้ว', 'Request sent'],
   'ph.sentBody': ['เจ้าหน้าที่ได้รับข้อมูลแล้ว กรุณารอผลการตรวจสอบ', 'Staff have received it. Please wait for the review.'],
-  'ph.sentEmail': ['เราจะแจ้งผลทางอีเมลที่ {email} และส่งสำเนาถึงผู้ติดต่อ OSD', 'We will email the result to {email}, with a copy to your OSD contact.'],
+  'ph.sentEmail': [
+    'เราจะแจ้งผลทางอีเมลที่ {email} และส่งสำเนาถึงผู้ติดต่อ OSD',
+    'We will email the result to {email}, with a copy to your OSD contact.',
+  ],
   'ph.receiptNo': ['เลขรับข้อมูล', 'Receipt number'],
   'ph.arrive': ['วันที่เข้าพื้นที่', 'Arrival date'],
   'ph.depart': ['วันที่ออกจากพื้นที่', 'Departure date'],
@@ -258,9 +296,15 @@ const S = {
   'ph.mail.revoked': ['สิทธิ์จอดรถถูกยกเลิก', 'Your parking access was revoked'],
   'ph.namePlaceholder': ['ชื่อ นามสกุล', 'First and last name'],
   // The revocation email's body (it showed the staff's confirm question).
-  'ph.mail.revokedBody': ['สิทธิ์จอดรถสำหรับการเข้าพบนี้ถูกยกเลิกแล้ว ไม้กั้นจะไม่เปิดให้ทะเบียนนี้อีก หากยังต้องการเข้าพบ โปรดส่งคำขอใหม่', 'Parking access for this visit has been ended: the barrier will no longer open for this plate. If you still plan to visit, please send a new request.'],
+  'ph.mail.revokedBody': [
+    'สิทธิ์จอดรถสำหรับการเข้าพบนี้ถูกยกเลิกแล้ว ไม้กั้นจะไม่เปิดให้ทะเบียนนี้อีก หากยังต้องการเข้าพบ โปรดส่งคำขอใหม่',
+    'Parking access for this visit has been ended: the barrier will no longer open for this plate. If you still plan to visit, please send a new request.',
+  ],
   'ph.ticket': ['บัตรจอดรถ', 'Parking ticket'],
-  'ph.ticket.how': ['ขับเข้าทางประตูหลัก กล้องจะอ่านทะเบียนและเปิดไม้กั้นให้อัตโนมัติ · จอดโซน P2 แถว A', 'Drive to the main gate: the camera reads your plate and opens the barrier · park in zone P2, row A'],
+  'ph.ticket.how': [
+    'ขับเข้าทางประตูหลัก กล้องจะอ่านทะเบียนและเปิดไม้กั้นให้อัตโนมัติ · จอดโซน P2 แถว A',
+    'Drive to the main gate: the camera reads your plate and opens the barrier · park in zone P2, row A',
+  ],
   'ph.ticket.qr': ['แสดง QR นี้ที่ประตูอาคาร', 'Show this QR at the building doors'],
   'ph.ticket.cal': ['parking-visit.ics · เตือนวันที่เข้าพื้นที่', 'parking-visit.ics · arrival-day reminder'],
   'ph.newRequest': ['ส่งคำขอใหม่', 'New request'],
@@ -275,40 +319,91 @@ const S = {
   'story.exit': ['ออกจากเรื่องราว', 'Exit story'],
   'story.autoAdvance': ['เดินเรื่องอัตโนมัติ', 'Auto-advance'],
   'story.step': ['ขั้นที่ {n} / {total}', 'Step {n} / {total}'],
-  'story.idle': ['เลือก “เล่นเรื่องราว” เพื่อดูการเดินทางของผู้มาติดต่อ หรือทดลองกดเองได้ทุกส่วน', 'Choose “Play the story” to follow one visitor, or try any part yourself'],
-  'story.freeMode': ['ออกจากเรื่องราวแล้ว · ทดลองเองได้ทุกส่วน: แผงเจ้าหน้าที่ มือถือ หรือส่งรถไปที่ไม้กั้น', 'Story stopped · try anything: the staff console, the phone, or send cars to the barrier'],
+  'story.idle': [
+    'เลือก “เล่นเรื่องราว” เพื่อดูการเดินทางของผู้มาติดต่อ หรือทดลองกดเองได้ทุกส่วน',
+    'Choose “Play the story” to follow one visitor, or try any part yourself',
+  ],
+  'story.freeMode': [
+    'ออกจากเรื่องราวแล้ว · ทดลองเองได้ทุกส่วน: แผงเจ้าหน้าที่ มือถือ หรือส่งรถไปที่ไม้กั้น',
+    'Story stopped · try anything: the staff console, the phone, or send cars to the barrier',
+  ],
 
   'story.hint.approve': ['ลองกด “อนุมัติ” ในคอนโซลเจ้าหน้าที่', 'Try “Approve” in the staff console'],
   'story.hint.alert': ['เลือก “เปิดให้เข้า” หรือ “ไม่ให้เข้า” ได้เลย', 'Choose “Open” or “Deny”'],
-  'story.hint.noPass': ['ทะเบียนนี้ไม่มีสิทธิ์จอดที่ใช้ได้ ไม้กั้นจึงไม่เปิด และรถถอยออกไป', 'This plate has no valid pass: the barrier stays shut and the car backs out'],
+  'story.hint.noPass': [
+    'ทะเบียนนี้ไม่มีสิทธิ์จอดที่ใช้ได้ ไม้กั้นจึงไม่เปิด และรถถอยออกไป',
+    'This plate has no valid pass: the barrier stays shut and the car backs out',
+  ],
   's1.t': ['ผู้มาติดต่อขอสิทธิ์จอดล่วงหน้า', 'A visitor asks for parking ahead of time'],
-  's1.b': ['คุณชูใจจะมาประชุมที่ OSD เปิดลิงก์บนมือถือ ไม่ต้องเข้าสู่ระบบ กรอกชื่อ อีเมลของตนเองและของผู้ติดต่อใน OSD', 'Chujai is coming to a meeting at OSD. She opens the link on her phone, with no sign-in, and enters her name, her email and her OSD contact’s'],
+  's1.b': [
+    'คุณชูใจจะมาประชุมที่ OSD เปิดลิงก์บนมือถือ ไม่ต้องเข้าสู่ระบบ กรอกชื่อ อีเมลของตนเองและของผู้ติดต่อใน OSD',
+    'Chujai is coming to a meeting at OSD. She opens the link on her phone, with no sign-in, and enters her name, her email and her OSD contact’s',
+  ],
   's2.t': ['ถ่ายรูปรถ ระบบกรอกทะเบียนให้', 'Snap the car and the plate fills itself'],
-  's2.b': ['รูปถูกส่งไปอ่านทะเบียนครั้งเดียวและไม่ถูกเก็บ ใบหน้าเป็นทางเลือก และต้องยินยอมก่อนเสมอ', 'The photo is read once and never stored. A face photo is optional and needs consent'],
+  's2.b': [
+    'รูปถูกส่งไปอ่านทะเบียนครั้งเดียวและไม่ถูกเก็บ ใบหน้าเป็นทางเลือก และต้องยินยอมก่อนเสมอ',
+    'The photo is read once and never stored. A face photo is optional and needs consent',
+  ],
   's3.t': ['คำขอเด้งขึ้นที่คอนโซลเจ้าหน้าที่ทันที', 'The request appears in the staff console at once'],
-  's3.b': ['เจ้าหน้าที่เห็นรายละเอียด ข้อสังเกต และผลตรวจทะเบียนใน ATOM ก่อนตัดสินใจ', 'Staff see the details, any flags and the ATOM plate lookup before deciding'],
+  's3.b': [
+    'เจ้าหน้าที่เห็นรายละเอียด ข้อสังเกต และผลตรวจทะเบียนใน ATOM ก่อนตัดสินใจ',
+    'Staff see the details, any flags and the ATOM plate lookup before deciding',
+  ],
   's4.t': ['อนุมัติด้วยการแตะครั้งเดียว', 'Approve in one tap'],
-  's4.b': ['ระบบลงทะเบียนรถและบุคคลใน ATOM ตามวันที่อนุมัติ ออก QR และส่งอีเมลยืนยันพร้อมปฏิทิน', 'The car and person are registered in ATOM for the approved dates, a QR code is issued and a ticket with a calendar invite is emailed'],
+  's4.b': [
+    'ระบบลงทะเบียนรถและบุคคลใน ATOM ตามวันที่อนุมัติ ออก QR และส่งอีเมลยืนยันพร้อมปฏิทิน',
+    'The car and person are registered in ATOM for the approved dates, a QR code is issued and a ticket with a calendar invite is emailed',
+  ],
   's5.t': ['บัตรจอดรถถึงมือถือ', 'The ticket lands on her phone'],
-  's5.b': ['ไม่ต้องพิมพ์ ไม่ต้องแลกบัตร วันนัดแค่ขับรถมาที่ไม้กั้น', 'Nothing to print or exchange. On the day she simply drives up to the barrier'],
+  's5.b': [
+    'ไม่ต้องพิมพ์ ไม่ต้องแลกบัตร วันนัดแค่ขับรถมาที่ไม้กั้น',
+    'Nothing to print or exchange. On the day she simply drives up to the barrier',
+  ],
   's4r.t': ['คำขอนี้ไม่ได้รับอนุมัติ', 'This request was rejected'],
-  's4r.b': ['ไม่มีการลงทะเบียนใน ATOM และไม่ออกสิทธิ์จอด ผู้มาติดต่อจะได้รับอีเมลแจ้งเหตุผล', 'Nothing is registered in ATOM and no pass is issued; the visitor gets an email with the reason'],
+  's4r.b': [
+    'ไม่มีการลงทะเบียนใน ATOM และไม่ออกสิทธิ์จอด ผู้มาติดต่อจะได้รับอีเมลแจ้งเหตุผล',
+    'Nothing is registered in ATOM and no pass is issued; the visitor gets an email with the reason',
+  ],
   's5v.t': ['สิทธิ์จอดถูกยกเลิก', 'The parking access was revoked'],
-  's5v.b': ['ไม้กั้นจะไม่เปิดให้ทะเบียนนี้อีก ถ้าส่งบัตรจอดทางอีเมลไปแล้ว ผู้มาติดต่อจะได้รับอีเมลแจ้งยกเลิก', 'The barrier will no longer open for this plate; if the ticket was already emailed, the visitor is told by email'],
+  's5v.b': [
+    'ไม้กั้นจะไม่เปิดให้ทะเบียนนี้อีก ถ้าส่งบัตรจอดทางอีเมลไปแล้ว ผู้มาติดต่อจะได้รับอีเมลแจ้งยกเลิก',
+    'The barrier will no longer open for this plate; if the ticket was already emailed, the visitor is told by email',
+  ],
   's5r.t': ['คำขอถูกปฏิเสธ · แจ้งทางอีเมล', 'Rejected: the visitor is told by email'],
-  's5r.b': ['อีเมลแจ้งเหตุผลที่เจ้าหน้าที่ระบุ และไม่มีการออกสิทธิ์จอด', 'The email gives the reason staff entered, and no pass is issued'],
+  's5r.b': [
+    'อีเมลแจ้งเหตุผลที่เจ้าหน้าที่ระบุ และไม่มีการออกสิทธิ์จอด',
+    'The email gives the reason staff entered, and no pass is issued',
+  ],
   's6r.t': ['วันนัด · ไม่มีสิทธิ์ ไม้กั้นไม่เปิด', 'On the day there is no pass, so the barrier stays shut'],
-  's6r.b': ['กล้องอ่านทะเบียนได้ แต่ไม่พบสิทธิ์ที่อนุมัติ รถจึงถอยออกไป และช่องทางเข้าว่างให้คันถัดไป', 'The camera reads the plate but finds no approved pass, so the car backs out and the entry is free for the next one'],
+  's6r.b': [
+    'กล้องอ่านทะเบียนได้ แต่ไม่พบสิทธิ์ที่อนุมัติ รถจึงถอยออกไป และช่องทางเข้าว่างให้คันถัดไป',
+    'The camera reads the plate but finds no approved pass, so the car backs out and the entry is free for the next one',
+  ],
   's6.t': ['วันนัด · กล้องอ่านทะเบียนและเปิดไม้กั้นเอง', 'On the day the camera reads the plate and opens the barrier'],
-  's6.b': ['ทะเบียนตรงกับสิทธิ์ที่อนุมัติ ไม้กั้นเปิดให้อัตโนมัติ และนับเข้าที่จอดทันที', 'The plate matches the approved access, so the barrier opens and the car is counted in'],
+  's6.b': [
+    'ทะเบียนตรงกับสิทธิ์ที่อนุมัติ ไม้กั้นเปิดให้อัตโนมัติ และนับเข้าที่จอดทันที',
+    'The plate matches the approved access, so the barrier opens and the car is counted in',
+  ],
   's7.t': ['รถไม่รู้จัก · ไม้กั้นไม่เปิด แต่แจ้งเตือนทันที', 'An unknown car: the barrier stays shut and staff are alerted'],
-  's7.b': ['เจ้าหน้าที่เห็นภาพจากกล้องและตัดสินใจ เปิดหรือไม่ให้เข้าได้ในแตะเดียว ทุกการเปิดต้องมีเหตุผล', 'Staff see the camera snapshot and decide, Open or Deny, in one tap. Every manual open needs a reason'],
+  's7.b': [
+    'เจ้าหน้าที่เห็นภาพจากกล้องและตัดสินใจ เปิดหรือไม่ให้เข้าได้ในแตะเดียว ทุกการเปิดต้องมีเหตุผล',
+    'Staff see the camera snapshot and decide, Open or Deny, in one tap. Every manual open needs a reason',
+  ],
   's8.t': ['เห็นภาพรวมลานจอดแบบสด', 'The whole car park, live'],
-  's8.b': ['จำนวนรถที่จอดเทียบกับความจุ รถเข้าออกรายชั่วโมง และสิ่งที่ต้องดูแล', 'Occupancy against capacity, hourly entries and exits, and what needs attention'],
+  's8.b': [
+    'จำนวนรถที่จอดเทียบกับความจุ รถเข้าออกรายชั่วโมง และสิ่งที่ต้องดูแล',
+    'Occupancy against capacity, hourly entries and exits, and what needs attention',
+  ],
   's9.t': ['รายงานและบันทึกตรวจสอบย้อนหลังได้', 'Reports and an audit trail'],
-  's9.b': ['สรุปประจำวันทางอีเมล บันทึกทุกการอนุมัติและการเปิดไม้กั้น ส่งออก CSV ได้', 'A daily summary email, every approval and manual open recorded, and CSV export'],
+  's9.b': [
+    'สรุปประจำวันทางอีเมล บันทึกทุกการอนุมัติและการเปิดไม้กั้น ส่งออก CSV ได้',
+    'A daily summary email, every approval and manual open recorded, and CSV export',
+  ],
   's10.t': ['ขาออก · เปิดให้เสมอ', 'On the way out the barrier always opens'],
-  's10.b': ['สิทธิ์หมดเวลาก็ไม่ขังรถไว้ ระบบบันทึกเวลาออกและคืนที่จอดว่าง', 'An expired pass never traps a car. The exit is logged and the space is freed'],
+  's10.b': [
+    'สิทธิ์หมดเวลาก็ไม่ขังรถไว้ ระบบบันทึกเวลาออกและคืนที่จอดว่าง',
+    'An expired pass never traps a car. The exit is logged and the space is freed',
+  ],
 };
 
 const fill = (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => vars?.[k] ?? '');
@@ -320,24 +415,37 @@ export function t(key, vars) {
   return fill(entry[lang === 'en' ? 1 : 0], vars);
 }
 // A pair given inline, for data objects that carry both languages.
-export const tx = pair => (Array.isArray(pair) ? pair[lang === 'en' ? 1 : 0] : pair);
+export const tx = (pair) => (Array.isArray(pair) ? pair[lang === 'en' ? 1 : 0] : pair);
 // The text in the chosen language, from its Thai and English versions.
 export const L = (th, en) => (lang === 'en' ? en : th);
 
 const MONTHS_TH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 // Demo times are epoch ms, always shown as Bangkok wall-clock time to stay independent of the laptop's zone.
-const pad = n => String(n).padStart(2, '0');
+const pad = (n) => String(n).padStart(2, '0');
 function parts(ms) {
   const d = new Date(ms + 7 * 3600e3);
-  return {y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate(), h: d.getUTCHours(), min: d.getUTCMinutes(), s: d.getUTCSeconds()};
+  return {
+    y: d.getUTCFullYear(),
+    m: d.getUTCMonth(),
+    d: d.getUTCDate(),
+    h: d.getUTCHours(),
+    min: d.getUTCMinutes(),
+    s: d.getUTCSeconds(),
+  };
 }
 export function fmtDate(ms) {
   const p = parts(ms);
   return lang === 'en' ? `${p.d} ${MONTHS_EN[p.m]} ${p.y}` : `${p.d} ${MONTHS_TH[p.m]} ${p.y + 543}`;
 }
-export const fmtTime = (ms, seconds = false) => { const p = parts(ms); return `${pad(p.h)}:${pad(p.min)}${seconds ? ':' + pad(p.s) : ''}`; };
-export const fmtDateTime = ms => `${fmtDate(ms)} ${fmtTime(ms)}`;
-export const fmtShortDate = ms => { const p = parts(ms); return lang === 'en' ? `${p.d} ${MONTHS_EN[p.m]}` : `${p.d} ${MONTHS_TH[p.m]}`; };
+export const fmtTime = (ms, seconds = false) => {
+  const p = parts(ms);
+  return `${pad(p.h)}:${pad(p.min)}${seconds ? ':' + pad(p.s) : ''}`;
+};
+export const fmtDateTime = (ms) => `${fmtDate(ms)} ${fmtTime(ms)}`;
+export const fmtShortDate = (ms) => {
+  const p = parts(ms);
+  return lang === 'en' ? `${p.d} ${MONTHS_EN[p.m]}` : `${p.d} ${MONTHS_TH[p.m]}`;
+};
 // Bangkok wall-clock to epoch ms.
 export const bkk = (y, m, d, h = 0, min = 0, s = 0) => Date.UTC(y, m - 1, d, h - 7, min, s);

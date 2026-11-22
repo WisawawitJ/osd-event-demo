@@ -31,14 +31,27 @@ const fragmentShader = `uniform vec3 color,shape; uniform float opacity,strength
 // A material for cones `height` tall, `top` wide in radius at the lamp and `bottom` at the floor.
 export function createLightConeMaterial({color, height, top, bottom, strength = 1.1}) {
   const material = new THREE.ShaderMaterial({
-    uniforms: {color: {value: new THREE.Color(color)}, opacity: {value: 1}, strength: {value: strength}, shape: {value: new THREE.Vector3(height / 2, top, bottom)}},
-    vertexShader, fragmentShader,
-    transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, blending: THREE.AdditiveBlending,
+    uniforms: {
+      color: {value: new THREE.Color(color)},
+      opacity: {value: 1},
+      strength: {value: strength},
+      shape: {value: new THREE.Vector3(height / 2, top, bottom)},
+    },
+    vertexShader,
+    fragmentShader,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    forceSinglePass: true,
+    blending: THREE.AdditiveBlending,
   });
   // The fade: `opacity`, read once per frame (uniforms go to the GPU at the material's first draw in a frame).
-  material.onBeforeRender = () => { material.uniforms.opacity.value = material.opacity; };
+  material.onBeforeRender = () => {
+    material.uniforms.opacity.value = material.opacity;
+  };
   return material;
 }
 
 // The cone's mesh, centred on its axis: place its top at the lamp with `position.y = lampY - height / 2`.
-export const createLightConeGeometry = ({height, top, bottom}) => new THREE.CylinderGeometry(top, bottom, height, 32, 1, false);
+export const createLightConeGeometry = ({height, top, bottom}) =>
+  new THREE.CylinderGeometry(top, bottom, height, 32, 1, false);

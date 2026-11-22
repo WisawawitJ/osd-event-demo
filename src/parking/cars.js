@@ -10,36 +10,64 @@ import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const CAR_COLORS = ['#f2f1ec', '#b9bec2', '#22262b', '#6d747a', '#2f5d9a', '#b8322e', '#33584a', '#cdbb98', '#1f3150'];
-export const CAR = {frontPlateZ: 2.29, plateY: .44};
+export const CAR = {frontPlateZ: 2.29, plateY: 0.44};
 
 // The lamp rows' heights on the nose and the tail, and how far out the lamps sit: the body's rounded edges (bevel)
 // put its nose and tail faces about 2.24 m from the middle at those heights; parts mounted on them stand just proud.
-const HEAD_Y = .6, TAIL_Y = .64, FACE_Z = 2.255;
+const HEAD_Y = 0.6,
+  TAIL_Y = 0.64,
+  FACE_Z = 2.255;
 // Blinker lenses (one side; mirrored for the other): [x, y, z, width, depth]. Front and rear faces at the outer corners
 // (head lamps run .37–.67, tail lamps .43–.69 from the middle) and a strip down each side next to them. The body is
 // 1.72 m wide and 4.46 m long over its rounded edges.
-const BLINKER_LENSES = [[.76, HEAD_Y, FACE_Z, .14, .05], [.855, HEAD_Y, 2.06, .05, .26], [.76, TAIL_Y, -FACE_Z, .14, .05], [.855, TAIL_Y, -2.06, .05, .26]];
+const BLINKER_LENSES = [
+  [0.76, HEAD_Y, FACE_Z, 0.14, 0.05],
+  [0.855, HEAD_Y, 2.06, 0.05, 0.26],
+  [0.76, TAIL_Y, -FACE_Z, 0.14, 0.05],
+  [0.855, TAIL_Y, -2.06, 0.05, 0.26],
+];
 // Plate texture layout: the plate fills the top 120 px; a lamp strip (head, blinker amber, tail, in thirds) sits below.
-const TEX_W = 256, TEX_H = 144, PLATE_W = 248, PLATE_H = 120;
+const TEX_W = 256,
+  TEX_H = 144,
+  PLATE_W = 248,
+  PLATE_H = 120;
 
 function profileGeometry(points, depth, bevel) {
   const shape = new THREE.Shape(points.map(([u, v]) => new THREE.Vector2(u, v)));
-  const geo = new THREE.ExtrudeGeometry(shape, {depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 4});
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: true,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 2,
+    curveSegments: 4,
+  });
   // Shape lies in XY (x = forward); extrusion runs along Z. Turn so forward is +Z and width is X.
   geo.translate(0, 0, -depth / 2);
   geo.rotateY(-Math.PI / 2);
   return geo;
 }
 const tint = (geo, color) => {
-  const c = new THREE.Color(color), n = geo.attributes.position.count, a = new Float32Array(n * 3);
+  const c = new THREE.Color(color),
+    n = geo.attributes.position.count,
+    a = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) c.toArray(a, i * 3);
   geo.setAttribute('color', new THREE.BufferAttribute(a, 3));
   return geo;
 };
 // Every vertex of a lamp samples one point of the lamp strip.
-const lampUv = (geo, u, v) => { const n = geo.attributes.position.count, a = new Float32Array(n * 2); for (let i = 0; i < n; i++) { a[i * 2] = u; a[i * 2 + 1] = v; } geo.setAttribute('uv', new THREE.BufferAttribute(a, 2)); return geo; };
+const lampUv = (geo, u, v) => {
+  const n = geo.attributes.position.count,
+    a = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    a[i * 2] = u;
+    a[i * 2 + 1] = v;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(a, 2));
+  return geo;
+};
 const strip = (TEX_H - PLATE_H) / 2 / TEX_H;
-const flat = g => (g.index ? g.toNonIndexed() : g);
+const flat = (g) => (g.index ? g.toNonIndexed() : g);
 
 let shared = null;
 function sharedParts() {
@@ -47,52 +75,139 @@ function sharedParts() {
   // A sedan, side profiles in (forward, up): a low nose sloping up the bonnet to the windscreen, the cabin's glass over
   // the middle (a raked windscreen and rear window), a painted roof, and a short raised boot deck; bumpers, a grille
   // and mirrors in dark trim. The wheels stand a little proud of the body's sides, so the whole of each shows.
-  const body = mergeGeometries([
-    profileGeometry([[-2.18, .3], [2.18, .3], [2.22, .48], [2.17, .68], [1.95, .76], [1, .84], [-1.42, .86], [-2, .84], [-2.16, .78], [-2.22, .5]], 1.62, .05),
-    profileGeometry([[.27, 1.355], [-.97, 1.335], [-.94, 1.415], [.23, 1.43]], 1.5, .02),
-  ].map(flat));
-  const wheel = new THREE.CylinderGeometry(.33, .33, .22, 16).rotateZ(Math.PI / 2);
+  const body = mergeGeometries(
+    [
+      profileGeometry(
+        [
+          [-2.18, 0.3],
+          [2.18, 0.3],
+          [2.22, 0.48],
+          [2.17, 0.68],
+          [1.95, 0.76],
+          [1, 0.84],
+          [-1.42, 0.86],
+          [-2, 0.84],
+          [-2.16, 0.78],
+          [-2.22, 0.5],
+        ],
+        1.62,
+        0.05,
+      ),
+      profileGeometry(
+        [
+          [0.27, 1.355],
+          [-0.97, 1.335],
+          [-0.94, 1.415],
+          [0.23, 1.43],
+        ],
+        1.5,
+        0.02,
+      ),
+    ].map(flat),
+  );
+  const wheel = new THREE.CylinderGeometry(0.33, 0.33, 0.22, 16).rotateZ(Math.PI / 2);
   const wheelFlat = flat(wheel);
   const trim = (w, h, d, x, y, z) => tint(flat(new THREE.BoxGeometry(w, h, d)).translate(x, y, z), '#22262b');
   const details = mergeGeometries([
-    tint(flat(profileGeometry([[1.02, .83], [-1.44, .85], [-.97, 1.36], [.26, 1.38]], 1.48, .02)), '#1e2a33'),
-    ...[[.8, 1.38], [-.8, 1.38], [.8, -1.38], [-.8, -1.38]].map(([x, z]) => tint(wheelFlat.clone().translate(x, .33, z), '#1b1d20')),
-    trim(1.78, .1, .12, 0, .34, 2.21), trim(1.78, .1, .12, 0, .34, -2.21), // bumpers, just behind the plates (in front, they hid the province line)
-    trim(.62, .09, .04, 0, .53, FACE_Z), // grille, below the plate's top and between the head lamps
-    trim(.08, .09, .16, .9, .93, .86), trim(.08, .09, .16, -.9, .93, .86), // mirrors
+    tint(
+      flat(
+        profileGeometry(
+          [
+            [1.02, 0.83],
+            [-1.44, 0.85],
+            [-0.97, 1.36],
+            [0.26, 1.38],
+          ],
+          1.48,
+          0.02,
+        ),
+      ),
+      '#1e2a33',
+    ),
+    ...[
+      [0.8, 1.38],
+      [-0.8, 1.38],
+      [0.8, -1.38],
+      [-0.8, -1.38],
+    ].map(([x, z]) => tint(wheelFlat.clone().translate(x, 0.33, z), '#1b1d20')),
+    trim(1.78, 0.1, 0.12, 0, 0.34, 2.21),
+    trim(1.78, 0.1, 0.12, 0, 0.34, -2.21), // bumpers, just behind the plates (in front, they hid the province line)
+    trim(0.62, 0.09, 0.04, 0, 0.53, FACE_Z), // grille, below the plate's top and between the head lamps
+    trim(0.08, 0.09, 0.16, 0.9, 0.93, 0.86),
+    trim(0.08, 0.09, 0.16, -0.9, 0.93, 0.86), // mirrors
   ]);
-  wheel.dispose(); wheelFlat.dispose();
-  const plateGeo = new THREE.PlaneGeometry(.62, .3);
+  wheel.dispose();
+  wheelFlat.dispose();
+  const plateGeo = new THREE.PlaneGeometry(0.62, 0.3);
   const uv = plateGeo.attributes.uv;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * PLATE_W / TEX_W, 1 - (1 - uv.getY(i)) * PLATE_H / TEX_H);
+  for (let i = 0; i < uv.count; i++)
+    uv.setXY(i, (uv.getX(i) * PLATE_W) / TEX_W, 1 - ((1 - uv.getY(i)) * PLATE_H) / TEX_H);
   const front = plateGeo.clone().translate(0, CAR.plateY, CAR.frontPlateZ);
   const back = plateGeo.clone().rotateY(Math.PI).translate(0, CAR.plateY, -CAR.frontPlateZ);
   plateGeo.dispose();
-  const lamp = (x, y, z, w, h, u) => lampUv(flat(new THREE.BoxGeometry(w, h, .05)).translate(x, y, z), u, strip);
+  const lamp = (x, y, z, w, h, u) => lampUv(flat(new THREE.BoxGeometry(w, h, 0.05)).translate(x, y, z), u, strip);
   // Blinker lenses, part of the body: dull amber at each corner, beside the head and tail lamps and wrapping round the
   // side (seen from the side and from above too). BLINKER_LENSES places the lit lenses over them (setCarBlinker).
-  const lenses = BLINKER_LENSES.flatMap(([x, y, z, w, d]) => [1, -1].map(side => lampUv(flat(new THREE.BoxGeometry(w, .1, d)).translate(side * x, y, z), .5, strip)));
-  const decals = mergeGeometries([flat(front), flat(back), lamp(.52, HEAD_Y, FACE_Z, .3, .1, 1 / 6), lamp(-.52, HEAD_Y, FACE_Z, .3, .1, 1 / 6), lamp(.56, TAIL_Y, -FACE_Z, .26, .12, 5 / 6), lamp(-.56, TAIL_Y, -FACE_Z, .26, .12, 5 / 6), ...lenses]
-    .map(g => { for (const k of Object.keys(g.attributes)) if (!['position', 'uv'].includes(k)) g.deleteAttribute(k); return g; }));
+  const lenses = BLINKER_LENSES.flatMap(([x, y, z, w, d]) =>
+    [1, -1].map((side) => lampUv(flat(new THREE.BoxGeometry(w, 0.1, d)).translate(side * x, y, z), 0.5, strip)),
+  );
+  const decals = mergeGeometries(
+    [
+      flat(front),
+      flat(back),
+      lamp(0.52, HEAD_Y, FACE_Z, 0.3, 0.1, 1 / 6),
+      lamp(-0.52, HEAD_Y, FACE_Z, 0.3, 0.1, 1 / 6),
+      lamp(0.56, TAIL_Y, -FACE_Z, 0.26, 0.12, 5 / 6),
+      lamp(-0.56, TAIL_Y, -FACE_Z, 0.26, 0.12, 5 / 6),
+      ...lenses,
+    ].map((g) => {
+      for (const k of Object.keys(g.attributes)) if (!['position', 'uv'].includes(k)) g.deleteAttribute(k);
+      return g;
+    }),
+  );
   const blobCanvas = document.createElement('canvas');
   blobCanvas.width = blobCanvas.height = 64;
-  const c = blobCanvas.getContext('2d'), g = c.createRadialGradient(32, 32, 4, 32, 32, 32);
-  g.addColorStop(0, 'rgba(20,30,35,.55)'); g.addColorStop(1, 'rgba(20,30,35,0)');
-  c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+  const c = blobCanvas.getContext('2d'),
+    g = c.createRadialGradient(32, 32, 4, 32, 32, 32);
+  g.addColorStop(0, 'rgba(20,30,35,.55)');
+  g.addColorStop(1, 'rgba(20,30,35,0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, 64, 64);
   const blobTexture = new THREE.CanvasTexture(blobCanvas);
   const blob = new THREE.PlaneGeometry(2.5, 5.1).rotateX(-Math.PI / 2);
   // Blinkers lit: bright lenses a touch larger than the dull ones in the body, a soft amber flare at each corner that
   // always faces the camera (blinkerGlow: the lenses alone were lost from the car park's usual distance), and a soft
   // patch of light on the road beside it (blinkerLight). Local +X is the driver's left (the car faces +Z).
-  const blinker = side => mergeGeometries(BLINKER_LENSES.map(([x, y, z, w, d]) => flat(new THREE.BoxGeometry(w + .02, .12, d + .02)).translate(side * x, y, z)));
+  const blinker = (side) =>
+    mergeGeometries(
+      BLINKER_LENSES.map(([x, y, z, w, d]) =>
+        flat(new THREE.BoxGeometry(w + 0.02, 0.12, d + 0.02)).translate(side * x, y, z),
+      ),
+    );
   shared = {
-    body, details, decals, blob, ...headlightPool(), ...headlightBeams(),
-    blinkLeft: blinker(1), blinkRight: blinker(-1), blinkMaterial: new THREE.MeshBasicMaterial({color: '#ffa31a', toneMapped: false}),
-    glowLeft: blinkerGlow(1), glowRight: blinkerGlow(-1), glowMaterial: blinkerGlowMaterial(),
+    body,
+    details,
+    decals,
+    blob,
+    ...headlightPool(),
+    ...headlightBeams(),
+    blinkLeft: blinker(1),
+    blinkRight: blinker(-1),
+    blinkMaterial: new THREE.MeshBasicMaterial({color: '#ffa31a', toneMapped: false}),
+    glowLeft: blinkerGlow(1),
+    glowRight: blinkerGlow(-1),
+    glowMaterial: blinkerGlowMaterial(),
     ...blinkerLight(),
-    detailMaterial: new THREE.MeshStandardMaterial({vertexColors: true, roughness: .3, metalness: .5}),
+    detailMaterial: new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.3, metalness: 0.5}),
     // The soft shadow sits on the road; the depth offset stops it flickering against the asphalt and paint.
-    blobMaterial: new THREE.MeshBasicMaterial({map: blobTexture, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12}),
+    blobMaterial: new THREE.MeshBasicMaterial({
+      map: blobTexture,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -6,
+      polygonOffsetUnits: -12,
+    }),
     blobTexture,
   };
   return shared;
@@ -103,17 +218,28 @@ function plateTexture(plate, province) {
   const id = `${plate}|${province}`;
   if (plateCache.has(id)) return plateCache.get(id);
   const canvas = document.createElement('canvas');
-  canvas.width = TEX_W; canvas.height = TEX_H;
+  canvas.width = TEX_W;
+  canvas.height = TEX_H;
   const c = canvas.getContext('2d');
-  c.fillStyle = '#fbfbf7'; c.fillRect(0, 0, PLATE_W, PLATE_H);
-  c.strokeStyle = '#1d232a'; c.lineWidth = 6; c.strokeRect(5, 5, PLATE_W - 10, PLATE_H - 10);
-  c.fillStyle = '#121820'; c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.font = '700 54px "OSD Thai", "Noto Sans Thai", sans-serif'; c.fillText(plate, PLATE_W / 2, 48, 220);
-  c.font = '500 22px "OSD Thai", "Noto Sans Thai", sans-serif'; c.fillText(province || '', PLATE_W / 2, 94, 220);
+  c.fillStyle = '#fbfbf7';
+  c.fillRect(0, 0, PLATE_W, PLATE_H);
+  c.strokeStyle = '#1d232a';
+  c.lineWidth = 6;
+  c.strokeRect(5, 5, PLATE_W - 10, PLATE_H - 10);
+  c.fillStyle = '#121820';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.font = '700 54px "OSD Thai", "Noto Sans Thai", sans-serif';
+  c.fillText(plate, PLATE_W / 2, 48, 220);
+  c.font = '500 22px "OSD Thai", "Noto Sans Thai", sans-serif';
+  c.fillText(province || '', PLATE_W / 2, 94, 220);
   const third = TEX_W / 3;
-  c.fillStyle = '#fff6dc'; c.fillRect(0, PLATE_H, third, TEX_H - PLATE_H);
-  c.fillStyle = '#b8741c'; c.fillRect(third, PLATE_H, third, TEX_H - PLATE_H);
-  c.fillStyle = '#c62a2e'; c.fillRect(third * 2, PLATE_H, TEX_W - third * 2, TEX_H - PLATE_H);
+  c.fillStyle = '#fff6dc';
+  c.fillRect(0, PLATE_H, third, TEX_H - PLATE_H);
+  c.fillStyle = '#b8741c';
+  c.fillRect(third, PLATE_H, third, TEX_H - PLATE_H);
+  c.fillStyle = '#c62a2e';
+  c.fillRect(third * 2, PLATE_H, TEX_W - third * 2, TEX_H - PLATE_H);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
@@ -128,30 +254,60 @@ function plateTexture(plate, province) {
 // added onto the road (and seen by the plate cameras). It fades to nothing well inside every edge of its quad, which
 // starts under the car's nose (hidden by the body): a light already bright at the quad's edges showed as straight cuts.
 // Real spot lights cost every lit pixel of the scene, so only three cars had them, and their pools began metres ahead.
-const POOL = {width: 5.4, length: 10, start: 1.6, bumper: 2.2, lampX: .52};
+const POOL = {width: 5.4, length: 10, start: 1.6, bumper: 2.2, lampX: 0.52};
 function headlightPool() {
-  const W = 128, H = 256, canvas = document.createElement('canvas');
-  canvas.width = W; canvas.height = H;
-  const c = canvas.getContext('2d'), image = c.createImageData(W, H), smooth = t => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
+  const W = 128,
+    H = 256,
+    canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const c = canvas.getContext('2d'),
+    image = c.createImageData(W, H),
+    smooth = (t) => {
+      t = Math.min(1, Math.max(0, t));
+      return t * t * (3 - 2 * t);
+    };
   for (let row = 0; row < H; row++) {
-    const z = (row + .5) / H * POOL.length, d = Math.max(0, z - (POOL.bumper - POOL.start)); // d: metres ahead of the bumper
-    const spread = .2 + d * .14;
+    const z = ((row + 0.5) / H) * POOL.length,
+      d = Math.max(0, z - (POOL.bumper - POOL.start)); // d: metres ahead of the bumper
+    const spread = 0.2 + d * 0.14;
     // Rises from nothing under the nose to full just past the bumper, then thins out with distance and is gone by the far edge.
-    const reach = smooth(z / (POOL.bumper - POOL.start + .45)) / (1 + (d / 3.4) ** 2) * (1 - smooth((z - (POOL.length - 3)) / 3));
+    const reach =
+      (smooth(z / (POOL.bumper - POOL.start + 0.45)) / (1 + (d / 3.4) ** 2)) *
+      (1 - smooth((z - (POOL.length - 3)) / 3));
     for (let col = 0; col < W; col++) {
-      const u = (col + .5) / W, x = (u - .5) * POOL.width;
+      const u = (col + 0.5) / W,
+        x = (u - 0.5) * POOL.width;
       let v = 0;
-      for (const side of [-1, 1]) { const axis = side * POOL.lampX * (1 - .45 * Math.min(1, d / 8)); v += Math.exp(-(((x - axis) / spread) ** 2)); }
-      const sides = smooth(Math.min(u, 1 - u) / .2); // and gone before the side edges
-      const a = Math.min(1, v * reach * sides), i = (row * W + col) * 4;
-      image.data[i] = image.data[i + 1] = image.data[i + 2] = 255; image.data[i + 3] = Math.round(a * 255);
+      for (const side of [-1, 1]) {
+        const axis = side * POOL.lampX * (1 - 0.45 * Math.min(1, d / 8));
+        v += Math.exp(-(((x - axis) / spread) ** 2));
+      }
+      const sides = smooth(Math.min(u, 1 - u) / 0.2); // and gone before the side edges
+      const a = Math.min(1, v * reach * sides),
+        i = (row * W + col) * 4;
+      image.data[i] = image.data[i + 1] = image.data[i + 2] = 255;
+      image.data[i + 3] = Math.round(a * 255);
     }
   }
   c.putImageData(image, 0, 0);
   const poolTexture = new THREE.CanvasTexture(canvas);
   // Flat on the road; the texture's top edge under the car's nose.
-  const pool = new THREE.PlaneGeometry(POOL.width, POOL.length).rotateX(-Math.PI / 2).translate(0, .035, POOL.start + POOL.length / 2);
-  const poolMaterial = new THREE.MeshBasicMaterial({map: poolTexture, color: 0xffe2ad, transparent: true, opacity: .78, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -16});
+  const pool = new THREE.PlaneGeometry(POOL.width, POOL.length)
+    .rotateX(-Math.PI / 2)
+    .translate(0, 0.035, POOL.start + POOL.length / 2);
+  const poolMaterial = new THREE.MeshBasicMaterial({
+    map: poolTexture,
+    color: 0xffe2ad,
+    transparent: true,
+    opacity: 0.78,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -8,
+    polygonOffsetUnits: -16,
+  });
   return {pool, poolMaterial, poolTexture};
 }
 
@@ -159,11 +315,19 @@ function headlightPool() {
 // One box ahead of the bumper holds both beams; for each pixel the shader adds up the glow of the two cones along the
 // view ray through the box (brightest near the lamps and on each beam's axis, thinning with distance, cut off at
 // the road), so the beams read as light in the air from any side, above included.
-const BEAM = {lampX: .52, lampY: HEAD_Y, lampZ: 2.28, reach: 8.5, width: 4.6, height: 1.3};
+const BEAM = {lampX: 0.52, lampY: HEAD_Y, lampZ: 2.28, reach: 8.5, width: 4.6, height: 1.3};
 function headlightBeams() {
-  const box = new THREE.BoxGeometry(BEAM.width, BEAM.height, BEAM.reach).translate(0, BEAM.height / 2, BEAM.lampZ + BEAM.reach / 2);
+  const box = new THREE.BoxGeometry(BEAM.width, BEAM.height, BEAM.reach).translate(
+    0,
+    BEAM.height / 2,
+    BEAM.lampZ + BEAM.reach / 2,
+  );
   const material = new THREE.ShaderMaterial({
-    uniforms: {color: {value: new THREE.Color(0xffe6b8)}, lamp: {value: new THREE.Vector3(BEAM.lampX, BEAM.lampY, BEAM.lampZ)}, size: {value: new THREE.Vector3(BEAM.width / 2, BEAM.height, BEAM.reach)}},
+    uniforms: {
+      color: {value: new THREE.Color(0xffe6b8)},
+      lamp: {value: new THREE.Vector3(BEAM.lampX, BEAM.lampY, BEAM.lampZ)},
+      size: {value: new THREE.Vector3(BEAM.width / 2, BEAM.height, BEAM.reach)},
+    },
     vertexShader: `varying vec3 local; varying vec3 eye;
       void main(){local=position;eye=(inverse(modelMatrix)*vec4(cameraPosition,1.)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
     fragmentShader: `uniform vec3 color,lamp,size; varying vec3 local; varying vec3 eye;
@@ -188,7 +352,11 @@ function headlightBeams() {
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
-    transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, blending: THREE.AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    forceSinglePass: true,
+    blending: THREE.AdditiveBlending,
   });
   return {beam: box, beamMaterial: material};
 }
@@ -197,9 +365,23 @@ function headlightBeams() {
 // offset that the vertex shader lays out across the screen, so the quad always faces the camera. Soft round falloff,
 // added onto what lies behind it.
 function blinkerGlow(side) {
-  const geo = new THREE.BufferGeometry(), pos = [], corner = [], index = [];
-  [[HEAD_Y, FACE_Z + .03], [TAIL_Y, -FACE_Z - .03]].forEach(([y, z], q) => {
-    for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { pos.push(side * .8, y, z); corner.push(u, v); }
+  const geo = new THREE.BufferGeometry(),
+    pos = [],
+    corner = [],
+    index = [];
+  [
+    [HEAD_Y, FACE_Z + 0.03],
+    [TAIL_Y, -FACE_Z - 0.03],
+  ].forEach(([y, z], q) => {
+    for (const [u, v] of [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ]) {
+      pos.push(side * 0.8, y, z);
+      corner.push(u, v);
+    }
     index.push(q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3);
   });
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -212,25 +394,51 @@ function blinkerGlow(side) {
 function blinkerLight() {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 64;
-  const c = canvas.getContext('2d'), g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,160,40,.55)'); g.addColorStop(.5, 'rgba(255,150,30,.18)'); g.addColorStop(1, 'rgba(255,140,20,0)');
-  c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+  const c = canvas.getContext('2d'),
+    g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,160,40,.55)');
+  g.addColorStop(0.5, 'rgba(255,150,30,.18)');
+  g.addColorStop(1, 'rgba(255,140,20,0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, 64, 64);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  const patch = side => mergeGeometries([2.3, -2.3].map(z => flat(new THREE.PlaneGeometry(2.2, 2.2)).rotateX(-Math.PI / 2).translate(side * 1.05, .03, z)));
-  return {lightLeft: patch(1), lightRight: patch(-1), lightTexture: texture,
-    lightMaterial: new THREE.MeshBasicMaterial({map: texture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8})};
+  const patch = (side) =>
+    mergeGeometries(
+      [2.3, -2.3].map((z) =>
+        flat(new THREE.PlaneGeometry(2.2, 2.2))
+          .rotateX(-Math.PI / 2)
+          .translate(side * 1.05, 0.03, z),
+      ),
+    );
+  return {
+    lightLeft: patch(1),
+    lightRight: patch(-1),
+    lightTexture: texture,
+    lightMaterial: new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -8,
+    }),
+  };
 }
 function blinkerGlowMaterial() {
   return new THREE.ShaderMaterial({
-    uniforms: {color: {value: new THREE.Color('#ffa31a')}, size: {value: .6}},
+    uniforms: {color: {value: new THREE.Color('#ffa31a')}, size: {value: 0.6}},
     vertexShader: `attribute vec2 corner; uniform float size; varying vec2 vCorner;
       void main(){vCorner=corner;vec4 mv=modelViewMatrix*vec4(position,1.);mv.xy+=corner*size;gl_Position=projectionMatrix*mv;}`,
     fragmentShader: `uniform vec3 color; varying vec2 vCorner;
       void main(){float a=1.-smoothstep(0.,1.,length(vCorner));a*=a;gl_FragColor=vec4(color*a*1.4,a);
         #include <colorspace_fragment>
       }`,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
   });
 }
 
@@ -243,25 +451,52 @@ export function createCar({plate, province, color = 0}) {
   car.userData.paint = CAR_COLORS[color % CAR_COLORS.length];
   // Parts never move inside the car, and the car's own matrix is set when it is placed.
   car.matrixAutoUpdate = false;
-  const add = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.receiveShadow = false; m.matrixAutoUpdate = false; car.add(m); return m; };
+  const add = (geo, mat) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.receiveShadow = false;
+    m.matrixAutoUpdate = false;
+    car.add(m);
+    return m;
+  };
   const decals = add(p.decals, plateTexture(plate, province));
   decals.name = 'Demo_car_decals';
   const pool = add(p.pool, p.poolMaterial);
-  pool.receiveShadow = false; pool.visible = false; pool.name = 'Demo_car_headlights';
+  pool.receiveShadow = false;
+  pool.visible = false;
+  pool.name = 'Demo_car_headlights';
   const beams = add(p.beam, p.beamMaterial);
-  beams.receiveShadow = false; beams.visible = false; beams.name = 'Demo_car_headlight_beams';
-  for (const [side, geo] of [['left', p.blinkLeft], ['right', p.blinkRight]]) {
+  beams.receiveShadow = false;
+  beams.visible = false;
+  beams.name = 'Demo_car_headlight_beams';
+  for (const [side, geo] of [
+    ['left', p.blinkLeft],
+    ['right', p.blinkRight],
+  ]) {
     const b = add(geo, p.blinkMaterial);
-    b.receiveShadow = false; b.visible = false; b.name = `Demo_car_blinker_${side}`;
+    b.receiveShadow = false;
+    b.visible = false;
+    b.name = `Demo_car_blinker_${side}`;
   }
-  for (const [side, geo] of [['left', p.glowLeft], ['right', p.glowRight]]) {
+  for (const [side, geo] of [
+    ['left', p.glowLeft],
+    ['right', p.glowRight],
+  ]) {
     const g = add(geo, p.glowMaterial);
     // Its quads are spread out in the shader, beyond the bounds three.js would cull by.
-    g.receiveShadow = false; g.visible = false; g.renderOrder = 1; g.frustumCulled = false; g.name = `Demo_car_blinker_glow_${side}`;
+    g.receiveShadow = false;
+    g.visible = false;
+    g.renderOrder = 1;
+    g.frustumCulled = false;
+    g.name = `Demo_car_blinker_glow_${side}`;
   }
-  for (const [side, geo] of [['left', p.lightLeft], ['right', p.lightRight]]) {
+  for (const [side, geo] of [
+    ['left', p.lightLeft],
+    ['right', p.lightRight],
+  ]) {
     const l = add(geo, p.lightMaterial);
-    l.visible = false; l.renderOrder = -1; l.name = `Demo_car_blinker_light_${side}`;
+    l.visible = false;
+    l.renderOrder = -1;
+    l.name = `Demo_car_blinker_light_${side}`;
   }
   cars.add(car);
   return car;
@@ -275,33 +510,62 @@ export function createCar({plate, province, color = 0}) {
 // `capacity`: the most cars shown at once.
 export function createCarInstances(root, capacity = 160) {
   const p = sharedParts();
-  const paint = new THREE.MeshStandardMaterial({color: '#ffffff', roughness: .32, metalness: .45});
-  const body = new THREE.InstancedMesh(p.body, paint, capacity), details = new THREE.InstancedMesh(p.details, p.detailMaterial, capacity), blob = new THREE.InstancedMesh(p.blob, p.blobMaterial, capacity);
-  body.name = 'Demo_cars_body'; details.name = 'Demo_cars_details'; blob.name = 'Demo_cars_blob';
+  const paint = new THREE.MeshStandardMaterial({color: '#ffffff', roughness: 0.32, metalness: 0.45});
+  const body = new THREE.InstancedMesh(p.body, paint, capacity),
+    details = new THREE.InstancedMesh(p.details, p.detailMaterial, capacity),
+    blob = new THREE.InstancedMesh(p.blob, p.blobMaterial, capacity);
+  body.name = 'Demo_cars_body';
+  details.name = 'Demo_cars_details';
+  blob.name = 'Demo_cars_blob';
   body.receiveShadow = details.receiveShadow = true;
   body.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
   blob.renderOrder = -1;
-  const colour = new THREE.Color(), lift = new THREE.Matrix4().makeTranslation(0, .025, 0), under = new THREE.Matrix4();
+  const colour = new THREE.Color(),
+    lift = new THREE.Matrix4().makeTranslation(0, 0.025, 0),
+    under = new THREE.Matrix4();
   for (const mesh of [body, details, blob]) {
     // The cars move every frame, beyond any bounds worked out once.
-    mesh.frustumCulled = false; mesh.matrixAutoUpdate = false; mesh.count = 0;
+    mesh.frustumCulled = false;
+    mesh.matrixAutoUpdate = false;
+    mesh.count = 0;
     root.add(mesh);
   }
-  const scene = root.parent, before = scene.onBeforeRender;
-  scene.onBeforeRender = function (...args) { before.apply(this, args); sync(); };
+  const scene = root.parent,
+    before = scene.onBeforeRender;
+  scene.onBeforeRender = function (...args) {
+    before.apply(this, args);
+    sync();
+  };
   function sync() {
     let n = 0;
     for (const car of cars) {
-      if (!car.parent) { cars.delete(car); continue; }
+      if (!car.parent) {
+        cars.delete(car);
+        continue;
+      }
       if (car.parent !== root || !car.visible || n >= capacity) continue;
-      body.setMatrixAt(n, car.matrix); details.setMatrixAt(n, car.matrix); blob.setMatrixAt(n, under.multiplyMatrices(car.matrix, lift));
+      body.setMatrixAt(n, car.matrix);
+      details.setMatrixAt(n, car.matrix);
+      blob.setMatrixAt(n, under.multiplyMatrices(car.matrix, lift));
       body.setColorAt(n, colour.set(car.userData.paint));
       n++;
     }
-    for (const mesh of [body, details, blob]) { mesh.count = n; mesh.instanceMatrix.needsUpdate = true; }
+    for (const mesh of [body, details, blob]) {
+      mesh.count = n;
+      mesh.instanceMatrix.needsUpdate = true;
+    }
     body.instanceColor.needsUpdate = true;
   }
-  return {dispose() { scene.onBeforeRender = before; for (const mesh of [body, details, blob]) { mesh.removeFromParent(); mesh.dispose(); } paint.dispose(); }};
+  return {
+    dispose() {
+      scene.onBeforeRender = before;
+      for (const mesh of [body, details, blob]) {
+        mesh.removeFromParent();
+        mesh.dispose();
+      }
+      paint.dispose();
+    },
+  };
 }
 
 // Lamps and plate at night: a car with its engine on shows its lamps (and plate) bright; a parked one at night is
@@ -309,21 +573,52 @@ export function createCarInstances(root, capacity = 160) {
 // through-traffic shares one, and it is always on the move).
 export function setCarLamps(car, on, night) {
   const [decals, pool, beams] = car.children;
-  decals.material.color.setScalar(!night || on ? 1 : .3);
+  decals.material.color.setScalar(!night || on ? 1 : 0.3);
   pool.visible = beams.visible = night && on;
 }
 
 // The blinkers (children 3 and 4, their flares 5 and 6, their light on the road 7 and 8): `side` is 'left', 'right'
 // or null; `lit` is the flash's on half.
 export function setCarBlinker(car, side, lit) {
-  car.children.slice(3, 9).forEach((o, i) => { o.visible = side === (i % 2 ? 'right' : 'left') && lit; });
+  car.children.slice(3, 9).forEach((o, i) => {
+    o.visible = side === (i % 2 ? 'right' : 'left') && lit;
+  });
 }
 
 export function disposeCars() {
   if (!shared) return;
-  for (const k of ['body', 'details', 'decals', 'blob', 'pool', 'beam', 'blinkLeft', 'blinkRight', 'glowLeft', 'glowRight', 'lightLeft', 'lightRight']) shared[k].dispose();
-  for (const k of ['detailMaterial', 'blobMaterial', 'blobTexture', 'poolMaterial', 'poolTexture', 'beamMaterial', 'blinkMaterial', 'glowMaterial', 'lightMaterial', 'lightTexture']) shared[k].dispose();
-  for (const m of plateCache.values()) { m.map.dispose(); m.dispose(); }
+  for (const k of [
+    'body',
+    'details',
+    'decals',
+    'blob',
+    'pool',
+    'beam',
+    'blinkLeft',
+    'blinkRight',
+    'glowLeft',
+    'glowRight',
+    'lightLeft',
+    'lightRight',
+  ])
+    shared[k].dispose();
+  for (const k of [
+    'detailMaterial',
+    'blobMaterial',
+    'blobTexture',
+    'poolMaterial',
+    'poolTexture',
+    'beamMaterial',
+    'blinkMaterial',
+    'glowMaterial',
+    'lightMaterial',
+    'lightTexture',
+  ])
+    shared[k].dispose();
+  for (const m of plateCache.values()) {
+    m.map.dispose();
+    m.dispose();
+  }
   plateCache.clear();
   shared = null;
 }

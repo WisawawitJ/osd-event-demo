@@ -1,5 +1,9 @@
 // Small DOM helpers shared by the parking UI.
-export const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+export const esc = (v) =>
+  String(v ?? '').replace(
+    /[&<>"']/g,
+    (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c],
+  );
 
 const paths = {
   car: 'M5 17h14M6 17v2m12-2v2M4 13l2-5h12l2 5v4H4ZM7 13h.01M17 13h.01',
@@ -28,7 +32,8 @@ const paths = {
   arrowOut: 'M12 20V8m-5 5 5-5 5 5M5 4h14',
   sync: 'M4 12a8 8 0 0 1 14-5l2 2M20 12a8 8 0 0 1-14 5l-2-2M20 4v5h-5M4 20v-5h5',
 };
-export const icon = (name, cls = '') => `<svg viewBox="0 0 24 24" aria-hidden="true"${cls ? ` class="${cls}"` : ''}><path d="${paths[name] || paths.car}"/></svg>`;
+export const icon = (name, cls = '') =>
+  `<svg viewBox="0 0 24 24" aria-hidden="true"${cls ? ` class="${cls}"` : ''}><path d="${paths[name] || paths.car}"/></svg>`;
 
 // Brings a container in line with new markup (a string, or a fragment), changing only what differs: text,
 // attributes and form values. Elements that stay are kept, so a button under the pointer keeps its hover (rebuilt on
@@ -36,7 +41,11 @@ export const icon = (name, cls = '') => `<svg viewBox="0 0 24 24" aria-hidden="t
 // Form values follow the markup, as a rebuilt field's did.
 export function morph(el, markup) {
   let source = markup;
-  if (typeof markup === 'string') { const template = document.createElement('template'); template.innerHTML = markup; source = template.content; }
+  if (typeof markup === 'string') {
+    const template = document.createElement('template');
+    template.innerHTML = markup;
+    source = template.content;
+  }
   const active = document.activeElement;
   morphChildren(el, source);
   // A keyed row moved into place takes its focused button with it, but moving it drops the focus.
@@ -45,15 +54,21 @@ export function morph(el, markup) {
 // Rows with a `data-key` (a list that reorders) are matched by it, not by position: matched by position, a focused
 // row's buttons went on to act on whichever item moved into its place.
 function morphChildren(target, source) {
-  const want = [...source.childNodes], keyed = new Map();
+  const want = [...source.childNodes],
+    keyed = new Map();
   for (const child of target.children) if (child.dataset.key) keyed.set(child.dataset.key, child);
   want.forEach((node, i) => {
     let current = target.childNodes[i];
     const key = node.nodeType === 1 ? node.dataset.key : undefined;
     if (key !== undefined && current?.dataset?.key !== key) {
       const match = keyed.get(key);
-      if (match) { target.insertBefore(match, current || null); current = match; }
-      else { target.insertBefore(node, current || null); return; }
+      if (match) {
+        target.insertBefore(match, current || null);
+        current = match;
+      } else {
+        target.insertBefore(node, current || null);
+        return;
+      }
     }
     if (!current) target.appendChild(node);
     else if (current.nodeType === node.nodeType && current.nodeName === node.nodeName) morphNode(current, node);
@@ -62,17 +77,22 @@ function morphChildren(target, source) {
   while (target.childNodes.length > want.length) target.lastChild.remove();
 }
 function morphNode(current, node) {
-  if (node.nodeType !== 1) { if (current.nodeValue !== node.nodeValue) current.nodeValue = node.nodeValue; return; }
+  if (node.nodeType !== 1) {
+    if (current.nodeValue !== node.nodeValue) current.nodeValue = node.nodeValue;
+    return;
+  }
   for (const {name} of [...current.attributes]) if (!node.hasAttribute(name)) current.removeAttribute(name);
-  for (const {name, value} of [...node.attributes]) if (current.getAttribute(name) !== value) current.setAttribute(name, value);
+  for (const {name, value} of [...node.attributes])
+    if (current.getAttribute(name) !== value) current.setAttribute(name, value);
   morphChildren(current, node);
   const tag = current.tagName;
-  if (tag === 'INPUT' && (current.type === 'checkbox' || current.type === 'radio')) current.checked = node.hasAttribute('checked');
+  if (tag === 'INPUT' && (current.type === 'checkbox' || current.type === 'radio'))
+    current.checked = node.hasAttribute('checked');
   else if (tag === 'INPUT' || tag === 'TEXTAREA') {
-    const value = tag === 'INPUT' ? node.getAttribute('value') ?? '' : node.textContent;
+    const value = tag === 'INPUT' ? (node.getAttribute('value') ?? '') : node.textContent;
     if (current.value !== value) current.value = value;
   } else if (tag === 'SELECT') {
-    const chosen = [...node.options].find(o => o.hasAttribute('selected')) || node.options[0];
+    const chosen = [...node.options].find((o) => o.hasAttribute('selected')) || node.options[0];
     const value = chosen && (chosen.getAttribute('value') ?? chosen.textContent);
     if (chosen && current.value !== value) current.value = value;
   }
@@ -91,41 +111,85 @@ export function patch(el, html) {
   const next = el.contains(active) ? active : el.querySelector(`[data-focus="${focusId}"],#${CSS.escape(focusId)}`);
   if (!next) return;
   if (document.activeElement !== next) next.focus({preventScroll: true});
-  if (sel && next.setSelectionRange) try { next.setSelectionRange(...sel); } catch {}
+  if (sel && next.setSelectionRange)
+    try {
+      next.setSelectionRange(...sel);
+    } catch {}
 }
 
 // A deterministic QR-like pattern for the demo ticket (not a scannable code).
 export function fakeQr(text, size = 29) {
   let h = 2166136261;
-  for (const ch of text) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
-  const rand = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return (h >>> 0) / 4294967296; };
+  for (const ch of text) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 16777619);
+  }
+  const rand = () => {
+    h ^= h << 13;
+    h ^= h >>> 17;
+    h ^= h << 5;
+    return (h >>> 0) / 4294967296;
+  };
   const cells = [];
   const finder = (x, y) => (x < 7 && y < 7) || (x >= size - 7 && y < 7) || (x < 7 && y >= size - 7);
-  const finderOn = (x, y) => { const fx = x >= size - 7 ? x - (size - 7) : x, fy = y >= size - 7 ? y - (size - 7) : y; return fx === 0 || fx === 6 || fy === 0 || fy === 6 || (fx >= 2 && fx <= 4 && fy >= 2 && fy <= 4); };
-  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const on = finder(x, y) ? finderOn(x, y) : (x === 7 || y === 7 || x === size - 8 || y === size - 8) ? false : (x === 6 || y === 6) ? (x + y) % 2 === 0 : rand() < .48;
-    if (on) cells.push(`M${x} ${y}h1v1h-1z`);
-  }
+  const finderOn = (x, y) => {
+    const fx = x >= size - 7 ? x - (size - 7) : x,
+      fy = y >= size - 7 ? y - (size - 7) : y;
+    return fx === 0 || fx === 6 || fy === 0 || fy === 6 || (fx >= 2 && fx <= 4 && fy >= 2 && fy <= 4);
+  };
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const on = finder(x, y)
+        ? finderOn(x, y)
+        : x === 7 || y === 7 || x === size - 8 || y === size - 8
+          ? false
+          : x === 6 || y === 6
+            ? (x + y) % 2 === 0
+            : rand() < 0.48;
+      if (on) cells.push(`M${x} ${y}h1v1h-1z`);
+    }
   return `<svg class="qr" viewBox="-2 -2 ${size + 4} ${size + 4}" role="img" aria-label="QR"><rect x="-2" y="-2" width="${size + 4}" height="${size + 4}" fill="#fff"/><path d="${cells.join('')}" fill="#14202b"/></svg>`;
 }
 
 export function saveFile(name, text, type) {
   const url = URL.createObjectURL(new Blob([text], {type}));
   const a = Object.assign(document.createElement('a'), {href: url, download: name});
-  document.body.append(a); a.click(); a.remove();
+  document.body.append(a);
+  a.click();
+  a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 // CSV with a byte-order mark so spreadsheet apps read the Thai text as UTF-8.
-export const download = (name, rows) => saveFile(name, '﻿' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
+export const download = (name, rows) =>
+  saveFile(
+    name,
+    '﻿' + rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n'),
+    'text/csv;charset=utf-8',
+  );
 
 // The approval email's calendar file, as in the real app: a Thai/English all-day reminder for the arrival date only.
 export function visitInvite(r) {
-  const day = ms => new Date(ms + 7 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
-  const text = s => String(s).replace(/[;,]/g, m => '\\' + m).replace(/\n/g, '\\n');
-  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//OSD event demo//Parking (simulated)//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
-    `UID:${r.ref}@parking.osd.example`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
-    `DTSTART;VALUE=DATE:${day(r.arrival)}`, `DTEND;VALUE=DATE:${day(r.arrival + 86400e3)}`,
-    `SUMMARY:${text(`ที่จอดรถ OSD / OSD parking · ${r.plate}`)}`, `LOCATION:${text('OSD car park, zone P2 row A (simulated)')}`,
+  const day = (ms) => new Date(ms + 7 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
+  const text = (s) =>
+    String(s)
+      .replace(/[;,]/g, (m) => '\\' + m)
+      .replace(/\n/g, '\\n');
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//OSD event demo//Parking (simulated)//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:${r.ref}@parking.osd.example`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
+    `DTSTART;VALUE=DATE:${day(r.arrival)}`,
+    `DTEND;VALUE=DATE:${day(r.arrival + 86400e3)}`,
+    `SUMMARY:${text(`ที่จอดรถ OSD / OSD parking · ${r.plate}`)}`,
+    `LOCATION:${text('OSD car park, zone P2 row A (simulated)')}`,
     `DESCRIPTION:${text(`Demo ticket ${r.ref} for ${r.plate} ${r.province}. Drive to the main gate and the plate camera opens the barrier. Simulated for the OSD event demo.`)}`,
-    'END:VEVENT', 'END:VCALENDAR', ''].join('\r\n');
+    'END:VEVENT',
+    'END:VCALENDAR',
+    '',
+  ].join('\r\n');
 }

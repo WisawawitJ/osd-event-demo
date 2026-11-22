@@ -1,103 +1,344 @@
 /* Night: the page around the 3D view goes dark with the scene. main.js sets html[data-night=true]. */
-html[data-night=true] {
+html[data-night='true'] {
   color-scheme: dark;
-  --paper: #0e151c; --ink: #e4ebf2; --muted: #96a8b8; --line: #283746; --accent: #00a1df; --active: #22314a;
-  --pk-blue-soft: #1d2a45; --pk-line: #253442;
-  --pk-ok: #7fd8b0; --pk-ok-bg: #173329; --pk-warn: #f1bf73; --pk-warn-bg: #3a2b14; --pk-bad: #ff9c8f; --pk-bad-bg: #3d1f1c;
-  --pk-mute: #a4b3c2; --pk-mute-bg: #222f3c; --pk-info: #8fcbf2; --pk-info-bg: #16303f;
+  --paper: #0e151c;
+  --ink: #e4ebf2;
+  --muted: #96a8b8;
+  --line: #283746;
+  --accent: #00a1df;
+  --active: #22314a;
+  --pk-blue-soft: #1d2a45;
+  --pk-line: #253442;
+  --pk-ok: #7fd8b0;
+  --pk-ok-bg: #173329;
+  --pk-warn: #f1bf73;
+  --pk-warn-bg: #3a2b14;
+  --pk-bad: #ff9c8f;
+  --pk-bad-bg: #3d1f1c;
+  --pk-mute: #a4b3c2;
+  --pk-mute-bg: #222f3c;
+  --pk-info: #8fcbf2;
+  --pk-info-bg: #16303f;
   background: var(--paper);
 }
-html[data-night=true] body { background: var(--paper); color: var(--ink); }
+html[data-night='true'] body {
+  background: var(--paper);
+  color: var(--ink);
+}
 /* The switch itself is one cross-fade of the whole page (main.js, setPageNight): no element fades its own colours, which
    took text and background through the same grey halfway. */
-html.theme-switch, html.theme-switch * { transition: none !important; }
-::view-transition-old(root), ::view-transition-new(root) { animation-duration: .35s; }
+html.theme-switch,
+html.theme-switch * {
+  transition: none !important;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.35s;
+}
 
 /* Surfaces */
-html[data-night=true] .tour-header, html[data-night=true] .header, html[data-night=true] .context-panel, html[data-night=true] .destination-dock,
-html[data-night=true] .day-timeline, html[data-night=true] .insight-toolbar, html[data-night=true] .parking-bar,
-html[data-night=true] .pk-caption, html[data-night=true] .pk-alert-pop, html[data-night=true] .view-controls,
-html[data-night=true] #scene-chip,
-html[data-night=true] .showcase-page #status[data-state=loading], html[data-night=true] .showcase-page #status[data-state=error] {
-  background: #151f29; color: var(--ink); border-color: var(--line);
+html[data-night='true'] .tour-header,
+html[data-night='true'] .header,
+html[data-night='true'] .context-panel,
+html[data-night='true'] .destination-dock,
+html[data-night='true'] .day-timeline,
+html[data-night='true'] .insight-toolbar,
+html[data-night='true'] .parking-bar,
+html[data-night='true'] .pk-caption,
+html[data-night='true'] .pk-alert-pop,
+html[data-night='true'] .view-controls,
+html[data-night='true'] #scene-chip,
+html[data-night='true'] .showcase-page #status[data-state='loading'],
+html[data-night='true'] .showcase-page #status[data-state='error'] {
+  background: #151f29;
+  color: var(--ink);
+  border-color: var(--line);
 }
-html[data-night=true] #scene-chip { color: #c9d6e3; }
-html[data-night=true] .scene-title { background: #151f29f0; color: var(--ink); }
-html[data-night=true] .destination-dock button, html[data-night=true] .layer-controls button, html[data-night=true] .parking-bar button:not(.primary-button) { color: #b9c7d5; }
-html[data-night=true] .destination-dock button[aria-pressed=true] { color: #fff; }
-html[data-night=true] .layer-controls button[aria-pressed=true] { background: #22314a; color: #7fd0f3; }
-html[data-night=true] button:not(:disabled):hover, html[data-night=true] a:hover { background: #22314a; }
-html[data-night=true] .primary-button { background: #e4ebf2; color: #0e151c; }
-html[data-night=true] .primary-button:hover { background: #ffffff !important; }
-html[data-night=true] #tour-night[aria-pressed=true] { background: #e4ebf2; color: #0e151c; }
-html[data-night=true] .tour-brand, html[data-night=true] .explore-link, html[data-night=true] .back-link { color: var(--ink) !important; }
-html[data-night=true] .demo-label, html[data-night=true] .layer-controls > span, html[data-night=true] .layer-key,
-html[data-night=true] .day-events time, html[data-night=true] .timeline-labels { color: var(--muted); }
-html[data-night=true] .day-events span, html[data-night=true] #insight-room { color: var(--ink); }
-html[data-night=true] .day-events button { border-left-color: #2c3c4d; }
-html[data-night=true] .day-events [aria-current=true] { background: #1d2a45; }
+html[data-night='true'] #scene-chip {
+  color: #c9d6e3;
+}
+html[data-night='true'] .scene-title {
+  background: #151f29f0;
+  color: var(--ink);
+}
+html[data-night='true'] .destination-dock button,
+html[data-night='true'] .layer-controls button,
+html[data-night='true'] .parking-bar button:not(.primary-button) {
+  color: #b9c7d5;
+}
+html[data-night='true'] .destination-dock button[aria-pressed='true'] {
+  color: #fff;
+}
+html[data-night='true'] .layer-controls button[aria-pressed='true'] {
+  background: #22314a;
+  color: #7fd0f3;
+}
+html[data-night='true'] button:not(:disabled):hover,
+html[data-night='true'] a:hover {
+  background: #22314a;
+}
+html[data-night='true'] .primary-button {
+  background: #e4ebf2;
+  color: #0e151c;
+}
+html[data-night='true'] .primary-button:hover {
+  background: #ffffff !important;
+}
+html[data-night='true'] #tour-night[aria-pressed='true'] {
+  background: #e4ebf2;
+  color: #0e151c;
+}
+html[data-night='true'] .tour-brand,
+html[data-night='true'] .explore-link,
+html[data-night='true'] .back-link {
+  color: var(--ink) !important;
+}
+html[data-night='true'] .demo-label,
+html[data-night='true'] .layer-controls > span,
+html[data-night='true'] .layer-key,
+html[data-night='true'] .day-events time,
+html[data-night='true'] .timeline-labels {
+  color: var(--muted);
+}
+html[data-night='true'] .day-events span,
+html[data-night='true'] #insight-room {
+  color: var(--ink);
+}
+html[data-night='true'] .day-events button {
+  border-left-color: #2c3c4d;
+}
+html[data-night='true'] .day-events [aria-current='true'] {
+  background: #1d2a45;
+}
 
 /* Building panel */
-html[data-night=true] .data-row { border-bottom-color: var(--line); }
-html[data-night=true] .system-icon, html[data-night=true] .panel-action, html[data-night=true] .incidents-heading > span { background: #1d2a45; color: #7fd0f3; }
-html[data-night=true] .panel-action:hover { background: #24345a; }
-html[data-night=true] .local-controls button { background: #1e2a37; color: var(--ink); }
-html[data-night=true] .local-controls button[aria-pressed=true] { background: #173329; color: #7fd8b0; }
-html[data-night=true] .status-pill { background: #173329; color: #7fd8b0; }
-html[data-night=true] .status-pill.attention, html[data-night=true] .alert-strip { background: #3a2b14; color: #f1bf73; }
-html[data-night=true] .metric-note { color: #7fd8b0; }
-html[data-night=true] .energy-node { background: #173329; color: #7fd8b0; }
-html[data-night=true] .energy-node:last-child { background: #1d2a45; color: #7fd0f3; }
-html[data-night=true] .water-level i { background: #1e3331; }
-html[data-night=true] .event-row { border-left-color: var(--line); }
-html[data-night=true] .incident-item { background: #2c2416; border-color: #4a3a1f; }
-html[data-night=true] .incident-item small { color: #d1b58c; }
-html[data-night=true] .chart .chart-grid { stroke: #24323f; }
-html[data-night=true] .chart text { fill: #8c9db0; }
-html[data-night=true] .chart path[fill="#eaf1fb"] { fill: #1b2740; }
-html[data-night=true] .plate { border-color: #3a4a5a; }
+html[data-night='true'] .data-row {
+  border-bottom-color: var(--line);
+}
+html[data-night='true'] .system-icon,
+html[data-night='true'] .panel-action,
+html[data-night='true'] .incidents-heading > span {
+  background: #1d2a45;
+  color: #7fd0f3;
+}
+html[data-night='true'] .panel-action:hover {
+  background: #24345a;
+}
+html[data-night='true'] .local-controls button {
+  background: #1e2a37;
+  color: var(--ink);
+}
+html[data-night='true'] .local-controls button[aria-pressed='true'] {
+  background: #173329;
+  color: #7fd8b0;
+}
+html[data-night='true'] .status-pill {
+  background: #173329;
+  color: #7fd8b0;
+}
+html[data-night='true'] .status-pill.attention,
+html[data-night='true'] .alert-strip {
+  background: #3a2b14;
+  color: #f1bf73;
+}
+html[data-night='true'] .metric-note {
+  color: #7fd8b0;
+}
+html[data-night='true'] .energy-node {
+  background: #173329;
+  color: #7fd8b0;
+}
+html[data-night='true'] .energy-node:last-child {
+  background: #1d2a45;
+  color: #7fd0f3;
+}
+html[data-night='true'] .water-level i {
+  background: #1e3331;
+}
+html[data-night='true'] .event-row {
+  border-left-color: var(--line);
+}
+html[data-night='true'] .incident-item {
+  background: #2c2416;
+  border-color: #4a3a1f;
+}
+html[data-night='true'] .incident-item small {
+  color: #d1b58c;
+}
+html[data-night='true'] .chart .chart-grid {
+  stroke: #24323f;
+}
+html[data-night='true'] .chart text {
+  fill: #8c9db0;
+}
+html[data-night='true'] .chart path[fill='#eaf1fb'] {
+  fill: #1b2740;
+}
+html[data-night='true'] .plate {
+  border-color: #3a4a5a;
+}
 
 /* Staff console */
-html[data-night=true] .pk-tabs { background: #1b2632; }
-html[data-night=true] .pk-tabs button { color: #a7b6c5; }
-html[data-night=true] .pk-tabs button[aria-selected=true] { background: #253445; color: #c3d3ff; box-shadow: none; }
-html[data-night=true] .pk-console-head span { color: var(--ink); }
-html[data-night=true] .pk-kpis div, html[data-night=true] .pk-attention, html[data-night=true] .pk-gate-status { background: #1b2632; }
-html[data-night=true] .pk-attention.alert { background: var(--pk-bad-bg); }
-html[data-night=true] .pk-gate-icon { background: #253445; color: #b9c7d5; }
-html[data-night=true] .pk-btn { background: #1e2a37; color: var(--ink); }
-html[data-night=true] .pk-btn.primary { background: #0055b8; color: #fff; }
-html[data-night=true] .pk-btn.danger { background: var(--pk-bad-bg); color: var(--pk-bad); }
-html[data-night=true] .pk-chips button { background: #1e2a37; color: #b9c7d5; }
-html[data-night=true] .pk-chips button[aria-pressed=true] { background: #e4ebf2; color: #0e151c; }
-html[data-night=true] .pk-row.is-new { background: #1a2640; }
-html[data-night=true] .pk-toolbar input[type=search], html[data-night=true] .pk-manual select, html[data-night=true] .pk-manual input,
-html[data-night=true] .pk-inline select, html[data-night=true] .pk-reject textarea, html[data-night=true] .pk-add form input, html[data-night=true] .pk-add form select {
-  background: #121b24; border-color: #2c3c4d; color: var(--ink);
+html[data-night='true'] .pk-tabs {
+  background: #1b2632;
 }
-html[data-night=true] .pk-add { border-color: var(--line); }
-html[data-night=true] .pk-alert-card { background: #2a1917; border-color: #6b3a33; }
-html[data-night=true] .pk-alert-card p, html[data-night=true] .pk-alert-pop-body p { color: #f0c2ba; }
-html[data-night=true] .pk-alert-head small, html[data-night=true] .pk-alert-pop-head small { color: #d3a49c; }
-html[data-night=true] .pk-donut circle:first-child { stroke: #24323f; }
-html[data-night=true] .pk-bars .axis { stroke: #2a3846; }
-html[data-night=true] .pk-bars text { fill: #8c9db0; }
-html[data-night=true] .pk-zone > i { background: #1e2a37; }
-html[data-night=true] .pk-dots i { background: #263544; }
-html[data-night=true] .pk-qr-row { border-color: var(--line); }
-html[data-night=true] .pk-caption p { color: var(--muted); }
-html[data-night=true] .pk-caption-hint { background: #1d2a45; color: #7fd0f3; }
-html[data-night=true] .view-controls button { color: #b9c7d5 !important; }
-html[data-night=true] .flash { animation-name: pk-flash-night; }
-@keyframes pk-flash-night { 0%, 30% { background: #3b3416; } 100% { background: transparent; } }
+html[data-night='true'] .pk-tabs button {
+  color: #a7b6c5;
+}
+html[data-night='true'] .pk-tabs button[aria-selected='true'] {
+  background: #253445;
+  color: #c3d3ff;
+  box-shadow: none;
+}
+html[data-night='true'] .pk-console-head span {
+  color: var(--ink);
+}
+html[data-night='true'] .pk-kpis div,
+html[data-night='true'] .pk-attention,
+html[data-night='true'] .pk-gate-status {
+  background: #1b2632;
+}
+html[data-night='true'] .pk-attention.alert {
+  background: var(--pk-bad-bg);
+}
+html[data-night='true'] .pk-gate-icon {
+  background: #253445;
+  color: #b9c7d5;
+}
+html[data-night='true'] .pk-btn {
+  background: #1e2a37;
+  color: var(--ink);
+}
+html[data-night='true'] .pk-btn.primary {
+  background: #0055b8;
+  color: #fff;
+}
+html[data-night='true'] .pk-btn.danger {
+  background: var(--pk-bad-bg);
+  color: var(--pk-bad);
+}
+html[data-night='true'] .pk-chips button {
+  background: #1e2a37;
+  color: #b9c7d5;
+}
+html[data-night='true'] .pk-chips button[aria-pressed='true'] {
+  background: #e4ebf2;
+  color: #0e151c;
+}
+html[data-night='true'] .pk-row.is-new {
+  background: #1a2640;
+}
+html[data-night='true'] .pk-toolbar input[type='search'],
+html[data-night='true'] .pk-manual select,
+html[data-night='true'] .pk-manual input,
+html[data-night='true'] .pk-inline select,
+html[data-night='true'] .pk-reject textarea,
+html[data-night='true'] .pk-add form input,
+html[data-night='true'] .pk-add form select {
+  background: #121b24;
+  border-color: #2c3c4d;
+  color: var(--ink);
+}
+html[data-night='true'] .pk-add {
+  border-color: var(--line);
+}
+html[data-night='true'] .pk-alert-card {
+  background: #2a1917;
+  border-color: #6b3a33;
+}
+html[data-night='true'] .pk-alert-card p,
+html[data-night='true'] .pk-alert-pop-body p {
+  color: #f0c2ba;
+}
+html[data-night='true'] .pk-alert-head small,
+html[data-night='true'] .pk-alert-pop-head small {
+  color: #d3a49c;
+}
+html[data-night='true'] .pk-donut circle:first-child {
+  stroke: #24323f;
+}
+html[data-night='true'] .pk-bars .axis {
+  stroke: #2a3846;
+}
+html[data-night='true'] .pk-bars text {
+  fill: #8c9db0;
+}
+html[data-night='true'] .pk-zone > i {
+  background: #1e2a37;
+}
+html[data-night='true'] .pk-dots i {
+  background: #263544;
+}
+html[data-night='true'] .pk-qr-row {
+  border-color: var(--line);
+}
+html[data-night='true'] .pk-caption p {
+  color: var(--muted);
+}
+html[data-night='true'] .pk-caption-hint {
+  background: #1d2a45;
+  color: #7fd0f3;
+}
+html[data-night='true'] .view-controls button {
+  color: #b9c7d5 !important;
+}
+html[data-night='true'] .flash {
+  animation-name: pk-flash-night;
+}
+@keyframes pk-flash-night {
+  0%,
+  30% {
+    background: #3b3416;
+  }
+  100% {
+    background: transparent;
+  }
+}
 /* Plates stay white, as on a real car, so their text stays dark; the phone stays a phone in its own light theme. */
-html[data-night=true] .pk-phone { --ink: #253b43; --muted: #526870; --line: #cbd6da; --accent: #0055b8; --pk-blue-soft: #eef4fc; --pk-ok: #236b54; --pk-ok-bg: #e5f5ee; --pk-bad: #a3352b; color: var(--ink); color-scheme: light; }
-html[data-night=true] .pk-plate-chip, html[data-night=true] .pk-plate-big, html[data-night=true] .plate { color: #121820; background: #fdfdfb; }
-html[data-night=true] .pk-plate-chip small, html[data-night=true] .pk-plate-big small, html[data-night=true] .plate small { color: #2b3540; }
+html[data-night='true'] .pk-phone {
+  --ink: #253b43;
+  --muted: #526870;
+  --line: #cbd6da;
+  --accent: #0055b8;
+  --pk-blue-soft: #eef4fc;
+  --pk-ok: #236b54;
+  --pk-ok-bg: #e5f5ee;
+  --pk-bad: #a3352b;
+  color: var(--ink);
+  color-scheme: light;
+}
+html[data-night='true'] .pk-plate-chip,
+html[data-night='true'] .pk-plate-big,
+html[data-night='true'] .plate {
+  color: #121820;
+  background: #fdfdfb;
+}
+html[data-night='true'] .pk-plate-chip small,
+html[data-night='true'] .pk-plate-big small,
+html[data-night='true'] .plate small {
+  color: #2b3540;
+}
 
 /* Explore page. Its pressed-button rule reaches the showcase too, where the dock and console tabs keep their own colours. */
-html[data-night=true] button[aria-pressed="true"] { background: #e4ebf2; color: #0e151c; }
-html[data-night=true] .showcase-page .destination-dock button[aria-pressed=true] { background: #0055b8; color: #fff; }
-html[data-night=true] .showcase-page .pk-tabs button[aria-selected=true] { background: #253445; }
-html[data-night=true] .camera-presets button, html[data-night=true] .simulation-night, html[data-night=true] .simulation-device, html[data-night=true] .simulation-room { border-color: var(--line); background: transparent; color: var(--ink); }
-html[data-night=true] .download { color: var(--accent); }
+html[data-night='true'] button[aria-pressed='true'] {
+  background: #e4ebf2;
+  color: #0e151c;
+}
+html[data-night='true'] .showcase-page .destination-dock button[aria-pressed='true'] {
+  background: #0055b8;
+  color: #fff;
+}
+html[data-night='true'] .showcase-page .pk-tabs button[aria-selected='true'] {
+  background: #253445;
+}
+html[data-night='true'] .camera-presets button,
+html[data-night='true'] .simulation-night,
+html[data-night='true'] .simulation-device,
+html[data-night='true'] .simulation-room {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink);
+}
+html[data-night='true'] .download {
+  color: var(--accent);
+}

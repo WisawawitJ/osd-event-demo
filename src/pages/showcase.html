@@ -1,32 +1,217 @@
-<header class="tour-header"><a class="tour-brand" href="/" aria-label="OSD × ATOM"><img class="brand-osd" src="src/brand/osd-wordmark-gradient.svg" alt="OSD"><img class="brand-osd night-logo" src="src/brand/osd-wordmark-white.svg" alt=""><svg class="brand-x" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2l12 12M14 2L2 14"/></svg><img class="brand-atom" src="src/brand/atom-logo-color.png" alt="ATOM"><img class="brand-atom night-logo" src="src/brand/atom-logo-white.png" alt=""><span class="brand-line" data-i18n="brand">ระบบอาคารอัจฉริยะ</span></a><div class="header-actions"><button id="lang-toggle" class="lang-toggle" title="Language / ภาษา"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><span>EN</span></button><span class="demo-label"><i></i><span data-i18n="demo">ข้อมูลจำลอง</span></span><button id="tour-night" aria-pressed="false" disabled title="สลับกลางวันและกลางคืน" data-i18n-title="night.title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14A8 8 0 0 1 10 4a8.5 8.5 0 1 0 10 10Z"/></svg><span data-i18n-init="night">กลางคืน</span></button><a class="explore-link" href="/explore"><span data-i18n="explore">สำรวจอาคาร</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></a></div></header>
-<main id="showcase">
- <div class="tour-workspace">
-  <div class="scene-column">
-   <section id="viewport" aria-label="โมเดลอาคาร OSD แบบโต้ตอบ" data-i18n-label="viewport">
-    <div class="scene-title"><p id="scene-floor" class="scene-overline" data-i18n-init="scene.floor">ทั้งอาคาร</p><h1 id="scene-heading" data-i18n-init="scene.heading">ภาพรวมอาคาร</h1></div>
-    <div class="scene-top-right"><section class="insight-toolbar" hidden aria-label="ข้อมูลบนโมเดล" data-i18n-label="toolbar"><div class="layer-controls"><span data-i18n="layer.heading">สีพื้นห้อง</span><div role="group" aria-label="เลือกข้อมูลแสดงด้วยสี" data-i18n-label="layer.group"><button data-layer="none" aria-pressed="true" disabled data-i18n="layer.none">ปกติ</button><button data-layer="temperature" aria-pressed="false" disabled data-i18n="layer.temperature">อุณหภูมิ</button><button data-layer="occupancy" aria-pressed="false" disabled data-i18n="layer.occupancy">การใช้ห้อง</button><button data-layer="lights" aria-pressed="false" disabled data-i18n="layer.lights">ไฟ</button></div></div><div class="layer-key"><span id="layer-legend" hidden></span><span id="insight-room" hidden></span></div></section><span id="flight-status" role="status"></span></div>
-    <div class="scene-bottom"><span id="scene-chip" data-i18n-init="scene.chip">โมเดลอาคาร OSD · 5 ระดับ</span></div>
-    <div class="view-controls" role="group" data-i18n-label="view.group" aria-label="ควบคุมมุมมอง"><button id="view-zoom-in" data-i18n-label="view.zoomIn" data-i18n-title="view.zoomIn" aria-label="ซูมเข้า" title="ซูมเข้า"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><button id="view-zoom-out" data-i18n-label="view.zoomOut" data-i18n-title="view.zoomOut" aria-label="ซูมออก" title="ซูมออก"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button><button id="view-up" data-i18n-label="view.up" data-i18n-title="view.up" aria-label="ยกกล้องขึ้น" title="ยกกล้องขึ้น"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button><button id="view-down" data-i18n-label="view.down" data-i18n-title="view.down" aria-label="ลดกล้องลง" title="ลดกล้องลง"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button><button id="view-reset" data-i18n-title="view.reset" title="มุมเริ่มต้น"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M5 15a8 8 0 1 0 2-9L4 10"/></svg><span data-i18n="view.reset">มุมเริ่มต้น</span></button><button id="view-orbit" aria-pressed="true" data-i18n-title="view.orbit.title" title="หมุนมุมกล้องช้า ๆ เมื่อไม่มีการใช้งาน"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4m14-1v2a3 3 0 0 1-3 3H3"/></svg><span data-i18n="view.orbit">หมุนเมื่อว่าง</span></button></div>
-    <div id="story-caption" class="pk-caption building-caption" role="status" hidden></div>
-    <div id="parking-layer" hidden><div id="pk-overlays"></div><div id="pk-phone" class="pk-phone" hidden></div></div>
-    <div class="stage-message"><p id="status" role="status" data-state="loading" data-i18n-init="loading">กำลังเตรียมอาคาร…</p><button id="retry" hidden data-i18n="retry">ลองโหลดใหม่</button></div>
-   </section>
-   <nav class="destination-dock" aria-label="เลือกจุดพาชม" data-i18n-label="dock">
-    <button data-destination="overview" aria-pressed="true" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V8.5L12 4l7 4.5V21"/><path d="M9.5 10.5h.01M14.5 10.5h.01M9.5 14h.01M14.5 14h.01"/><path d="M10.5 21v-3.5h3V21"/></svg><span data-i18n="dock.overview">ภาพรวม</span></button>
-    <button data-destination="meeting" aria-pressed="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="6" r="2.25"/><circle cx="16.5" cy="6" r="2.25"/><path d="M3.5 13.5v-.5a4 4 0 0 1 8 0v.5M12.5 13.5v-.5a4 4 0 0 1 8 0v.5"/><rect x="2.5" y="13.5" width="19" height="3" rx="1"/><path d="M5.5 16.5V21M18.5 16.5V21"/></svg><span data-i18n="dock.meeting">ห้องประชุม</span></button>
-    <button data-destination="pond" aria-pressed="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5c2.2-3.4 7.2-4.2 10.6-1.2L18 7v7l-3.4-2.3C11.2 14.7 6.2 13.9 4 10.5Z"/><path d="M8 10h.01"/><path d="M3 18.5c1.5 1.2 3 1.2 4.5 0s3-1.2 4.5 0 3 1.2 4.5 0 3-1.2 4.5 0"/></svg><span data-i18n="dock.pond">บ่อปลา</span></button>
-    <button data-destination="energy" aria-pressed="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.5a4 4 0 0 1 8 0"/><path d="M12 1.5v.5M5 4l.5.4M19 4l-.5.4"/><path d="M5.5 10h13l2 7h-17Z"/><path d="M4.25 13.5h15.5M12 10v7M12 17v4M8.5 21h7"/></svg><span data-i18n="dock.energy">พลังงาน</span></button>
-    <button data-destination="parking" aria-pressed="false" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M9.25 17V7h3.25a3.25 3.25 0 0 1 0 6.5H9.25"/></svg><span>ที่จอดรถ</span></button>
-   </nav>
-   <section class="day-timeline" aria-label="สำรวจหนึ่งวันในอาคารด้วยข้อมูลจำลอง" data-i18n-label="timeline">
-    <div class="timeline-heading"><div><strong id="replay-time">13:30</strong><span id="replay-mode" data-i18n-init="day.mode">เวลาจำลอง · เดินตลอด</span></div><div class="timeline-actions"><button id="story-play" class="primary-button" disabled></button><button id="day-pause" aria-pressed="false" disabled data-i18n-init="day.pause">หยุดชั่วคราว</button><button id="day-speed" disabled data-i18n-title="day.speed" title="ความยาวหนึ่งวันจำลอง">20 นาที/วัน</button></div></div>
-    <label class="timeline-track"><span class="sr-only" data-i18n="day.time">เวลาในเรื่องราวจำลอง</span><input id="day-time" type="range" min="0" max="1439" step="1" value="540" disabled><span class="timeline-labels" aria-hidden="true"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></span></label>
-    <div id="day-events" class="day-events" aria-label="ช่วงเวลาที่น่าสนใจ" data-i18n-label="day.events"></div>
-   </section>
-   <section id="parking-bar" class="parking-bar" aria-label="เรื่องเล่าที่จอดรถ" data-i18n-label="parking.storyBar" hidden></section>
+<header class="tour-header">
+  <a class="tour-brand" href="/" aria-label="OSD × ATOM"
+    ><img class="brand-osd" src="src/brand/osd-wordmark-gradient.svg" alt="OSD" /><img
+      class="brand-osd night-logo"
+      src="src/brand/osd-wordmark-white.svg"
+      alt=""
+    /><svg class="brand-x" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2l12 12M14 2L2 14" /></svg
+    ><img class="brand-atom" src="src/brand/atom-logo-color.png" alt="ATOM" /><img
+      class="brand-atom night-logo"
+      src="src/brand/atom-logo-white.png"
+      alt=""
+    /><span class="brand-line" data-i18n="brand">ระบบอาคารอัจฉริยะ</span></a
+  >
+  <div class="header-actions">
+    <button id="lang-toggle" class="lang-toggle" title="Language / ภาษา">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></svg
+      ><span>EN</span></button
+    ><span class="demo-label"><i></i><span data-i18n="demo">ข้อมูลจำลอง</span></span
+    ><button id="tour-night" aria-pressed="false" disabled title="สลับกลางวันและกลางคืน" data-i18n-title="night.title">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14A8 8 0 0 1 10 4a8.5 8.5 0 1 0 10 10Z" /></svg
+      ><span data-i18n-init="night">กลางคืน</span></button
+    ><a class="explore-link" href="/explore"
+      ><span data-i18n="explore">สำรวจอาคาร</span
+      ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10" /></svg
+    ></a>
   </div>
-  <aside class="context-panel" aria-label="ข้อมูลประกอบจุดที่เลือก" data-i18n-label="panel"><div class="panel-heading"><h2 id="panel-title" data-i18n-init="panel.title">ภาพรวมอาคาร</h2><span class="status-pill" id="panel-status" data-i18n-init="panel.status">พร้อมพาชม</span></div><section class="building-incidents" aria-labelledby="incidents-heading"><div class="incidents-heading"><h3 id="incidents-heading" data-i18n="incidents">จุดที่ควรดู</h3><span id="incident-count">0</span></div><div id="incident-list"><p class="loading-copy" data-i18n-init="incidents.loading">กำลังเตรียมเหตุการณ์…</p></div></section><div id="dashboard-content"><p class="loading-copy" data-i18n-init="panel.loading">กำลังเตรียมข้อมูลจำลอง…</p></div><div id="parking-panel" class="pk-console" hidden></div></aside>
- </div>
- <div class="tour-footer"><span class="simulation-disclosure" data-i18n="disclosure">ข้อมูลและเหตุการณ์เพื่อสาธิต · ไม่เชื่อมต่ออุปกรณ์จริง</span></div>
- <div hidden id="legacy-controls"><div class="toolbar"><nav class="floors"><button data-floor="all"></button><button data-floor="1"></button><button data-floor="2"></button><button data-floor="3"></button><button data-floor="4"></button><button data-floor="5"></button></nav><button id="exterior"></button><button id="explode"></button><button id="cutaway"></button><button id="reset"></button></div><div class="camera-presets"><button id="camera-front"></button><button id="camera-side"></button><button id="lift"></button><button id="courtyard"></button><button id="office"></button><button id="arrival"></button><button id="reception"></button><button id="services"></button><button id="parking"></button><button id="stairs"></button></div><span id="view-label"></span></div>
+</header>
+<main id="showcase">
+  <div class="tour-workspace">
+    <div class="scene-column">
+      <section id="viewport" aria-label="โมเดลอาคาร OSD แบบโต้ตอบ" data-i18n-label="viewport">
+        <div class="scene-title">
+          <p id="scene-floor" class="scene-overline" data-i18n-init="scene.floor">ทั้งอาคาร</p>
+          <h1 id="scene-heading" data-i18n-init="scene.heading">ภาพรวมอาคาร</h1>
+        </div>
+        <div class="scene-top-right">
+          <section class="insight-toolbar" hidden aria-label="ข้อมูลบนโมเดล" data-i18n-label="toolbar">
+            <div class="layer-controls">
+              <span data-i18n="layer.heading">สีพื้นห้อง</span>
+              <div role="group" aria-label="เลือกข้อมูลแสดงด้วยสี" data-i18n-label="layer.group">
+                <button data-layer="none" aria-pressed="true" disabled data-i18n="layer.none">ปกติ</button
+                ><button data-layer="temperature" aria-pressed="false" disabled data-i18n="layer.temperature">
+                  อุณหภูมิ</button
+                ><button data-layer="occupancy" aria-pressed="false" disabled data-i18n="layer.occupancy">
+                  การใช้ห้อง</button
+                ><button data-layer="lights" aria-pressed="false" disabled data-i18n="layer.lights">ไฟ</button>
+              </div>
+            </div>
+            <div class="layer-key"><span id="layer-legend" hidden></span><span id="insight-room" hidden></span></div>
+          </section>
+          <span id="flight-status" role="status"></span>
+        </div>
+        <div class="scene-bottom"><span id="scene-chip" data-i18n-init="scene.chip">โมเดลอาคาร OSD · 5 ระดับ</span></div>
+        <div class="view-controls" role="group" data-i18n-label="view.group" aria-label="ควบคุมมุมมอง">
+          <button
+            id="view-zoom-in"
+            data-i18n-label="view.zoomIn"
+            data-i18n-title="view.zoomIn"
+            aria-label="ซูมเข้า"
+            title="ซูมเข้า"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button
+          ><button
+            id="view-zoom-out"
+            data-i18n-label="view.zoomOut"
+            data-i18n-title="view.zoomOut"
+            aria-label="ซูมออก"
+            title="ซูมออก"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg></button
+          ><button
+            id="view-up"
+            data-i18n-label="view.up"
+            data-i18n-title="view.up"
+            aria-label="ยกกล้องขึ้น"
+            title="ยกกล้องขึ้น"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></button
+          ><button
+            id="view-down"
+            data-i18n-label="view.down"
+            data-i18n-title="view.down"
+            aria-label="ลดกล้องลง"
+            title="ลดกล้องลง"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6" /></svg></button
+          ><button id="view-reset" data-i18n-title="view.reset" title="มุมเริ่มต้น">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M5 15a8 8 0 1 0 2-9L4 10" /></svg
+            ><span data-i18n="view.reset">มุมเริ่มต้น</span></button
+          ><button
+            id="view-orbit"
+            aria-pressed="true"
+            data-i18n-title="view.orbit.title"
+            title="หมุนมุมกล้องช้า ๆ เมื่อไม่มีการใช้งาน"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4m14-1v2a3 3 0 0 1-3 3H3" /></svg
+            ><span data-i18n="view.orbit">หมุนเมื่อว่าง</span>
+          </button>
+        </div>
+        <div id="story-caption" class="pk-caption building-caption" role="status" hidden></div>
+        <div id="parking-layer" hidden>
+          <div id="pk-overlays"></div>
+          <div id="pk-phone" class="pk-phone" hidden></div>
+        </div>
+        <div class="stage-message">
+          <p id="status" role="status" data-state="loading" data-i18n-init="loading">กำลังเตรียมอาคาร…</p>
+          <button id="retry" hidden data-i18n="retry">ลองโหลดใหม่</button>
+        </div>
+      </section>
+      <nav class="destination-dock" aria-label="เลือกจุดพาชม" data-i18n-label="dock">
+        <button data-destination="overview" aria-pressed="true" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 21h18M5 21V8.5L12 4l7 4.5V21" />
+            <path d="M9.5 10.5h.01M14.5 10.5h.01M9.5 14h.01M14.5 14h.01" />
+            <path d="M10.5 21v-3.5h3V21" /></svg
+          ><span data-i18n="dock.overview">ภาพรวม</span>
+        </button>
+        <button data-destination="meeting" aria-pressed="false" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="7.5" cy="6" r="2.25" />
+            <circle cx="16.5" cy="6" r="2.25" />
+            <path d="M3.5 13.5v-.5a4 4 0 0 1 8 0v.5M12.5 13.5v-.5a4 4 0 0 1 8 0v.5" />
+            <rect x="2.5" y="13.5" width="19" height="3" rx="1" />
+            <path d="M5.5 16.5V21M18.5 16.5V21" /></svg
+          ><span data-i18n="dock.meeting">ห้องประชุม</span>
+        </button>
+        <button data-destination="pond" aria-pressed="false" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 10.5c2.2-3.4 7.2-4.2 10.6-1.2L18 7v7l-3.4-2.3C11.2 14.7 6.2 13.9 4 10.5Z" />
+            <path d="M8 10h.01" />
+            <path d="M3 18.5c1.5 1.2 3 1.2 4.5 0s3-1.2 4.5 0 3 1.2 4.5 0 3-1.2 4.5 0" /></svg
+          ><span data-i18n="dock.pond">บ่อปลา</span>
+        </button>
+        <button data-destination="energy" aria-pressed="false" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 6.5a4 4 0 0 1 8 0" />
+            <path d="M12 1.5v.5M5 4l.5.4M19 4l-.5.4" />
+            <path d="M5.5 10h13l2 7h-17Z" />
+            <path d="M4.25 13.5h15.5M12 10v7M12 17v4M8.5 21h7" /></svg
+          ><span data-i18n="dock.energy">พลังงาน</span>
+        </button>
+        <button data-destination="parking" aria-pressed="false" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3.5" y="3.5" width="17" height="17" rx="4" />
+            <path d="M9.25 17V7h3.25a3.25 3.25 0 0 1 0 6.5H9.25" /></svg
+          ><span>ที่จอดรถ</span>
+        </button>
+      </nav>
+      <section class="day-timeline" aria-label="สำรวจหนึ่งวันในอาคารด้วยข้อมูลจำลอง" data-i18n-label="timeline">
+        <div class="timeline-heading">
+          <div>
+            <strong id="replay-time">13:30</strong
+            ><span id="replay-mode" data-i18n-init="day.mode">เวลาจำลอง · เดินตลอด</span>
+          </div>
+          <div class="timeline-actions">
+            <button id="story-play" class="primary-button" disabled></button
+            ><button id="day-pause" aria-pressed="false" disabled data-i18n-init="day.pause">หยุดชั่วคราว</button
+            ><button id="day-speed" disabled data-i18n-title="day.speed" title="ความยาวหนึ่งวันจำลอง">20 นาที/วัน</button>
+          </div>
+        </div>
+        <label class="timeline-track"
+          ><span class="sr-only" data-i18n="day.time">เวลาในเรื่องราวจำลอง</span
+          ><input id="day-time" type="range" min="0" max="1439" step="1" value="540" disabled /><span
+            class="timeline-labels"
+            aria-hidden="true"
+            ><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></span
+          ></label
+        >
+        <div id="day-events" class="day-events" aria-label="ช่วงเวลาที่น่าสนใจ" data-i18n-label="day.events"></div>
+      </section>
+      <section
+        id="parking-bar"
+        class="parking-bar"
+        aria-label="เรื่องเล่าที่จอดรถ"
+        data-i18n-label="parking.storyBar"
+        hidden
+      ></section>
+    </div>
+    <aside class="context-panel" aria-label="ข้อมูลประกอบจุดที่เลือก" data-i18n-label="panel">
+      <div class="panel-heading">
+        <h2 id="panel-title" data-i18n-init="panel.title">ภาพรวมอาคาร</h2>
+        <span class="status-pill" id="panel-status" data-i18n-init="panel.status">พร้อมพาชม</span>
+      </div>
+      <section class="building-incidents" aria-labelledby="incidents-heading">
+        <div class="incidents-heading">
+          <h3 id="incidents-heading" data-i18n="incidents">จุดที่ควรดู</h3>
+          <span id="incident-count">0</span>
+        </div>
+        <div id="incident-list"><p class="loading-copy" data-i18n-init="incidents.loading">กำลังเตรียมเหตุการณ์…</p></div>
+      </section>
+      <div id="dashboard-content"><p class="loading-copy" data-i18n-init="panel.loading">กำลังเตรียมข้อมูลจำลอง…</p></div>
+      <div id="parking-panel" class="pk-console" hidden></div>
+    </aside>
+  </div>
+  <div class="tour-footer">
+    <span class="simulation-disclosure" data-i18n="disclosure">ข้อมูลและเหตุการณ์เพื่อสาธิต · ไม่เชื่อมต่ออุปกรณ์จริง</span>
+  </div>
+  <div hidden id="legacy-controls">
+    <div class="toolbar">
+      <nav class="floors">
+        <button data-floor="all"></button><button data-floor="1"></button><button data-floor="2"></button
+        ><button data-floor="3"></button><button data-floor="4"></button><button data-floor="5"></button>
+      </nav>
+      <button id="exterior"></button><button id="explode"></button><button id="cutaway"></button
+      ><button id="reset"></button>
+    </div>
+    <div class="camera-presets">
+      <button id="camera-front"></button><button id="camera-side"></button><button id="lift"></button
+      ><button id="courtyard"></button><button id="office"></button><button id="arrival"></button
+      ><button id="reception"></button><button id="services"></button><button id="parking"></button
+      ><button id="stairs"></button>
+    </div>
+    <span id="view-label"></span>
+  </div>
 </main>

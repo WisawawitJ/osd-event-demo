@@ -4,10 +4,29 @@ import {esc, icon, patch, fakeQr, saveFile, visitInvite} from './dom.js';
 import {PROVINCES} from './sim.js';
 import {later, cancelLater, sleep} from './clock.js';
 
-const blankForm = () => ({name: '', phone: '', email: '', company: '', contact: '', plate: '', province: '', arrival: '2026-11-24', departure: '2026-11-24', notes: '', consent: false, faceConsent: false, face: false, photo: 'idle'});
-const dateValue = s => bkk(...s.split('-').map(Number));
+const blankForm = () => ({
+  name: '',
+  phone: '',
+  email: '',
+  company: '',
+  contact: '',
+  plate: '',
+  province: '',
+  arrival: '2026-11-24',
+  departure: '2026-11-24',
+  notes: '',
+  consent: false,
+  faceConsent: false,
+  face: false,
+  photo: 'idle',
+});
+const dateValue = (s) => bkk(...s.split('-').map(Number));
 // The form offers today and the next 30 days, shown in the chosen language.
-const DATE_OPTIONS = Array.from({length: 31}, (_, i) => { const ms = bkk(2026, 11, 24 + i); const d = new Date(ms + 7 * 3600e3); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`; });
+const DATE_OPTIONS = Array.from({length: 31}, (_, i) => {
+  const ms = bkk(2026, 11, 24 + i);
+  const d = new Date(ms + 7 * 3600e3);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+});
 
 // An illustrated car photo for the plate-reading step (drawn, not captured).
 function carPhoto(plate, province, reading) {
@@ -16,19 +35,34 @@ function carPhoto(plate, province, reading) {
 const faceArt = `<svg viewBox="0 0 80 80" class="ph-face" role="img" aria-label="face photo"><rect width="80" height="80" rx="12" fill="#e4ebf3"/><circle cx="40" cy="32" r="15" fill="#c99f80"/><path d="M25 28q2-16 15-16t15 16q-6-7-15-7t-15 7Z" fill="#2b2a2e"/><path d="M14 80q2-24 26-24t26 24Z" fill="#3a6fb0"/><rect x="22" y="14" width="36" height="40" rx="8" fill="none" stroke="#38d36b" stroke-width="2" stroke-dasharray="5 4"/></svg>`;
 
 export function createPhone({root, sim, actions}) {
-  const ui = {open: false, screen: 'form', form: blankForm(), error: '', requestId: null, banner: null, cue: null, typing: null};
+  const ui = {
+    open: false,
+    screen: 'form',
+    form: blankForm(),
+    error: '',
+    requestId: null,
+    banner: null,
+    cue: null,
+    typing: null,
+  };
   let frame = 0;
   // No `root` (the headless world in tests): the phone keeps its form and sends its request, and draws nothing.
-  const schedule = () => { if (root && !frame) frame = requestAnimationFrame(() => { frame = 0; render(); }); };
-  const req = () => ui.requestId && sim.state.requests.find(q => q.id === ui.requestId);
-  const cue = name => (ui.cue === name ? ' data-cue="true"' : '');
+  const schedule = () => {
+    if (root && !frame)
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        render();
+      });
+  };
+  const req = () => ui.requestId && sim.state.requests.find((q) => q.id === ui.requestId);
+  const cue = (name) => (ui.cue === name ? ' data-cue="true"' : '');
 
   function field(name, label, {type = 'text', placeholder = '', required = true, help = ''} = {}) {
     const v = ui.form[name];
     return `<label class="ph-field${ui.typing === name ? ' typing' : ''}"><span>${label}${required ? ' *' : ''}</span><input name="${name}" data-focus="ph-${name}" type="${type}" value="${esc(v)}" placeholder="${esc(placeholder)}"${type === 'email' ? ' inputmode="email"' : ''}>${help ? `<small>${help}</small>` : ''}</label>`;
   }
   function dateField(name, label) {
-    return `<label class="ph-field"><span>${label} *</span><select name="${name}" data-focus="ph-${name}">${DATE_OPTIONS.map(v => `<option value="${v}"${ui.form[name] === v ? ' selected' : ''}>${fmtDate(dateValue(v))}</option>`).join('')}</select></label>`;
+    return `<label class="ph-field"><span>${label} *</span><select name="${name}" data-focus="ph-${name}">${DATE_OPTIONS.map((v) => `<option value="${v}"${ui.form[name] === v ? ' selected' : ''}>${fmtDate(dateValue(v))}</option>`).join('')}</select></label>`;
   }
   function formScreen() {
     const f = ui.form;
@@ -64,7 +98,7 @@ export function createPhone({root, sim, actions}) {
   }
   function mailScreen() {
     const r = req();
-    const mail = r && sim.state.emails.find(m => m.requestId === r.id);
+    const mail = r && sim.state.emails.find((m) => m.requestId === r.id);
     if (!r || !mail) return sentScreen();
     const subject = t(`ph.mail.${mail.kind}`);
     const head = `<div class="ph-mail-head"><span class="ph-avatar">P</span><div><strong>OSD Parking</strong><small>no-reply@osd.example · ${fmtTime(mail.at)}</small></div></div><h4>${subject}</h4><p class="ph-to">${esc(r.visitor.email)}, cc ${esc(r.contact)}</p>`;
@@ -79,47 +113,88 @@ export function createPhone({root, sim, actions}) {
     root.hidden = !ui.open;
     if (!ui.open) return;
     const body = ui.screen === 'form' ? formScreen() : ui.screen === 'sent' ? sentScreen() : mailScreen();
-    const signal = '<svg class="ph-ic" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx=".7"/><rect x="5" y="5.5" width="3" height="6.5" rx=".7"/><rect x="10" y="3" width="3" height="9" rx=".7"/><rect x="15" y="0" width="3" height="12" rx=".7"/></svg>';
-    const battery = '<svg class="ph-ic bat" viewBox="0 0 26 12" aria-hidden="true"><rect x=".6" y=".6" width="22" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="15" height="7.2" rx="1.6"/><rect x="23.8" y="4" width="1.8" height="4" rx=".8"/></svg>';
-    const bar = ui.screen === 'mail'
-      ? `<div class="ph-appbar mail"><button type="button" data-ph="site" aria-label="${t('back')}">${icon('next', 'flip')}</button><span>${icon('inbox')}${t('ph.mailApp')}</span></div>`
-      : `<div class="ph-url">${icon('globe')}<span>${t('ph.site')}</span></div>`;
-    patch(root, `<div class="ph-frame"><div class="ph-notch"></div><div class="ph-status"><span>${fmtTime(sim.now())}</span><span class="ph-sys">${signal}<b>5G</b>${battery}</span></div>
+    const signal =
+      '<svg class="ph-ic" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx=".7"/><rect x="5" y="5.5" width="3" height="6.5" rx=".7"/><rect x="10" y="3" width="3" height="9" rx=".7"/><rect x="15" y="0" width="3" height="12" rx=".7"/></svg>';
+    const battery =
+      '<svg class="ph-ic bat" viewBox="0 0 26 12" aria-hidden="true"><rect x=".6" y=".6" width="22" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="15" height="7.2" rx="1.6"/><rect x="23.8" y="4" width="1.8" height="4" rx=".8"/></svg>';
+    const bar =
+      ui.screen === 'mail'
+        ? `<div class="ph-appbar mail"><button type="button" data-ph="site" aria-label="${t('back')}">${icon('next', 'flip')}</button><span>${icon('inbox')}${t('ph.mailApp')}</span></div>`
+        : `<div class="ph-url">${icon('globe')}<span>${t('ph.site')}</span></div>`;
+    patch(
+      root,
+      `<div class="ph-frame"><div class="ph-notch"></div><div class="ph-status"><span>${fmtTime(sim.now())}</span><span class="ph-sys">${signal}<b>5G</b>${battery}</span></div>
       ${bar}
       <div class="ph-screen" data-screen="${ui.screen}">${body}</div>
       ${ui.banner ? `<button type="button" class="ph-banner" data-ph="inbox"${cue('banner')}><span class="ph-avatar">P</span><span><b>OSD Parking</b><small>${esc(t(ui.banner))}</small></span></button>` : ''}
-      <div class="ph-home"></div></div><span class="ph-caption">${icon('phone')}${t('ph.label')}</span>`);
+      <div class="ph-home"></div></div><span class="ph-caption">${icon('phone')}${t('ph.label')}</span>`,
+    );
   }
 
   function submit() {
     // The story's colour is for its own request only, sent or not: free-play visitors' cars get the sim's random one.
-    const f = ui.form, color = ui.color;
+    const f = ui.form,
+      color = ui.color;
     ui.color = undefined;
-    const missing = ['name', 'email', 'contact', 'phone', 'plate', 'province'].some(k => !String(f[k]).trim()) || !f.consent;
-    if (missing) { ui.error = 'ph.required'; render(); return null; }
+    const missing =
+      ['name', 'email', 'contact', 'phone', 'plate', 'province'].some((k) => !String(f[k]).trim()) || !f.consent;
+    if (missing) {
+      ui.error = 'ph.required';
+      render();
+      return null;
+    }
     ui.error = '';
-    const arrival = dateValue(f.arrival), departure = Math.max(arrival, dateValue(f.departure));
-    const r = sim.submitRequest({visitor: {name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), company: f.company.trim() || '—'}, contact: f.contact.trim(), plate: f.plate.trim(), province: f.province, arrival, departure, notes: f.notes, face: f.faceConsent && f.face, color});
-    ui.requestId = r.id; ui.screen = 'sent';
+    const arrival = dateValue(f.arrival),
+      departure = Math.max(arrival, dateValue(f.departure));
+    const r = sim.submitRequest({
+      visitor: {name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), company: f.company.trim() || '—'},
+      contact: f.contact.trim(),
+      plate: f.plate.trim(),
+      province: f.province,
+      arrival,
+      departure,
+      notes: f.notes,
+      face: f.faceConsent && f.face,
+      color,
+    });
+    ui.requestId = r.id;
+    ui.screen = 'sent';
     render();
     return r;
   }
 
-  root?.addEventListener('click', e => {
+  root?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-ph]');
     if (!b) return;
     const what = b.dataset.ph;
     // A tap on the story's cued photo button is the presenter going along: the story reads its own plate next.
     if (what === 'photo' && ui.cue !== 'photo') readPhoto();
-    if (what === 'face') { ui.form.face = true; render(); }
+    if (what === 'face') {
+      ui.form.face = true;
+      render();
+    }
     // As with the photo: a tap on the story's cued Send is the presenter going along (it sent the request twice).
     if (what === 'submit' && ui.cue !== 'submit') submit();
-    if (what === 'inbox') { ui.screen = 'mail'; ui.banner = null; render(); }
-    if (what === 'site') { ui.screen = req() ? 'sent' : 'form'; render(); }
+    if (what === 'inbox') {
+      ui.screen = 'mail';
+      ui.banner = null;
+      render();
+    }
+    if (what === 'site') {
+      ui.screen = req() ? 'sent' : 'form';
+      render();
+    }
     if (what === 'calendar' && req()) saveFile('parking-visit.ics', visitInvite(req()), 'text/calendar;charset=utf-8');
-    if (what === 'new') { settleRead?.(); ui.form = blankForm(); ui.screen = 'form'; ui.requestId = null; ui.banner = null; render(); }
+    if (what === 'new') {
+      settleRead?.();
+      ui.form = blankForm();
+      ui.screen = 'form';
+      ui.requestId = null;
+      ui.banner = null;
+      render();
+    }
   });
-  root?.addEventListener('input', e => {
+  root?.addEventListener('input', (e) => {
     const n = e.target.name;
     if (!n) return;
     ui.form[n] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
@@ -128,20 +203,31 @@ export function createPhone({root, sim, actions}) {
 
   // The free-play photo picks a made-up plate; the story passes its own. One read at a time: a press during a read
   // waits for it, and the story's plate wins over a free-play read already running (the presenter tapping the cue).
-  let photoTimer = 0, photoRead = null, settleRead = null, sample = null;
+  let photoTimer = 0,
+    photoRead = null,
+    settleRead = null,
+    sample = null;
   function readPhoto(plate = null, province = null) {
     if (photoRead && !plate) return photoRead;
     // The story's own plate always lands in the form; a free-play read only fills fields still empty.
     sample = plate ? {plate, province, own: true} : {plate: '6กม 3195', province: 'นนทบุรี'};
-    ui.photoPlate = sample.plate; ui.photoProvince = sample.province;
-    ui.form.photo = 'reading'; render();
+    ui.photoPlate = sample.plate;
+    ui.photoProvince = sample.province;
+    ui.form.photo = 'reading';
+    render();
     if (photoRead) return photoRead;
-    photoRead = new Promise(resolve => {
-      settleRead = () => { cancelLater(photoTimer); photoRead = settleRead = null; resolve(); };
+    photoRead = new Promise((resolve) => {
+      settleRead = () => {
+        cancelLater(photoTimer);
+        photoRead = settleRead = null;
+        resolve();
+      };
       photoTimer = later(() => {
         if (sample.own || !ui.form.plate) ui.form.plate = sample.plate;
         if (sample.own || !ui.form.province) ui.form.province = sample.province;
-        ui.form.photo = 'done'; render(); settleRead();
+        ui.form.photo = 'done';
+        render();
+        settleRead();
       }, 1500);
     });
     return photoRead;
@@ -153,44 +239,100 @@ export function createPhone({root, sim, actions}) {
     // Cancelled (the story stopped or restarted): it leaves the field alone (it wrote the whole text into the new run's
     // empty form), and its highlight goes unless a newer typing has taken over (it stayed on in free play). Checked
     // after the last character's pause too: a cancel there wrote the field all the same.
-    const cancelled = () => { if (!isCancelled()) return false; if (mine === typingRun && ui.typing === name) { ui.typing = null; render(); } return true; };
-    ui.typing = name; ui.form[name] = '';
+    const cancelled = () => {
+      if (!isCancelled()) return false;
+      if (mine === typingRun && ui.typing === name) {
+        ui.typing = null;
+        render();
+      }
+      return true;
+    };
+    ui.typing = name;
+    ui.form[name] = '';
     for (const ch of text) {
       if (cancelled()) return;
-      ui.form[name] += ch; render();
+      ui.form[name] += ch;
+      render();
       await sleep(1000 / cps);
       while (isPaused() && !isCancelled()) await sleep(100);
     }
     if (cancelled()) return;
-    ui.form[name] = text; ui.typing = null; render();
+    ui.form[name] = text;
+    ui.typing = null;
+    render();
   }
 
   sim.subscribe((kind, payload) => {
     // Text keys, not text (they stayed in the old language after a switch).
-    if (kind === 'email' && payload.requestId === ui.requestId) { ui.banner = `ph.mail.${payload.kind}`; render(); }
-    else if (ui.open && (kind === 'request' || kind === 'clock')) schedule();
+    if (kind === 'email' && payload.requestId === ui.requestId) {
+      ui.banner = `ph.mail.${payload.kind}`;
+      render();
+    } else if (ui.open && (kind === 'request' || kind === 'clock')) schedule();
   });
 
   return {
     render: schedule,
-    get isOpen() { return ui.open; },
+    get isOpen() {
+      return ui.open;
+    },
     // What the form holds (tests read it).
-    get form() { return {...ui.form}; },
-    setOpen(v) { ui.open = v; globalThis.document?.body?.classList.toggle('phone-open', v); render(); actions.openChanged?.(v); },
+    get form() {
+      return {...ui.form};
+    },
+    setOpen(v) {
+      ui.open = v;
+      globalThis.document?.body?.classList.toggle('phone-open', v);
+      render();
+      actions.openChanged?.(v);
+    },
     // A photo still being read belongs to the old form (as with New request): it ends without filling in the new one.
-    reset() { settleRead?.(); Object.assign(ui, {screen: 'form', form: blankForm(), error: '', requestId: null, banner: null, cue: null, typing: null, photoPlate: null, photoProvince: null}); render(); },
-    setForm(values) { Object.assign(ui.form, values); render(); },
-    setScreen(s) { ui.screen = s; if (s === 'mail') ui.banner = null; render(); },
-    setCue(name) { ui.cue = name; render(); },
-    setColor(c) { ui.color = c; },
+    reset() {
+      settleRead?.();
+      Object.assign(ui, {
+        screen: 'form',
+        form: blankForm(),
+        error: '',
+        requestId: null,
+        banner: null,
+        cue: null,
+        typing: null,
+        photoPlate: null,
+        photoProvince: null,
+      });
+      render();
+    },
+    setForm(values) {
+      Object.assign(ui.form, values);
+      render();
+    },
+    setScreen(s) {
+      ui.screen = s;
+      if (s === 'mail') ui.banner = null;
+      render();
+    },
+    setCue(name) {
+      ui.cue = name;
+      render();
+    },
+    setColor(c) {
+      ui.color = c;
+    },
     // Back on request `id`, with its email's banner (the story's own, after a tap on New request let go of it).
     follow(id) {
       if (!id || ui.requestId === id) return;
-      const mail = sim.state.emails.find(m => m.requestId === id);
-      Object.assign(ui, {requestId: id, screen: 'sent', banner: mail ? `ph.mail.${mail.kind}` : null}); render();
+      const mail = sim.state.emails.find((m) => m.requestId === id);
+      Object.assign(ui, {requestId: id, screen: 'sent', banner: mail ? `ph.mail.${mail.kind}` : null});
+      render();
     },
-    typeInto, readPhoto, submit,
+    typeInto,
+    readPhoto,
+    submit,
     // The story stopped: a read it started ends without touching the form the visitor now owns.
-    cancelRead() { if (!settleRead) return; settleRead(); ui.form.photo = 'idle'; render(); },
+    cancelRead() {
+      if (!settleRead) return;
+      settleRead();
+      ui.form.photo = 'idle';
+      render();
+    },
   };
 }

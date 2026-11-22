@@ -7,7 +7,10 @@ import {createDirector, IDLE_MS} from 'osd/viewer/director.js';
 import {parking} from './world.mjs';
 
 const live = [];
-afterEach(() => { for (const x of live.splice(0)) x.dispose(); world.setPaused(false); });
+afterEach(() => {
+  for (const x of live.splice(0)) x.dispose();
+  world.setPaused(false);
+});
 
 // A showcase without a page: flights take `flightMs` of simulation time. `timer`: the idle timer by hand instead of
 // the engine's clock (the page runs it on real time, which a paused day does not stop).
@@ -17,12 +20,40 @@ function showcase({time, flightMs = 3000, timer = null, hidden = () => false} = 
   let at = 'overview';
   async function select(id) {
     await sleep(flightMs);
-    at = id; log.stops.push(id); return true;
+    at = id;
+    log.stops.push(id);
+    return true;
   }
-  const d = createDirector({select, parking: w, current: () => at, hidden, ui: {stopScenario: () => log.stopped++},
-    ...timer && {after: fn => { timer.fn = fn; return fn; }, cancel: () => { timer.fn = null; }}});
-  live.push({dispose() { d.dispose(); w.dispose(); }});
-  return {w, d, log, go: id => { at = id; }};
+  const d = createDirector({
+    select,
+    parking: w,
+    current: () => at,
+    hidden,
+    ui: {stopScenario: () => log.stopped++},
+    ...(timer && {
+      after: (fn) => {
+        timer.fn = fn;
+        return fn;
+      },
+      cancel: () => {
+        timer.fn = null;
+      },
+    }),
+  });
+  live.push({
+    dispose() {
+      d.dispose();
+      w.dispose();
+    },
+  });
+  return {
+    w,
+    d,
+    log,
+    go: (id) => {
+      at = id;
+    },
+  };
 }
 
 test('left alone for a minute at another stop, it flies back to the overview; each touch starts the minute again', async () => {

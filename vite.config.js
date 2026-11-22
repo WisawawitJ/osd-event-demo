@@ -3,7 +3,7 @@
 import {fileURLToPath} from 'node:url';
 import {defineConfig} from 'vite-plus';
 
-const here = path => fileURLToPath(new URL(path, import.meta.url));
+const here = (path) => fileURLToPath(new URL(path, import.meta.url));
 // Not ours, or not code: the vendored three.js, the building model, screenshots, reference material.
 const IGNORE = ['vendor/**', 'model/**', 'shots/**', 'reference/**', 'dev/**', 'node_modules/**'];
 

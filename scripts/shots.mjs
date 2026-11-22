@@ -35,40 +35,69 @@ const git = (...args) => execFileSync('git', ['-C', root, ...args], {encoding: '
 const args = process.argv.slice(2);
 const baseAt = args.indexOf('--base');
 const baseRef = baseAt >= 0 ? args[baseAt + 1] : null;
-if (baseAt >= 0 && !baseRef) { console.error('--base needs a commit, branch or tag'); process.exit(2); }
-const words = args.filter((a, i) => baseAt < 0 || (i !== baseAt && i !== baseAt + 1)).map(w => w.toLowerCase());
+if (baseAt >= 0 && !baseRef) {
+  console.error('--base needs a commit, branch or tag');
+  process.exit(2);
+}
+const words = args.filter((a, i) => baseAt < 0 || (i !== baseAt && i !== baseAt + 1)).map((w) => w.toLowerCase());
 
 // The plan: every state the words pick, as page loads.
 const sessions = buildSessions();
 const shotName = (s, st) => `${sizeName(s.size)}-${s.lang}-${s.tod}-${st.state}`;
 // A word is a language (th, en), a time of day (day, night), a size or part of one, or else part of the state's name
 // (`en` alone matched "energy" and "sent").
-const matches = (s, st, w) => LANGS.includes(w) ? s.lang === w : w === 'day' || w === 'night' ? s.tod === w : /^\d+(x\d*)?$/.test(w) ? sizeName(s.size).includes(w) : st.state.includes(w);
-const wanted = new Set(sessions.flatMap(s => s.steps.filter(st => st.state && words.every(w => matches(s, st, w))).map(st => shotName(s, st))));
-if (!wanted.size) { console.error(`no state matches ${words.join(' ')}`); process.exit(2); }
+const matches = (s, st, w) =>
+  LANGS.includes(w)
+    ? s.lang === w
+    : w === 'day' || w === 'night'
+      ? s.tod === w
+      : /^\d+(x\d*)?$/.test(w)
+        ? sizeName(s.size).includes(w)
+        : st.state.includes(w);
+const wanted = new Set(
+  sessions.flatMap((s) =>
+    s.steps.filter((st) => st.state && words.every((w) => matches(s, st, w))).map((st) => shotName(s, st)),
+  ),
+);
+if (!wanted.size) {
+  console.error(`no state matches ${words.join(' ')}`);
+  process.exit(2);
+}
 const stateOrder = new Map();
-for (const s of sessions) for (const st of s.steps) if (st.state && !stateOrder.has(st.state)) stateOrder.set(st.state, stateOrder.size);
+for (const s of sessions)
+  for (const st of s.steps) if (st.state && !stateOrder.has(st.state)) stateOrder.set(st.state, stateOrder.size);
 
 // --- Taking a version's shots ---------------------------------------------------------------------------------------
 // Photographs the wanted states not in `have` into `out` from the demo served out of `site`. Returns what it took.
 async function capture(site, out, have) {
-  const todo = new Set([...wanted].filter(n => !have.has(n)));
-  const plan = sessions.map(s => ({s, take: s.steps.map(st => Boolean(st.state) && todo.has(shotName(s, st)))})).map(x => ({...x, last: x.take.lastIndexOf(true)})).filter(x => x.last >= 0);
+  const todo = new Set([...wanted].filter((n) => !have.has(n)));
+  const plan = sessions
+    .map((s) => ({s, take: s.steps.map((st) => Boolean(st.state) && todo.has(shotName(s, st)))}))
+    .map((x) => ({...x, last: x.take.lastIndexOf(true)}))
+    .filter((x) => x.last >= 0);
   const total = plan.reduce((n, x) => n + x.take.filter(Boolean).length, 0);
-  const shots = [], failures = [], time = {load: 0, steps: 0, capture: 0};
+  const shots = [],
+    failures = [],
+    time = {load: 0, steps: 0, capture: 0};
   if (!total) return {shots, failures};
   console.log(`${total} states in ${plan.length} page loads → ${relative(root, out)}`);
   mkdirSync(out, {recursive: true});
   let opened = null;
   const page = async () => {
-    if (!opened || opened.page.gone) { await opened?.close(); opened = await open({site}); console.log(`WebGL: ${opened.page.renderer}`); }
+    if (!opened || opened.page.gone) {
+      await opened?.close();
+      opened = await open({site});
+      console.log(`WebGL: ${opened.page.renderer}`);
+    }
     return opened.page;
   };
   for (const {s, take, last} of plan) {
     const p = await page();
     const [width, height] = s.size;
     await p.cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: width < 600});
-    await p.cdp('Storage.clearDataForOrigin', {origin: new URL(p.url).origin, storageTypes: 'local_storage'}).catch(() => {});
+    await p
+      .cdp('Storage.clearDataForOrigin', {origin: new URL(p.url).origin, storageTypes: 'local_storage'})
+      .catch(() => {});
     // The language is chosen before the page's own scripts run (as a visitor's earlier choice would be). CSS
     // animations and transitions end at once: on real time, a run caught them part way, a different part each time.
     const source = `try{localStorage.setItem('osd-demo-language',${JSON.stringify(s.lang)})}catch{}
@@ -88,41 +117,73 @@ async function capture(site, out, have) {
         time.steps += Date.now() - t;
         if (!take[i]) continue;
         t = Date.now();
-        const name = shotName(s, st), r = await p.cdp('Page.captureScreenshot', {format: 'png', optimizeForSpeed: true});
+        const name = shotName(s, st),
+          r = await p.cdp('Page.captureScreenshot', {format: 'png', optimizeForSpeed: true});
         const at = await p.eval('window.__engine?.now()').catch(() => null); // simulation time (ms), stepped pages
-        if (process.env.SHOTS_DIGEST) writeFileSync(join(out, `${name}.scene.json`), await p.eval(`JSON.stringify((()=>{const out=[];const seen=o=>{for(let p=o;p;p=p.parent)if(!p.visible)return false;return true};__scene.traverse(o=>{if(!o.isMesh&&!o.isLight)return;const m=[].concat(o.material||[]);const w=o.getWorldPosition(new o.position.constructor());out.push([o.name||o.type,seen(o),w.x.toFixed(2)+','+w.y.toFixed(2)+','+w.z.toFixed(2),m.map(x=>x&&(x.type+':'+(x.clippingPlanes||[]).length+':'+(x.clippingPlanes||[]).map(p=>p.constant.toFixed(2)).join('/')+':o'+(x.opacity??1).toFixed(3)+':e'+(x.emissiveIntensity??0).toFixed(3))).join(','),o.isLight?(o.intensity.toFixed(3)+':'+o.castShadow):''].join('|'))});return out.sort()})())`));
+        if (process.env.SHOTS_DIGEST)
+          writeFileSync(
+            join(out, `${name}.scene.json`),
+            await p.eval(
+              `JSON.stringify((()=>{const out=[];const seen=o=>{for(let p=o;p;p=p.parent)if(!p.visible)return false;return true};__scene.traverse(o=>{if(!o.isMesh&&!o.isLight)return;const m=[].concat(o.material||[]);const w=o.getWorldPosition(new o.position.constructor());out.push([o.name||o.type,seen(o),w.x.toFixed(2)+','+w.y.toFixed(2)+','+w.z.toFixed(2),m.map(x=>x&&(x.type+':'+(x.clippingPlanes||[]).length+':'+(x.clippingPlanes||[]).map(p=>p.constant.toFixed(2)).join('/')+':o'+(x.opacity??1).toFixed(3)+':e'+(x.emissiveIntensity??0).toFixed(3))).join(','),o.isLight?(o.intensity.toFixed(3)+':'+o.castShadow):''].join('|'))});return out.sort()})())`,
+            ),
+          );
         if (!r.result?.data) throw new Error(`no screenshot (${r.error?.message || 'empty'})`);
         writeFileSync(join(out, `${name}.png`), Buffer.from(r.result.data, 'base64'));
-        shots.push({name, file: `${name}.png`, at, group: st.group, state: st.state, label: st.label, size: sizeName(s.size), lang: s.lang, tod: s.tod});
+        shots.push({
+          name,
+          file: `${name}.png`,
+          at,
+          group: st.group,
+          state: st.state,
+          label: st.label,
+          size: sizeName(s.size),
+          lang: s.lang,
+          tod: s.tod,
+        });
         time.capture += Date.now() - t;
         console.log(`✓ ${name}`);
       }
     } catch (error) {
       // The rest of the page's states depend on this one: each is listed as not captured.
       const message = error.message.split('\n')[0];
-      for (; i <= last; i++) if (take[i]) { const name = shotName(s, s.steps[i]); failures.push({name, error: message}); console.log(`✗ ${name}: ${message}`); }
+      for (; i <= last; i++)
+        if (take[i]) {
+          const name = shotName(s, s.steps[i]);
+          failures.push({name, error: message});
+          console.log(`✗ ${name}: ${message}`);
+        }
     } finally {
       if (script) await p.cdp('Page.removeScriptToEvaluateOnNewDocument', {identifier: script}).catch(() => {});
       await p.cdp('Page.navigate', {url: 'about:blank'}).catch(() => {});
     }
-    const errors = p.logs.filter(l => !/GL_INVALID_OPERATION|PCFSoftShadowMap|UniformsUtils|KHR_parallel_shader_compile/.test(l));
+    const errors = p.logs.filter(
+      (l) => !/GL_INVALID_OPERATION|PCFSoftShadowMap|UniformsUtils|KHR_parallel_shader_compile/.test(l),
+    );
     if (errors.length) console.log(`  console (${s.path}): ${errors.slice(0, 3).join(' | ').slice(0, 300)}`);
   }
   await opened?.close();
-  console.log(`time: page loads ${(time.load / 1000).toFixed(0)} s, steps ${(time.steps / 1000).toFixed(0)} s, screenshots ${(time.capture / 1000).toFixed(0)} s`);
+  console.log(
+    `time: page loads ${(time.load / 1000).toFixed(0)} s, steps ${(time.steps / 1000).toFixed(0)} s, screenshots ${(time.capture / 1000).toFixed(0)} s`,
+  );
   return {shots, failures};
 }
 
 // A version's folder: its manifest (what it holds) and contact sheet. A commit's shots are reused; `+wip` starts over.
 async function version(label, {commit, site, wip}) {
-  const out = join(SHOTS, label), manifestFile = join(out, 'manifest.json');
+  const out = join(SHOTS, label),
+    manifestFile = join(out, 'manifest.json');
   if (wip) rmSync(out, {recursive: true, force: true});
-  const manifest = existsSync(manifestFile) ? JSON.parse(readFileSync(manifestFile, 'utf8')) : {label, commit, shots: [], failures: []};
-  const have = new Set(manifest.shots.map(s => s.name));
+  const manifest = existsSync(manifestFile)
+    ? JSON.parse(readFileSync(manifestFile, 'utf8'))
+    : {label, commit, shots: [], failures: []};
+  const have = new Set(manifest.shots.map((s) => s.name));
   const {shots, failures} = await capture(site, out, have);
-  const taken = new Set(shots.map(s => s.name));
-  manifest.shots = [...manifest.shots.filter(s => !taken.has(s.name)), ...shots];
-  manifest.failures = [...manifest.failures.filter(f => !taken.has(f.name) && !failures.some(g => g.name === f.name)), ...failures];
+  const taken = new Set(shots.map((s) => s.name));
+  manifest.shots = [...manifest.shots.filter((s) => !taken.has(s.name)), ...shots];
+  manifest.failures = [
+    ...manifest.failures.filter((f) => !taken.has(f.name) && !failures.some((g) => g.name === f.name)),
+    ...failures,
+  ];
   manifest.date = new Date().toISOString();
   mkdirSync(out, {recursive: true});
   writeFileSync(manifestFile, JSON.stringify(manifest, null, 1));
@@ -131,10 +192,14 @@ async function version(label, {commit, site, wip}) {
 }
 
 // --- Pages --------------------------------------------------------------------------------------------------------
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 const LANG_NAME = {th: 'ไทย (TH)', en: 'English (EN)'};
 const sizeOrder = SIZES.map(sizeName);
-const byState = (a, b) => (stateOrder.get(a.state) ?? 1e9) - (stateOrder.get(b.state) ?? 1e9) || sizeOrder.indexOf(a.size) - sizeOrder.indexOf(b.size) || LANGS.indexOf(a.lang) - LANGS.indexOf(b.lang) || a.tod.localeCompare(b.tod);
+const byState = (a, b) =>
+  (stateOrder.get(a.state) ?? 1e9) - (stateOrder.get(b.state) ?? 1e9) ||
+  sizeOrder.indexOf(a.size) - sizeOrder.indexOf(b.size) ||
+  LANGS.indexOf(a.lang) - LANGS.indexOf(b.lang) ||
+  a.tod.localeCompare(b.tod);
 const STYLE = `:root{--bg:#f4f5f2;--card:#fff;--ink:#1d2a30;--mute:#61707a;--line:#d9dedb;--accent:#0f7b6c;--bad:#b3261e;--warn:#a15c00}
 @media (prefers-color-scheme:dark){:root{--bg:#12181c;--card:#1b2328;--ink:#e3e9ec;--mute:#93a2ab;--line:#2c373e;--accent:#4fc1ad;--bad:#f2b8b5;--warn:#f0b96b}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,"Noto Sans Thai",sans-serif}
@@ -154,30 +219,57 @@ figcaption{padding:8px 10px;display:flex;flex-direction:column;gap:2px}figcaptio
 dialog .bar{display:flex;gap:8px;align-items:center;padding:8px 10px;flex-wrap:wrap}dialog .bar button{padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
 dialog .bar button[aria-pressed=true]{background:var(--accent);color:#fff;border-color:var(--accent)}dialog .view{position:relative;line-height:0}dialog .view img{max-width:94vw;max-height:84vh;display:block}
 dialog .view .top{position:absolute;inset:0}dialog .view .top img{width:100%;height:100%}`;
-const filters = (items, extra = '') => `${['size', 'lang', 'tod'].map(key => {
-  const values = key === 'size' ? sizeOrder : key === 'lang' ? LANGS : ['day', 'night'];
-  const label = v => key === 'size' ? v.replace('x', '×') : key === 'lang' ? v.toUpperCase() : v;
-  return `<span class="chips" data-key="${key}">${values.filter(v => items.some(s => s[key] === v)).map(v => `<label><input type="checkbox" value="${esc(v)}" checked>${esc(label(v))}</label>`).join('')}</span>`;
-}).join('')}${extra}<input type="search" placeholder="Filter by name…" aria-label="Filter by name">`;
+const filters = (items, extra = '') =>
+  `${['size', 'lang', 'tod']
+    .map((key) => {
+      const values = key === 'size' ? sizeOrder : key === 'lang' ? LANGS : ['day', 'night'];
+      const label = (v) => (key === 'size' ? v.replace('x', '×') : key === 'lang' ? v.toUpperCase() : v);
+      return `<span class="chips" data-key="${key}">${values
+        .filter((v) => items.some((s) => s[key] === v))
+        .map((v) => `<label><input type="checkbox" value="${esc(v)}" checked>${esc(label(v))}</label>`)
+        .join('')}</span>`;
+    })
+    .join('')}${extra}<input type="search" placeholder="Filter by name…" aria-label="Filter by name">`;
 const FILTER_SCRIPT = `const apply=()=>{const on=k=>new Set([...document.querySelectorAll('.chips[data-key="'+k+'"] input:checked')].map(i=>i.value));const s=on('size'),l=on('lang'),t=on('tod'),q=document.querySelector('input[type=search]').value.toLowerCase().split(/\\s+/).filter(Boolean);const same=document.querySelector('#show-same');
 for(const f of document.querySelectorAll('figure'))f.classList.toggle('hide',!(s.has(f.dataset.size)&&l.has(f.dataset.lang)&&t.has(f.dataset.tod)&&q.every(w=>f.dataset.name.includes(w))&&(!same||same.checked||f.dataset.kind!=='same')));
 for(const sec of document.querySelectorAll('section'))sec.classList.toggle('hide',!sec.querySelector('figure:not(.hide)'));};
 document.addEventListener('input',apply);apply();`;
-const failed = list => list.length ? `<div class="failed"><h2>Not captured</h2><ul>${list.map(f => `<li>${esc(f.name)}: ${esc(f.error)}</li>`).join('')}</ul></div>` : '';
-const figureData = s => `data-size="${s.size}" data-lang="${s.lang}" data-tod="${s.tod}" data-name="${esc(s.name)}"`;
-const caption = s => `<b>${esc(s.label)}</b><span>${s.size.replace('x', '×')} · ${esc(LANG_NAME[s.lang])} · ${s.tod}</span>`;
-const page = (title, head, body, script = '') => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>${STYLE}</style></head><body>
+const failed = (list) =>
+  list.length
+    ? `<div class="failed"><h2>Not captured</h2><ul>${list.map((f) => `<li>${esc(f.name)}: ${esc(f.error)}</li>`).join('')}</ul></div>`
+    : '';
+const figureData = (s) => `data-size="${s.size}" data-lang="${s.lang}" data-tod="${s.tod}" data-name="${esc(s.name)}"`;
+const caption = (s) =>
+  `<b>${esc(s.label)}</b><span>${s.size.replace('x', '×')} · ${esc(LANG_NAME[s.lang])} · ${s.tod}</span>`;
+const page = (
+  title,
+  head,
+  body,
+  script = '',
+) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>${STYLE}</style></head><body>
 <header>${head}</header><main>${body}</main><script>${FILTER_SCRIPT}${script}</script></body></html>\n`;
 
 function contactSheet(m) {
   const shots = [...m.shots].sort(byState);
-  const sections = Object.entries(GROUPS).map(([g, title]) => {
-    const items = shots.filter(s => s.group === g);
-    return items.length ? `<section><h2>${esc(title)} <small>${items.length}</small></h2><div class="grid">${items.map(s => `
+  const sections = Object.entries(GROUPS)
+    .map(([g, title]) => {
+      const items = shots.filter((s) => s.group === g);
+      return items.length
+        ? `<section><h2>${esc(title)} <small>${items.length}</small></h2><div class="grid">${items
+            .map(
+              (s) => `
   <figure ${figureData(s)}><div class="pics"><a href="${esc(s.file)}" target="_blank"><img src="${esc(s.file)}" loading="lazy" alt="${esc(s.label)}"></a></div>
-    <figcaption>${caption(s)}<code>${esc(s.file)}</code></figcaption></figure>`).join('')}</div></section>` : '';
-  }).join('');
-  return page(`Screenshots ${m.label}`, `<h1>Screenshots · ${esc(m.label)}</h1><p>${shots.length} states${m.failures.length ? ` · ${m.failures.length} not captured` : ''} · ${esc(m.date ?? '')}</p>${filters(shots)}`, failed(m.failures) + sections);
+    <figcaption>${caption(s)}<code>${esc(s.file)}</code></figcaption></figure>`,
+            )
+            .join('')}</div></section>`
+        : '';
+    })
+    .join('');
+  return page(
+    `Screenshots ${m.label}`,
+    `<h1>Screenshots · ${esc(m.label)}</h1><p>${shots.length} states${m.failures.length ? ` · ${m.failures.length} not captured` : ''} · ${esc(m.date ?? '')}</p>${filters(shots)}`,
+    failed(m.failures) + sections,
+  );
 }
 
 // Before / after: the changed pixels worked out in the browser (a canvas), the most changed first.
@@ -204,10 +296,11 @@ const DIFF_PAGE = `async (before, after) => {
 }`;
 async function compare(before, after) {
   const out = join(SHOTS, 'compare', `${before.label}..${after.label}`);
-  rmSync(out, {recursive: true, force: true}); mkdirSync(out, {recursive: true});
+  rmSync(out, {recursive: true, force: true});
+  mkdirSync(out, {recursive: true});
   const rel = (m, s) => `../../${m.label}/${s.file}`;
-  const was = new Map(before.shots.filter(s => wanted.has(s.name)).map(s => [s.name, s]));
-  const now = new Map(after.shots.filter(s => wanted.has(s.name)).map(s => [s.name, s]));
+  const was = new Map(before.shots.filter((s) => wanted.has(s.name)).map((s) => [s.name, s]));
+  const now = new Map(after.shots.filter((s) => wanted.has(s.name)).map((s) => [s.name, s]));
   const items = [];
   console.log(`comparing ${was.size} before with ${now.size} after`);
   const opened = await open();
@@ -215,26 +308,59 @@ async function compare(before, after) {
     const p = opened.page;
     await p.goto('shots/');
     for (const name of new Set([...was.keys(), ...now.keys()])) {
-      const a = was.get(name), b = now.get(name), s = b ?? a;
-      const item = {...s, before: a && rel(before, a), after: b && rel(after, b), kind: !a ? 'new' : !b ? 'gone' : 'same', changed: 0};
+      const a = was.get(name),
+        b = now.get(name),
+        s = b ?? a;
+      const item = {
+        ...s,
+        before: a && rel(before, a),
+        after: b && rel(after, b),
+        kind: !a ? 'new' : !b ? 'gone' : 'same',
+        changed: 0,
+      };
       if (a && b) {
-        const r = await p.eval(`(${DIFF_PAGE})(${JSON.stringify(`/shots/${before.label}/${a.file}`)}, ${JSON.stringify(`/shots/${after.label}/${b.file}`)})`);
-        item.changed = r.changed; item.pixels = r.pixels;
-        if (r.changed) { item.kind = 'changed'; item.diff = `${name}.diff.png`; if (r.png) writeFileSync(join(out, item.diff), Buffer.from(r.png, 'base64')); }
+        const r = await p.eval(
+          `(${DIFF_PAGE})(${JSON.stringify(`/shots/${before.label}/${a.file}`)}, ${JSON.stringify(`/shots/${after.label}/${b.file}`)})`,
+        );
+        item.changed = r.changed;
+        item.pixels = r.pixels;
+        if (r.changed) {
+          item.kind = 'changed';
+          item.diff = `${name}.diff.png`;
+          if (r.png) writeFileSync(join(out, item.diff), Buffer.from(r.png, 'base64'));
+        }
       }
       items.push(item);
     }
-  } finally { await opened.close(); }
+  } finally {
+    await opened.close();
+  }
   const rank = {gone: 0, new: 1, changed: 2, same: 3};
   items.sort((x, y) => rank[x.kind] - rank[y.kind] || y.changed - x.changed || byState(x, y));
-  const count = k => items.filter(i => i.kind === k).length;
-  const pct = i => i.kind === 'new' ? 'new' : i.kind === 'gone' ? 'gone' : i.kind === 'same' ? 'no change' : i.changed < .001 ? `${i.pixels} pixels changed` : `${(i.changed * 100).toFixed(i.changed < .01 ? 2 : 1)}% of pixels changed`;
-  const pic = (src, tag) => src ? `<a href="${esc(src)}" data-${tag}="${esc(src)}"><img src="${esc(src)}" loading="lazy" alt=""><span>${tag}</span></a>` : `<a><span>${tag}: none</span></a>`;
-  const body = `${failed([...after.failures, ...before.failures.map(f => ({...f, name: `${f.name} (before)`}))].filter(f => wanted.has(f.name.replace(' (before)', ''))))}
-<section><div class="grid">${items.map(i => `
+  const count = (k) => items.filter((i) => i.kind === k).length;
+  const pct = (i) =>
+    i.kind === 'new'
+      ? 'new'
+      : i.kind === 'gone'
+        ? 'gone'
+        : i.kind === 'same'
+          ? 'no change'
+          : i.changed < 0.001
+            ? `${i.pixels} pixels changed`
+            : `${(i.changed * 100).toFixed(i.changed < 0.01 ? 2 : 1)}% of pixels changed`;
+  const pic = (src, tag) =>
+    src
+      ? `<a href="${esc(src)}" data-${tag}="${esc(src)}"><img src="${esc(src)}" loading="lazy" alt=""><span>${tag}</span></a>`
+      : `<a><span>${tag}: none</span></a>`;
+  const body = `${failed([...after.failures, ...before.failures.map((f) => ({...f, name: `${f.name} (before)`}))].filter((f) => wanted.has(f.name.replace(' (before)', ''))))}
+<section><div class="grid">${items
+    .map(
+      (i) => `
   <figure ${figureData(i)} data-kind="${i.kind}" data-before="${esc(i.before ?? '')}" data-after="${esc(i.after ?? '')}" data-diff="${esc(i.diff ?? '')}">
     <div class="pics" style="--n:${i.diff ? 3 : 2}">${pic(i.before, 'before')}${pic(i.after, 'after')}${i.diff ? pic(i.diff, 'diff') : ''}</div>
-    <figcaption><span class="pct ${i.kind}">${pct(i)}</span>${caption(i)}<code>${esc(i.name)}</code></figcaption></figure>`).join('')}</div></section>
+    <figcaption><span class="pct ${i.kind}">${pct(i)}</span>${caption(i)}<code>${esc(i.name)}</code></figcaption></figure>`,
+    )
+    .join('')}</div></section>
 <dialog><div class="bar"><b></b><button data-mode="before">Before</button><button data-mode="after">After</button><button data-mode="diff">Changed pixels</button><button data-mode="swipe">Swipe</button><input type="range" min="0" max="100" value="50" aria-label="Swipe"><button data-close>Close (Esc)</button></div><div class="view"></div></dialog>`;
   const script = `
 const dlg=document.querySelector('dialog'),view=dlg.querySelector('.view'),range=dlg.querySelector('input[type=range]');let cur=null;
@@ -245,8 +371,12 @@ document.querySelectorAll('figure').forEach(f=>f.querySelector('.pics').addEvent
 dlg.addEventListener('click',e=>{const b=e.target.closest('[data-mode]');if(b)show(b.dataset.mode);if(e.target.closest('[data-close]'))dlg.close();});
 range.addEventListener('input',()=>{const t=view.querySelector('.top');if(t)t.style.clipPath='inset(0 0 0 '+range.value+'%)';});`;
   const title = `${before.label} → ${after.label}`;
-  const unstepped = [before, after].filter(m => m.shots.length && m.shots.every(s => s.at == null)).map(m => m.label);
-  const note = unstepped.length ? `<p><b>${esc(unstepped.join(', '))}</b> ran on real time (older than the stepped screenshots): its cars, clocks and plates differ anyway.</p>` : '';
+  const unstepped = [before, after]
+    .filter((m) => m.shots.length && m.shots.every((s) => s.at == null))
+    .map((m) => m.label);
+  const note = unstepped.length
+    ? `<p><b>${esc(unstepped.join(', '))}</b> ran on real time (older than the stepped screenshots): its cars, clocks and plates differ anyway.</p>`
+    : '';
   const head = `<h1>${esc(title)}</h1>${note}<p>${count('changed')} changed · ${count('same')} the same${count('new') ? ` · ${count('new')} new` : ''}${count('gone') ? ` · ${count('gone')} gone` : ''} · click a picture to swipe between them</p>${filters(items, '<span class="chips"><label><input type="checkbox" id="show-same">show unchanged</label></span>')}`;
   writeFileSync(join(out, 'index.html'), page(title, head, body, script));
   return join(out, 'index.html');
@@ -254,34 +384,58 @@ range.addEventListener('input',()=>{const t=view.querySelector('.top');if(t)t.st
 
 // --- Main ---------------------------------------------------------------------------------------------------------
 const started = Date.now();
-const short = ref => git('rev-parse', '--short', `${ref}^{commit}`);
-const head = short('HEAD'), wip = git('status', '--porcelain', '--', '.', ':!shots').length > 0;
+const short = (ref) => git('rev-parse', '--short', `${ref}^{commit}`);
+const head = short('HEAD'),
+  wip = git('status', '--porcelain', '--', '.', ':!shots').length > 0;
 const afterLabel = wip ? `${head}+wip` : head;
 let before = null;
-const kept = label => existsSync(join(SHOTS, label, 'manifest.json')) ? JSON.parse(readFileSync(join(SHOTS, label, 'manifest.json'), 'utf8')) : null;
-const isCommit = ref => { try { short(ref); return true; } catch { return false; } };
+const kept = (label) =>
+  existsSync(join(SHOTS, label, 'manifest.json'))
+    ? JSON.parse(readFileSync(join(SHOTS, label, 'manifest.json'), 'utf8'))
+    : null;
+const isCommit = (ref) => {
+  try {
+    short(ref);
+    return true;
+  } catch {
+    return false;
+  }
+};
 if (baseRef && !isCommit(baseRef)) {
   // Not a commit: a folder of shots/ (a `+wip` run, or one kept under another name), compared as it is.
   before = kept(baseRef);
-  if (!before) { console.error(`--base ${baseRef}: no such commit, or folder in shots/`); process.exit(2); }
-  if (baseRef === afterLabel) { console.error(`--base ${baseRef}: this run takes it again; keep it under another name first`); process.exit(2); }
+  if (!before) {
+    console.error(`--base ${baseRef}: no such commit, or folder in shots/`);
+    process.exit(2);
+  }
+  if (baseRef === afterLabel) {
+    console.error(`--base ${baseRef}: this run takes it again; keep it under another name first`);
+    process.exit(2);
+  }
   before.label = baseRef;
 } else if (baseRef) {
-  const commit = short(baseRef), cached = kept(commit);
+  const commit = short(baseRef),
+    cached = kept(commit);
   console.log(`\nbefore: ${baseRef} (${commit})`);
-  if (cached && [...wanted].every(n => cached.shots.some(s => s.name === n))) before = cached;
+  if (cached && [...wanted].every((n) => cached.shots.some((s) => s.name === n))) before = cached;
   else if (commit === head && !wip) before = await version(commit, {commit, site: root});
   else {
     // The older version from a checkout of its own, served on its own (its pages, scripts and model).
     const site = join(tmpdir(), `osd-demo-shots-${commit}`);
     rmSync(site, {recursive: true, force: true});
     git('worktree', 'add', '--detach', site, commit);
-    try { before = await version(commit, {commit, site}); } finally { git('worktree', 'remove', '--force', site); }
+    try {
+      before = await version(commit, {commit, site});
+    } finally {
+      git('worktree', 'remove', '--force', site);
+    }
   }
 }
 console.log(`\nafter: this checkout (${head}${wip ? ', with changes not committed' : ''})`);
 const after = await version(afterLabel, {commit: head, site: root, wip});
 const seconds = Math.round((Date.now() - started) / 1000);
-console.log(`\n${after.shots.filter(s => wanted.has(s.name)).length}/${wanted.size} states in ${seconds} s\n${join(SHOTS, after.label, 'index.html')}`);
+console.log(
+  `\n${after.shots.filter((s) => wanted.has(s.name)).length}/${wanted.size} states in ${seconds} s\n${join(SHOTS, after.label, 'index.html')}`,
+);
 if (before) console.log(await compare(before, after));
-process.exit(after.failures.some(f => wanted.has(f.name)) ? 1 : 0);
+process.exit(after.failures.some((f) => wanted.has(f.name)) ? 1 : 0);
