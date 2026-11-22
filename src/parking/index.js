@@ -46,7 +46,7 @@ function streetGap(minute) {
 function idleCars(sim, traffic, {staffOnly = false} = {}) {
   const m = world.minute();
   const vip = !staffOnly && m >= 420 && m < 660;
-  return sim.state.vehicles.filter(v => (v.type === 'staff' || (vip && v.type === 'vip')) && v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isArriving(sim.key(v.plate, v.province)));
+  return sim.state.vehicles.filter(v => (v.type === 'staff' || (vip && v.type === 'vip')) && v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isAround(sim.key(v.plate, v.province)));
 }
 // About a third of the cars coming in arrive along the far lane and turn right across the near one (the story's own
 // cars keep the near lane, where its camera shots expect them).
@@ -65,7 +65,7 @@ function leavingCandidates(sim, traffic, {staffOnly = false, guests = false} = {
 // allow (two arriving and two leaving at a time); the rest of a gap the barrier cannot close (a rush in time-lapse,
 // a jump in time, or time spent off screen) is made up in the bays directly, logged at times spread over that gap.
 // Between rushes a car comes or goes now and then. `paused()` (the story playing) stops all of it.
-function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paused = () => false, watched = () => true, arrive, leave, unknown = null}) {
+function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paused = () => false, watched = () => true, storyRunning = () => false, arrive, leave, unknown = null}) {
   const onScreen = () => lotOnScreen(lot);
   // Cars made up in the bays appear or vanish on the spot, so while the car park is on screen only in bays the camera
   // cannot see: popping in and out of view (the building's covered bays, at rush hour on a short day) read as a flicker.
@@ -120,14 +120,16 @@ function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paus
     const now = world.now();
     const came = new Set(sim.state.events.filter(e => e.at >= TODAY && (e.kind === 'entry' || e.kind === 'manual') && e.type === 'guest').map(e => sim.key(e.plate, e.province)));
     return sim.state.vehicles.filter(v => v.type === 'guest' && v.plate !== STORY.plate && v.enabled && v.sync === 'synced' && (!v.validFrom || v.validFrom <= now) && (!v.validTo || v.validTo >= now)
-      && !parkedPlate(sim, v) && !came.has(sim.key(v.plate, v.province)) && !traffic.isArriving(sim.key(v.plate, v.province)));
+      && !parkedPlate(sim, v) && !came.has(sim.key(v.plate, v.province)) && !traffic.isAround(sim.key(v.plate, v.province)));
   }
   // `from`…`now`: the world time since the last look; on average a visitor arrives every 35 minutes of it.
   function visits(from, now) {
     const m = world.minute();
     // Whose visit is over: one at a time, through the barrier when the car park is on screen.
     for (const [k, p] of sim.state.presence) {
-      if (p.type !== 'guest' || p.plate === STORY.plate || now - p.since < stayOf(p.plate)) continue;
+      // The story's visitor leaves by the story's own step while it runs; a story left before that step lets it go
+      // like any visitor once its visit is over (it stayed parked for good).
+      if (p.type !== 'guest' || (p.plate === STORY.plate && storyRunning()) || now - p.since < stayOf(p.plate)) continue;
       if (onScreen()) { if (traffic.leaving < 2) traffic.leave(k, {west: fromFarLane()}); }
       else traffic.vanish(k, () => sim.recordExit({plate: p.plate, province: p.province}));
       break;
@@ -271,7 +273,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
         return;
       }
       if (kind === 'unknown') {
-        const free = UNKNOWN_PLATES.filter(([p, pr]) => !traffic.isArriving(sim.key(p, pr)) && !presence.has(sim.key(p, pr)));
+        const free = UNKNOWN_PLATES.filter(([p, pr]) => !traffic.isAround(sim.key(p, pr)) && !presence.has(sim.key(p, pr)));
         if (!free.length) return;
         const [plate, province] = pickOne(free);
         traffic.arrive({plate, province, color: Math.floor(Math.random() * 9), fromX, ambient: quiet, west});
@@ -279,7 +281,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
         return;
       }
       const pool = kind === 'visitor'
-        ? sim.state.vehicles.filter(v => v.type === 'guest' && v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isArriving(sim.key(v.plate, v.province)) && v.validFrom <= sim.now() && v.validTo >= sim.now())
+        ? sim.state.vehicles.filter(v => v.type === 'guest' && v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isAround(sim.key(v.plate, v.province)) && v.validFrom <= sim.now() && v.validTo >= sim.now())
         : idleCars(sim, traffic, {staffOnly: !quiet}); // the Staff car button sends a staff car, never a VIP
       // The newest approved visitor drives up first, so a request made on the phone can be followed to the gate.
       const v = kind === 'visitor' ? pool[pool.length - 1] : pickOne(pool);
@@ -392,7 +394,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   // Background life of the car park. Unknown cars only on the parking stop, where their alert can be answered.
   // The parked cars are placed first: a late start's first catch-up takes cars away from the bays.
   traffic.syncParked();
-  const stopLife = startLotLife({sim, traffic, lot, camera, paused: () => quietAmbient, watched: () => active,
+  const stopLife = startLotLife({sim, traffic, lot, camera, paused: () => quietAmbient, watched: () => active, storyRunning: () => story.running,
     arrive: () => actions.simulate('registered', {quiet: true}), leave: () => actions.simulate('exit', {quiet: true}),
     unknown: () => { if (active) actions.simulate('unknown', {quiet: true}); }});
   function schedulePass() {

@@ -278,7 +278,11 @@ export function createParkingSim() {
   // Visitor requests
   function submitRequest(data) {
     const at = now();
-    const dup = state.requests.find(q => ['pending', 'approved'].includes(q.status) && normalizePlate(q.plate) === normalizePlate(data.plate) && q.arrival === data.arrival && q.visitor.email === data.visitor.email);
+    // A repeat shares the pending or approved request it repeats: the same email (any casing), plate, province, arrival and
+    // departure, as in the ATOM Parking app (a later departure or another province came back as the old request).
+    const email = e => String(e || '').trim().toLowerCase();
+    const dup = state.requests.find(q => ['pending', 'approved'].includes(q.status) && normalizePlate(q.plate) === normalizePlate(data.plate) && q.province === data.province
+      && q.arrival === data.arrival && q.departure === data.departure && email(q.visitor.email) === email(data.visitor.email));
     const req = dup || {id: uid('r'), ref: `PK-${Math.random().toString(36).slice(2, 6).toUpperCase()}${String(state.requests.length + 41).padStart(3, '0')}`, status: 'pending', createdAt: at, history: [{at, key: 'h.submitted'}], ...data, color: data.color ?? Math.floor(Math.random() * 9)}; // the colour after the data: an undefined one in it overwrote the random pick (every visitor car white)
     if (!dup) state.requests.unshift(req);
     req.receipt = `RC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;

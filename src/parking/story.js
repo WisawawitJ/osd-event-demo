@@ -50,7 +50,7 @@ export function createStory(ctx) {
   }
 
   // A step's `variant` picks other captions (the visitor's request rejected: no ticket, no pass).
-  const captionFor = i => { const key = steps[i].key + (steps[i].variant?.() || ''); return {step: t('story.step', {n: i + 1, total: steps.length}), title: t(`${key}.t`), body: t(`${key}.b`)}; };
+  const captionFor = (i, variant = steps[i].variant?.() || '') => { const key = steps[i].key + variant; return {step: t('story.step', {n: i + 1, total: steps.length}), title: t(`${key}.t`), body: t(`${key}.b`)}; };
   const noPass = () => ctx.sim.state.requests.find(q => q.id === requestId)?.status !== 'approved';
   const steps = [
     {key: 's1', cam: 'lot', async run(s) {
@@ -109,6 +109,8 @@ export function createStory(ctx) {
       const arrival = ctx.traffic.arrive({plate: STORY.plate, province: STORY.province, color: STORY.color, fromX: -52});
       try { await s.until(() => alertId || (approved && ctx.sim.state.gate === 'open'), 40000); } finally { off(); }
       if (alertId) {
+        // The no-pass captions too (the pass may have stopped working after the step began, under the other ones).
+        ctx.caption(captionFor(index, 'r'));
         ctx.hint(t('story.hint.noPass'));
         await s.wait(1800);
         if (ctx.sim.state.alerts.find(a => a.id === alertId)?.status === 'open') ctx.actions.resolveAlert(alertId, 'deny');

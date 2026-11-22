@@ -55,7 +55,8 @@ const CHROMIUM = process.env.CHROMIUM || (existsSync('/usr/lib/chromium/chromium
 async function startBrowser(mode, profileRoot) {
   const {flags, env = {}} = Array.isArray(mode) ? {flags: mode} : mode;
   const port = await freePort();
-  const profile = mkdtempSync(join(profileRoot, 'chrome-'));
+  // Named after the runner's process: a profile whose runner is gone is a leftover (see open).
+  const profile = mkdtempSync(join(profileRoot, `chrome-${process.pid}-`));
   // At low CPU priority: software rendering is CPU work, and the desktop around it should stay responsive.
   const chrome = spawn('nice', ['-n', '10', CHROMIUM, '--headless=new', '--no-sandbox', '--disable-extensions', '--disable-crash-reporter', '--hide-scrollbars', '--window-size=1600,1000', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, ...flags, 'about:blank'], {stdio: 'ignore', env: {...process.env, ...env}, detached: true});
   running.add(chrome);
@@ -84,13 +85,17 @@ async function startBrowser(mode, profileRoot) {
     // A call that gets no answer (a hung page or GPU process) fails the check instead of hanging the whole run.
     // A browser that died fails every call at once (each waited out the 90 s).
     let gone = null;
-    ws.addEventListener('close', () => { gone = new Error('the browser closed'); for (const {fail} of pending.values()) fail(gone); pending.clear(); });
+    const die = reason => { gone = new Error(reason); for (const {fail} of pending.values()) fail(gone); pending.clear(); };
+    ws.addEventListener('close', () => die('the browser closed'));
+    // A crashed page, its browser still up, is as good as gone (each call waited out its 90 s).
+    ws.addEventListener('message', e => { if (JSON.parse(e.data).method === 'Inspector.targetCrashed') die('the page crashed'); });
     const send = (method, params = {}) => new Promise((ok, fail) => {
       if (gone) return fail(gone);
       const i = ++id, timer = setTimeout(() => { pending.delete(i); fail(new Error(`DevTools ${method} got no answer in 90 s`)); }, 90000);
       pending.set(i, {ok: m => { clearTimeout(timer); ok(m); }, fail: error => { clearTimeout(timer); fail(error); }});
       ws.send(JSON.stringify({id: i, method, params}));
     });
+    await send('Inspector.enable');
     await send('Runtime.enable');
     await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false});
@@ -116,13 +121,15 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
   if (!GPU_MODES[gpu]) throw new Error(`GPU=${gpu}: use nvidia or software (default here: ${DEFAULT_GPU}), or vulkan / egl to opt in to other hardware (egl is the Intel iGPU: don't)`);
   const profileRoot = join(process.env.TEST_TMP || tmpdir(), 'osd-demo-test');
   mkdirSync(profileRoot, {recursive: true});
-  // Profiles left by runs that were killed (older than 30 minutes: a run going on alongside keeps its own).
-  // Their browsers too, if a runner killed outright (no exit handler) left them running: each runs in its own process
-  // group, so it outlives its runner, drawing the demo on the GPU.
-  const stale = readdirSync(profileRoot).filter(name => { try { return name.startsWith('chrome-') && Date.now() - statSync(join(profileRoot, name)).mtimeMs > 30 * 60000; } catch { return false; } });
+  // Profiles left by runners that are gone (killed outright, with no exit handler), and their browsers: each runs in
+  // its own process group, so it outlives its runner, drawing the demo on the GPU. A profile's runner is in its name;
+  // one without (older runs) counts as left over after 30 minutes. (By age alone, a long run's live browser was killed:
+  // its profile folder stops changing after the first minute.)
+  const runnerGone = name => { const pid = /^chrome-(\d+)-/.exec(name)?.[1]; return pid ? !existsSync(`/proc/${pid}`) : Date.now() - statSync(join(profileRoot, name)).mtimeMs > 30 * 60000; };
+  const stale = readdirSync(profileRoot).filter(name => { try { return name.startsWith('chrome-') && runnerGone(name); } catch { return false; } });
   if (stale.length) {
     for (const pid of readdirSync('/proc').filter(n => /^\d+$/.test(n))) {
-      try { const cmd = readFileSync(`/proc/${pid}/cmdline`, 'utf8'); if (stale.some(name => cmd.includes(join(profileRoot, name)))) process.kill(Number(pid), 'SIGKILL'); } catch {}
+      try { const cmd = readFileSync(`/proc/${pid}/cmdline`, 'utf8'); if (cmd.includes('chrom') && stale.some(name => cmd.includes(join(profileRoot, name)))) process.kill(Number(pid), 'SIGKILL'); } catch {}
     }
     for (const name of stale) try { rmSync(join(profileRoot, name), {recursive: true, force: true}); } catch {}
   }

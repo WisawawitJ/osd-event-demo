@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (162), about 115 s: run before a commit
+npm test                 # all behaviour checks (164), about 115 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -48,8 +48,8 @@ different area (load, language, night, flights, lights, pond, clock, car park, s
 `test/run.mjs` starts its own server on a free port and drives headless Chromium over the DevTools protocol
 (`/usr/lib/chromium/chromium` itself where it exists, so the desktop's own Chromium flags and extensions stay out;
 `CHROMIUM=` names another binary). Browser profiles go in `$TEST_TMP` (default the system temp folder) under
-`osd-demo-test`; each is removed once its browser has exited, and ones older than 30 minutes left by a killed run are
-cleared at the next start. Each check starts with the page's saved settings (language, idle orbit) cleared. A filter
+`osd-demo-test`, named after the runner's process; each is removed once its browser has exited, and at the next start
+any whose runner is gone (killed outright) is removed, its browser killed if still running. Each check starts with the page's saved settings (language, idle orbit) cleared. A filter
 that matches no check fails. There are no npm dependencies; the tests need Node 22 or newer for its built-in
 WebSocket. **It never uses the Intel iGPU by itself**: on this laptop headless Chromium on the iGPU hung it twice (i915
 GPU hang, then a failed reset), and since the iGPU drives the display the whole desktop froze. By default it renders on
@@ -64,7 +64,8 @@ and camera flights 30× faster; checks that time real behaviour use a lower spee
 of browsers; `SPEED=n` changes the speed, but many checks' waits assume 30, so other speeds are for exploring only. The `?speed` flag also works by hand for rehearsals, for example `/?dest=parking&story=1&speed=3`. Pages
 also load with `?day=0` (the world clock at real speed from 09:00) unless a check sets `day` itself, as the day-cycle
 checks do. Checks that do not measure smoothness also skip the shader warm-up (`?warm=0`). The slowest checks start
-first, from the times of earlier runs (`test/out/times.json`). Screenshots of failed checks go to `test/out/`.
+first, from the times of earlier runs (`test/out/times.json`). Screenshots of failed checks go to a folder of the run's own,
+`test/out/shots/<time>-<pid>/` (removed after a day).
 
 `test/bench.mjs` reports the median of 3 windows of 3 s per scene (`BENCH_ROUNDS`, `BENCH_SECONDS`); single windows
 vary by up to ~25%, so compare medians from back-to-back runs on the same machine.

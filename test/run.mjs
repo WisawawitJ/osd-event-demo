@@ -4,7 +4,8 @@
 // WebGL renders on the NVIDIA GPU when present, else in software; never on the Intel iGPU (see browser.mjs for why).
 // JOBS=n runs n browsers side by side (default 6 on NVIDIA, 3 in software, which is CPU work); SPEED=n sets the demo
 // time scale (default 30).
-import {readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync} from 'node:fs';
+import {readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, statSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {open, DEFAULT_GPU} from './browser.mjs';
 import {scenarios} from './scenarios.mjs';
 
@@ -23,8 +24,16 @@ const jobs = Math.max(1, Math.min(Number(process.env.JOBS) || ((process.env.GPU 
 // (SwiftShader has no parallel shader compiling; three.js warns and compiles normally.)
 const NOISE = /GL_INVALID_OPERATION|PCFSoftShadowMap|UniformsUtils: Textures of render targets|KHR_parallel_shader_compile extension not supported/;
 
-// Screenshots of failures from earlier runs go: kept, an old failure looked like this run's.
-try { for (const f of readdirSync(new URL('out/', import.meta.url))) if (f.endsWith('.png')) rmSync(new URL(`out/${f}`, import.meta.url)); } catch {}
+// Screenshots of failures go in a folder of this run's own (test/out/shots/<time>-<pid>): in one shared folder an old
+// failure looked like this run's, and clearing it at the start deleted a run alongside's evidence. Older than a day,
+// they go (and loose ones from before).
+const SHOTS = fileURLToPath(new URL('out/shots/', import.meta.url));
+try {
+  mkdirSync(SHOTS, {recursive: true});
+  for (const f of readdirSync(SHOTS)) if (Date.now() - statSync(SHOTS + f).mtimeMs > 864e5) rmSync(SHOTS + f, {recursive: true, force: true});
+  for (const f of readdirSync(new URL('out/', import.meta.url))) if (f.endsWith('.png')) rmSync(new URL(`out/${f}`, import.meta.url));
+} catch {}
+const runShots = `${SHOTS}${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}-${process.pid}`;
 
 const started = Date.now();
 const results = new Array(chosen.length);
@@ -32,12 +41,12 @@ let next = 0, renderer = '';
 async function worker() {
   // A browser that does not start leaves the checks to the others (it ended the whole run, without a summary).
   let opened;
-  try { opened = await open(); } catch (error) { console.error(`a browser did not start: ${error.message}`); return; }
+  try { opened = await open({shots: runShots}); } catch (error) { console.error(`a browser did not start: ${error.message}`); return; }
   const {page, close} = opened;
   renderer ||= page.renderer;
   const origin = new URL(page.url).origin;
   try {
-    while (next < chosen.length) {
+    while (next < chosen.length && !page.gone) {
       const index = next++, scenario = chosen[index], t0 = Date.now(), problems = [];
       const expect = (ok, message) => { if (!ok) problems.push(message); };
       // Each check starts with nothing saved in the page's storage (a check that failed with English on, or the idle

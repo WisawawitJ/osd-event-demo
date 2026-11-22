@@ -50,11 +50,21 @@ export const scenarios = [
     await p.until(ready, {timeout: 40000});
     const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const s=__parking.sim,v=s.state.vehicles.find(v=>v.type==='staff'),n=()=>s.state.vehicles.length,before=n();
       const again=s.addVehicle({plate:v.plate.replace(' ','-'),province:v.province,owner:'ซ้ำ'});const first=s.importCsv(),mid=n(),second=s.importCsv();
-      const colours=new Set(Array.from({length:8},(_,i)=>s.submitRequest({visitor:{name:'ทดสอบ '+i,phone:'080',email:'c'+i+'@example.com',company:'—'},contact:'host.demo@osd.example',plate:'9ทส '+(1000+i),province:'กรุงเทพมหานคร',arrival:s.now(),departure:s.now()}).color));
+      const colours=new Set(Array.from({length:8},(_,i)=>s.submitRequest({visitor:{name:'ทดสอบ '+i,phone:'080',email:'c'+i+'@example.com',company:'—'},contact:'host.demo@osd.example',plate:'9ทส '+(1000+i),province:'กรุงเทพมหานคร',arrival:s.now(),departure:s.now(),color:undefined}).color));
       return {again,first,second,added:mid-before,after:n()-mid,colours:[...colours]}})())`));
     expect(r.again === null, `the same plate (written with a hyphen) is refused (${JSON.stringify(r.again)})`);
     expect(r.first === 3 && r.second === 0 && r.added === 3 && r.after === 0, `the sample list adds 3 once, then none (${r.first}, ${r.second})`);
     expect(r.colours.length > 2 && r.colours.every(c => Number.isInteger(c)), `visitor cars get varied colours (${r.colours.join(', ')})`);
+  }},
+  {name: 'a story left after its visitor parked lets that car leave once its visit is over', async run(p, expect) {
+    // Left between steps 6 and 10, the story's visitor stayed parked for the rest of free play.
+    await p.goto(parking('&story=1'));
+    await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
+    const key = `__parking.sim.key(${JSON.stringify(STORY_PLATE)},${STORY_REQUEST}?.province)`;
+    await p.until(`__parking.sim.state.presence.has(${key}) && !__parking.traffic.isArriving(${key})`, {timeout: 60000, what: 'the story visitor parked'});
+    await p.eval(`(()=>{window.__k=${key};__parking.story.stop();__world.jumpTo(__world.minute()+240)})()`);
+    await p.until('!__parking.sim.state.presence.has(__k)', {timeout: 30000, what: 'the visitor gone after its visit'});
+    expect(true, 'the story visitor left');
   }},
   {quick: true, name: 'story plays end to end on auto-advance', async run(p, expect) {
     await p.goto(parking('&story=1'));
@@ -466,7 +476,9 @@ export const scenarios = [
     await p.eval('__parking.traffic.syncParked()');
     await p.sleep(500); // the old flow's next poll finds it aborted
     // Not below 0 (the bug); a background car may already hold the barrier again in the new run.
-    expect(await p.eval('__parking.traffic.gateHolders') >= 0, `no holder counted after the reset (${await p.eval('__parking.traffic.gateHolders')})`);
+    // The lowest over 2 s: one read could catch a new-run car holding the barrier on top of a stale -1.
+    const lowest = await p.eval(`new Promise(done=>{let low=Infinity;const end=performance.now()+2000;(function f(){low=Math.min(low,__parking.traffic.gateHolders);if(performance.now()<end)requestAnimationFrame(f);else done(low);})()})`);
+    expect(lowest >= 0, `no holder counted after the reset (lowest ${lowest})`);
   }},
   {name: 'a reset while a car leaving for the far lane reads its plate leaves far-lane traffic running', async run(p, expect) {
     // The leaving car carried on after the reset and left its hold on new far-lane traffic counted for good.
@@ -479,8 +491,9 @@ export const scenarios = [
     await p.sleep(1500); // past the read's pauses
     // A hold is left only by a car of the new run waiting at the exit (it holds the exit's turn there, counted in
     // gateHolders); the stale one held it with no car there.
-    const hold = JSON.parse(await p.eval('JSON.stringify(__parking.traffic.inspect())'));
-    expect(hold.westExitHold === 0 || hold.gateHolders > 0, `no hold on far-lane traffic left (${hold.westExitHold}, ${hold.gateHolders} at the barrier)`);
+    // A real hold ends once its car has gone; a stale one never does.
+    const cleared = await p.until('__parking.traffic.inspect().westExitHold === 0', {timeout: 20000, what: 'no hold on far-lane traffic'}).then(() => true, () => false);
+    expect(cleared, `no hold on far-lane traffic left (${await p.eval('__parking.traffic.inspect().westExitHold')})`);
   }},
   {quick: true, name: 'unknown car: Open once disabled while waiting; Open with a reason is audited', async run(p, expect) {
     // speed 10: the guard turns unanswered cars away after 45 s of demo time, 1.5 s of real time at speed 30.
@@ -1685,6 +1698,23 @@ export const scenarios = [
     expect(pinch.zoom > 0, `pinch zooms (distance ${pinch.zoom})`);
     const mouse = await wheel({deltaY: 100});
     expect(mouse.zoom > 0, `a mouse wheel notch zooms (distance ${mouse.zoom})`);
+  }},
+  {name: 'keys: R works on the Thai layout, and Ctrl+arrow, which moves the view, stops the tour', async run(p, expect) {
+    // The keys were read by character (R types พ on the Thai layout); and after Ctrl/Alt keys were left to the browser,
+    // Ctrl+arrow still turned the view (the controls take it) but no longer stopped the tour.
+    await p.goto(`?${FAST}`);
+    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
+    const key = (k, code, extra = {}) => p.eval(`document.querySelector('#viewport canvas').dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key:${JSON.stringify(k)},code:${JSON.stringify(code)},...${JSON.stringify(extra)}}))`);
+    const pose = `JSON.stringify(__camera.position.toArray().map(v=>+v.toFixed(1)))`, home = await p.eval(pose);
+    await p.eval(`(()=>{__camera.position.x+=15;__controls.update()})()`);
+    await key('พ', 'KeyR');
+    await p.until(`${pose} === ${JSON.stringify(home)}`, {timeout: 10000, what: 'the view back at the stop after R on the Thai layout'});
+    const label = `document.querySelector('#tour-play span').textContent`;
+    await p.click('#tour-play');
+    await p.until(`/หยุดพาชม|Stop tour/.test(${label})`, {timeout: 5000, what: 'the tour started'});
+    await key('ArrowLeft', 'ArrowLeft', {ctrlKey: true});
+    await p.sleep(300);
+    expect(/เริ่มพาชม|Start tour/.test(await p.eval(label)), `Ctrl+Left stopped the tour (button: ${await p.eval(label)})`);
   }},
   {name: 'panning slows far from the site and comes back at full speed; the ground\'s edge is in the fog', async run(p, expect) {
     // A touchpad scroll carried the view off without limit, past the end of the ground.

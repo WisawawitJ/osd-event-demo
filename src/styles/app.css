@@ -6,6 +6,8 @@ button { font:inherit; color:inherit; border:1px solid transparent; background:t
 button:disabled { opacity:.45; cursor:default; }
 button:not(:disabled):hover,a:hover { background:var(--active); }
 button:focus-visible,a:focus-visible,canvas:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+/* Inside: the 3D view's frame clips anything drawn outside the canvas, and its focus ring did not show. */
+canvas:focus-visible { outline-offset:-3px; }
 button[aria-pressed="true"] { background:var(--ink); color:white; }
 button[aria-pressed="true"]:not(:disabled):hover { background:var(--accent); }
 button, .download { min-height:44px; border-radius:8px; padding:9px 13px; line-height:1.5; }

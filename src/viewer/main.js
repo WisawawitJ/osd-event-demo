@@ -119,7 +119,7 @@ try {
   // a stop's first visit stalled ~0.4 s. Keep them for ?debug (tests), skip them for visitors.
   renderer.debug.checkShaderErrors = debug;
   renderer.shadowMap.enabled=true;
-  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type=THREE.PCFShadowMap; // PCFSoftShadowMap is gone from three.js (it fell back to this, warning on every load)
   renderer.shadowMap.autoUpdate=false;
   renderKit=createRenderKit(renderer,scene);
   surfaceTextures=createSurfaceTextures(renderer);
@@ -405,15 +405,22 @@ try {
   servicesButton.addEventListener('click',()=>interiorCamera('services'));
   parkingButton.addEventListener('click',()=>interiorCamera('parking'));
   stairsButton.addEventListener('click',()=>interiorCamera('stairs'));
+  // The view keys, by the key's place (the Thai layout types other characters on them), or by the character when a
+  // keyboard sends no place.
+  const VIEW_KEYS = {KeyR: 'reset', Equal: 'in', NumpadAdd: 'in', Minus: 'out', NumpadSubtract: 'out'}, VIEW_CHARS = {r: 'reset', R: 'reset', '+': 'in', '=': 'in', '-': 'out'};
+  const viewKey = event => (event.code ? VIEW_KEYS[event.code] : VIEW_CHARS[event.key]);
   canvas.addEventListener('keydown', event => {
     if (!model) return;
-    // Not with Ctrl, Alt or Cmd: those are the browser's (reload, its own zoom).
+    // Not with Ctrl, Alt or Cmd: those are the browser's (reload, its own zoom). By the key's place, not the character
+    // it types: on the Thai layout R types พ and -/= type ข/ช.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (event.key.toLowerCase() === 'r') { if (showcase) showcase.resetView(); else frameVisible(); }
-    else if (['+', '=', '-'].includes(event.key)) {
+    // (An on-screen keyboard may send no key place: then the character.)
+    const zoomOut = viewKey(event) === 'out', zoomIn = viewKey(event) === 'in';
+    if (viewKey(event) === 'reset') { if (showcase) showcase.resetView(); else frameVisible(); }
+    else if (zoomIn || zoomOut) {
       event.preventDefault();
       const offset = camera.position.clone().sub(controls.target);
-      const distance = THREE.MathUtils.clamp(offset.length() * (event.key === '-' ? 1.15 : 1 / 1.15), controls.minDistance, controls.maxDistance);
+      const distance = THREE.MathUtils.clamp(offset.length() * (zoomOut ? 1.15 : 1 / 1.15), controls.minDistance, controls.maxDistance);
       camera.position.copy(controls.target).add(offset.setLength(distance));
       controls.update();
       schedule();
@@ -606,7 +613,7 @@ try {
        // A flight's floors settled at once on a stop's scene: one cut short (see cancelFlight), or taken over.
        function settle(id){sceneTransition.finish();applyDestination(id);lastDestination=id;}
        // The story's camera moves; one that takes over a flight to the car park (Play tapped on the way) settles it there.
-       parking=parkingModule.createParking({scene,schedule,camera,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{if(docking){docking=false;settle('parking');}navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
+       parking=parkingModule.createParking({scene,schedule,camera,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{cancelAnimationFrame(zoomFrame);if(docking){docking=false;settle('parking');}navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
        parking.lot.root.visible=renderKit.ground.visible;
        if(debug)window.__parking=parking;
        parking.setNight(simulation.getState().night);simulation.subscribe(()=>parking.setNight(simulation.getState().night));
@@ -634,7 +641,8 @@ try {
         cancelFlight:()=>{const flying=flight.running;navigation++;docking=false;cancelAnimationFrame(zoomFrame);flight.stop();if(flying)settle(lastDestination);marker.visible=false;schedule();},
         onUserOrbit:callback=>{controls.addEventListener('start',callback);
          // Capture: runs before the canvas's own key handler, so R (Reset view) starts after this has cancelled the old flight, as the button does.
-         canvas.addEventListener('keydown',e=>{if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','r','R','+','=','-'].includes(e.key))callback();},{capture:true,signal:abort.signal});},
+         // Arrows move the view with or without a modifier (the controls take Ctrl/Alt+arrow too), so they always count.
+         canvas.addEventListener('keydown',e=>{const browserKey=e.ctrlKey||e.metaKey||e.altKey;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)||!browserKey&&viewKey(e))callback();},{capture:true,signal:abort.signal});},
         async navigate(id,{instant=false,onPhase=()=>{},onApproach=()=>{}}={}){
           flight.stop();cancelAnimationFrame(zoomFrame);const ticket=++navigation,start=readPose();marker.visible=false;markerMaterial.opacity=.6;
           const settings={
