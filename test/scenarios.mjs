@@ -1601,6 +1601,15 @@ export const scenarios = [
     expect(round <= 91, `scrolling the other way round the site does not creep out either (${round.toFixed(0)} m)`);
     const back = await scroll(-40, 40);
     expect(back < far - 20, `scrolling back is not slowed (${far.toFixed(0)} m to ${back.toFixed(0)} m in 40 scrolls)`);
+    // Up and down: from a low view, scroll far down then far up. It went under the ground, or off into the sky.
+    const vertical = JSON.parse(await p.eval(`JSON.stringify((()=>{__controls.target.set(0,5,0);__camera.position.set(0,8,60);__controls.update();
+      const c=document.querySelector('#viewport canvas'),go=d=>{for(let i=0;i<300;i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:400,clientY:300,deltaX:0,deltaY:d}));return {pivot:+__controls.target.y.toFixed(2),camera:+__camera.position.y.toFixed(2)}};
+      return {down:go(40),up:go(-40)}})())`));
+    expect(vertical.down.pivot >= 0 && vertical.down.camera > 0, `panning down stops at the ground (pivot ${vertical.down.pivot} m, camera ${vertical.down.camera} m up)`);
+    expect(vertical.up.pivot <= 25, `panning up stops at 25 m (pivot ${vertical.up.pivot} m)`);
+    // Orbiting down to below the horizon: the camera stays above its pivot.
+    const orbit = await p.eval(`(()=>{__controls.target.set(0,2,0);__camera.position.set(0,-20,40);__controls.update();return +(__camera.position.y-__controls.target.y).toFixed(2)})()`);
+    expect(orbit > 0, `the camera cannot orbit under the ground (${orbit} m above its pivot)`);
     const fog = JSON.parse(await p.eval(`JSON.stringify({far:__scene.fog?.far,ground:__scene.getObjectByName('PresentationGround').geometry.parameters.width/2})`));
     expect(fog.far < fog.ground, `the world is gone in the fog (${fog.far} m) before the ground ends (${fog.ground} m)`);
     // Pixels: the road by the gate shows, its far end has faded into the sky. (Fog worked out per vertex blended

@@ -42,7 +42,8 @@ const isShowcase=Boolean(document.querySelector('#showcase'));
 const dayBackground=isShowcase?'#e6ecee':'#dce5e5'; // the 3D view's daytime background (the sky darkens it at night)
 // The world (measured across the ground from the site's middle) is clear to WORLD_CLEAR metres out and gone in the fog by
 // WORLD_GONE; panning is free while the view's pivot stays within PAN_FREE and slows to a stop at PAN_LIMIT.
-const WORLD_CLEAR=65,WORLD_GONE=95,PAN_FREE=55,PAN_LIMIT=90;
+// The pivot's height stays between the ground and PAN_TOP (the roof is about 20 m up).
+const WORLD_CLEAR=65,WORLD_GONE=95,PAN_FREE=55,PAN_LIMIT=90,PAN_TOP=25;
 // ?debug=1 (tests, the benchmark: test/) exposes the scene and the demo's parts on window.
 const params=new URLSearchParams(location.search),debug=params.has('debug');
 // The page's night look (night.css) switches in one go and cross-fades as a whole (a view transition). Fading each
@@ -173,18 +174,25 @@ try {
   }, {capture: true, passive: false, signal: abort.signal});
   // Panning slows the further the view's pivot goes from the site's middle: free within PAN_FREE, then slower and
   // slower to a stop at PAN_LIMIT, so a touchpad scroll cannot carry the view off into the fog (it went on without
-  // end). Only the outward part of a step is slowed: coming back is never. (Every pan, by mouse, keys, touch or
-  // touchpad, goes through _pan.)
+  // end). Only the outward part of a step is slowed: coming back is never. Up and down, the pivot stays between the
+  // ground and PAN_TOP (it went under the ground, or off into the sky). Every pan, by mouse, keys, touch or touchpad,
+  // goes through _pan.
   const basePan = controls._pan.bind(controls), panBefore = new THREE.Vector3(), panStep = new THREE.Vector3();
   controls._pan = (deltaX, deltaY) => {
     panBefore.copy(controls._panOffset); basePan(deltaX, deltaY); panStep.subVectors(controls._panOffset, panBefore);
+    const t = controls.target, y = THREE.MathUtils.clamp(t.y + panStep.y, Math.min(t.y, 0), Math.max(t.y, PAN_TOP));
     // Measured on where the step lands, so a pan round the site (no outward part) cannot creep out either.
-    const t = controls.target, r = Math.hypot(t.x, t.z), x = t.x + panStep.x, z = t.z + panStep.z, landed = Math.hypot(x, z);
-    if (landed <= r || landed <= PAN_FREE) return;
-    const ease = (1 - THREE.MathUtils.clamp((r - PAN_FREE) / (PAN_LIMIT - PAN_FREE), 0, 1)) ** 2;
-    const allowed = Math.max(r, Math.min(r + (landed - r) * ease, PAN_LIMIT)), scale = allowed / landed;
-    if (scale < 1) controls._panOffset.copy(panBefore).add(panStep.set(x * scale - t.x, panStep.y, z * scale - t.z));
+    let x = t.x + panStep.x, z = t.z + panStep.z;
+    const r = Math.hypot(t.x, t.z), landed = Math.hypot(x, z);
+    if (landed > r && landed > PAN_FREE) {
+      const ease = (1 - THREE.MathUtils.clamp((r - PAN_FREE) / (PAN_LIMIT - PAN_FREE), 0, 1)) ** 2;
+      const scale = Math.max(r, Math.min(r + (landed - r) * ease, PAN_LIMIT)) / landed;
+      x *= scale; z *= scale;
+    }
+    controls._panOffset.copy(panBefore).add(panStep.set(x - t.x, y - t.y, z - t.z));
   };
+  // Orbiting stops just above the horizon: the camera never dips under the ground around its pivot.
+  controls.maxPolarAngle = Math.PI * .49;
   canvas.addEventListener('wheel', event => {
     if (!model || event.deltaY >= 0 || !controls.enabled || !controls.enableZoom) return;
     if (camera.position.distanceTo(controls.target) > closeRange()) return;
