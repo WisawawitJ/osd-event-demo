@@ -177,6 +177,8 @@ export function createPhone({root, sim, actions}) {
   return {
     render: schedule,
     get isOpen() { return ui.open; },
+    // What the form holds (tests read it).
+    get form() { return {...ui.form}; },
     setOpen(v) { ui.open = v; globalThis.document?.body?.classList.toggle('phone-open', v); render(); actions.openChanged?.(v); },
     // A photo still being read belongs to the old form (as with New request): it ends without filling in the new one.
     reset() { settleRead?.(); Object.assign(ui, {screen: 'form', form: blankForm(), error: '', requestId: null, banner: null, cue: null, typing: null, photoPlate: null, photoProvince: null}); render(); },
