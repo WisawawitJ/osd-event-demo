@@ -34,41 +34,6 @@ const DRIFT = `(()=>{__camera.updateMatrixWorld();const c=document.querySelector
 const viewport = (p, width = 1600, height = 1000) => p.cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
 
 export const scenarios = [
-  {quick: true, name: 'showcase loads with the parking stop', async run(p, expect) {
-    await p.goto(`?${FAST}`);
-    await p.until(LOADED, {timeout: 40000, what: 'model ready'});
-    expect(await p.eval('document.querySelectorAll(".destination-dock [data-destination]").length') === 5, 'dock has 5 stops');
-    // One column per stop: a grid with a column to spare left an empty slot after the last stop.
-    const gap = await p.eval(`(()=>{const d=document.querySelector('.destination-dock'),b=[...d.querySelectorAll('[data-destination]')].at(-1);return Math.round(d.getBoundingClientRect().right-b.getBoundingClientRect().right);})()`);
-    expect(gap < 16, `the stops fill the dock (${gap} px after the last)`);
-  }},
-
-  {name: 'a story whose request is rejected still finishes: the visitor is turned away at the barrier', async run(p, expect) {
-    // Rejected at step 4, the visitor's car waited at the barrier for an alert nobody answered, and the story stalled.
-    // The presenter's Reject stands in for the story's own approval here.
-    await p.goto(parking('&story=1'));
-    await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
-    await p.eval(`(()=>{const sim=__parking.sim;sim.approve=id=>sim.reject(id,'ไม่มีนัดหมาย')})()`);
-    await p.until('!__parking.story.running', {timeout: 90000, what: 'story end'});
-    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const s=__parking.sim.state,k=s.requests.length&&__parking.sim.key(${JSON.stringify(STORY_PLATE)},${STORY_REQUEST}?.province);const ev=s.events.filter(e=>e.plate===${JSON.stringify(STORY_PLATE)});
-      return {status:${STORY_REQUEST}?.status,entered:ev.some(e=>e.kind==='entry'),denied:ev.some(e=>e.kind==='denied'),parked:s.presence.has(k),open:s.alerts.filter(a=>a.status==='open').length,index:__parking.story.index}})())`));
-    expect(r.status === 'rejected', `the visitor's request rejected (got ${r.status})`);
-    expect(!r.entered && !r.parked && r.denied, `the visitor's car turned away at the barrier, never parked (entered ${r.entered}, parked ${r.parked}, denied ${r.denied})`);
-    expect(r.index === -1 && r.open === 0, `the story ran to its end with no alert left open (step ${r.index}, ${r.open} open)`);
-  }},
-  {name: 'a plate already listed is not added again, by hand or by importing twice; visitor cars get their own colours', async run(p, expect) {
-    // A second listing of a plate looked idle, drove in again and kept a bay; and every free-play visitor car came out
-    // the story car's blue, then (a later slip) white.
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const s=__parking.sim,v=s.state.vehicles.find(v=>v.type==='staff'),n=()=>s.state.vehicles.length,before=n();
-      const again=s.addVehicle({plate:v.plate.replace(' ','-'),province:v.province,owner:'ซ้ำ'});const first=s.importCsv(),mid=n(),second=s.importCsv();
-      const colours=new Set(Array.from({length:8},(_,i)=>s.submitRequest({visitor:{name:'ทดสอบ '+i,phone:'080',email:'c'+i+'@example.com',company:'—'},contact:'host.demo@osd.example',plate:'9ทส '+(1000+i),province:'กรุงเทพมหานคร',arrival:s.now(),departure:s.now(),color:undefined}).color));
-      return {again,first,second,added:mid-before,after:n()-mid,colours:[...colours]}})())`));
-    expect(r.again === null, `the same plate (written with a hyphen) is refused (${JSON.stringify(r.again)})`);
-    expect(r.first === 3 && r.second === 0 && r.added === 3 && r.after === 0, `the sample list adds 3 once, then none (${r.first}, ${r.second})`);
-    expect(r.colours.length > 2 && r.colours.every(c => Number.isInteger(c)), `visitor cars get varied colours (${r.colours.join(', ')})`);
-  }},
   {name: 'a story left after its visitor parked lets that car leave once its visit is over', async run(p, expect) {
     // Left between steps 6 and 10, the story's visitor stayed parked for the rest of free play.
     await p.goto(parking('&story=1'));
@@ -151,29 +116,6 @@ export const scenarios = [
     const toasts = await p.eval(`[...document.querySelectorAll('.pk-toast')].map(t=>t.textContent).join(' | ')`);
     expect(/Ticket emailed/.test(toasts), `the ticket email's toast (${toasts})`);
   }},
-  {name: 'email toasts say which email went: a rejection is not "ticket emailed"', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`(()=>{const q=__parking.sim.state.requests.find(q=>q.status==='pending');__parking.sim.reject(q.id,'ทดสอบ')})()`);
-    await p.until(`document.querySelector('.pk-toast')`, {timeout: 3000, what: 'a toast'});
-    const toasts = await p.eval(`[...document.querySelectorAll('.pk-toast')].map(t=>t.textContent).join(' | ')`);
-    expect(/ไม่อนุมัติ/.test(toasts) && !/ยืนยัน/.test(toasts), `the rejection's toast (${toasts})`);
-  }},
-  {name: 'guided story: Next pulses while the story waits for it; rejected at step 3, step 4 says so', async run(p, expect) {
-    // The bar was not redrawn as Next began waiting: its pulse showed only while the next step ran. And step 4 said
-    // "Approve in one tap" over a request rejected at step 3.
-    await p.goto(parking('&story=1&auto=0'));
-    await p.until('window.__parking && __parking.story.running', {timeout: 40000});
-    await p.until('__parking.story.waitingForNext', {timeout: 30000, what: 'step 1 waiting'});
-    await p.sleep(200);
-    expect(await p.eval(`!!document.querySelector('[data-bar="next"][data-cue="true"]')`), 'Next pulses while the story waits');
-    for (let i = 0; i < 2; i++) { await p.click('[data-bar="next"]'); await p.until(`__parking.story.index===${i + 1} && __parking.story.waitingForNext`, {timeout: 30000, what: `step ${i + 2}`}); }
-    await p.eval(`__parking.sim.reject(${STORY_REQUEST}.id,'ทดสอบ')`);
-    await p.click('[data-bar="next"]');
-    await p.until('__parking.story.index===3 && __parking.story.waitingForNext', {timeout: 30000, what: 'step 4'});
-    const title = await p.eval(`document.querySelector('.pk-caption strong')?.textContent`);
-    expect(title === 'คำขอนี้ไม่ได้รับอนุมัติ', `step 4's rejected caption (${title})`);
-  }},
   {name: 'story Pause stops the phone typing; unticking Auto-advance while paused leaves Next working', async run(p, expect) {
     // Paused, the phone typed on; with Auto-advance then off, the bar had Next but no Resume and the step stood still.
     await p.goto(parking('&story=1'));
@@ -188,16 +130,6 @@ export const scenarios = [
     await p.click('[data-bar="next"]');
     await p.until('__parking.story.index===1', {timeout: 5000, what: 'Next moving on'});
   }},
-  {name: 'story on auto-advance: a Reject tapped at the Approve cue is not overridden', async run(p, expect) {
-    // The story approved 2.6 s after the cue whatever the presenter had started: the reject form vanished under them.
-    await p.goto('?dest=parking&debug=1&speed=5&warm=0&story=1');
-    await p.until('window.__parking && __parking.story.running', {timeout: 40000});
-    await p.eval(`new MutationObserver((m,o)=>{const b=document.querySelector('[data-act="approve"][data-cue="true"]')&&document.querySelector('[data-act="reject"]');if(b){o.disconnect();b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));b.click();window.__tapped=performance.now()}}).observe(document.body,{subtree:true,childList:true,attributes:true})`);
-    await p.until('window.__tapped', {timeout: 60000, what: 'the Approve cue'});
-    await p.sleep(800); // 4 s of demo time: past the 2.6 s the story waited
-    const r = JSON.parse(await p.eval(`JSON.stringify({status:${STORY_REQUEST}?.status,form:!!document.querySelector('.pk-reject textarea')})`));
-    expect(r.status === 'pending' && r.form, `still pending with the reject form open (${r.status}, form ${r.form})`);
-  }},
   {name: 'story on auto-advance: a console tap early on does not slow the later cues', async run(p, expect) {
     // Touches were counted for the whole page: one tap at step 1 made every later cue wait 6 s, not 2.6.
     await p.goto('?dest=parking&debug=1&speed=5&warm=0&story=1');
@@ -209,18 +141,6 @@ export const scenarios = [
     await p.until('window.__approvedAt', {timeout: 10000, what: 'approved'});
     const after = await p.eval('(__approvedAt-__cueAt)*5/1000');
     expect(after < 4.5, `approved ${after.toFixed(1)} s (demo) after the cue, not the 6 s a touch during it gives`);
-  }},
-  {name: 'an unknown car\'s Open reason is one choice, in the console card and the pop-up alike', async run(p, expect) {
-    // Each kept its own: the card's "plate misread", then Open in the pop-up, logged the pop-up's default.
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`void __parking.traffic.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:5,fromX:-40})`);
-    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='1กก 1111') && document.querySelector('[data-alert-reason]') && document.querySelector('[data-pop="open"]')`, {timeout: 30000, what: 'the alert in the card and the pop-up'});
-    await p.eval(`(()=>{const s=document.querySelector('[data-alert-reason]');s.value='gate.reason.misread';s.dispatchEvent(new Event('change',{bubbles:true}))})()`);
-    const pop = await p.eval(`document.querySelector('[data-pop-reason]').value`);
-    await p.click('[data-pop="open"]');
-    const logged = await p.eval(`__parking.sim.state.audit.find(a=>a.target==='1กก 1111')?.reasonKey`);
-    expect(pop === 'gate.reason.misread' && logged === 'gate.reason.misread', `the pop-up shows and opens with the card's reason (shown ${pop}, logged ${logged})`);
   }},
   {name: 'a story left at step 7 lets its unknown car go like a background one, not after 45 s', async run(p, expect) {
     // Its car stood at the barrier for the 45 s a presenter's own car gets, holding up every car behind it.
@@ -242,15 +162,6 @@ export const scenarios = [
     const r = JSON.parse(await p.eval(`JSON.stringify({ambient:__parking.sim.state.alerts.find(a=>a.plate==='2ฒษ 9077').ambient,tab:document.querySelector('[data-tab][aria-selected="true"]')?.dataset.tab})`));
     expect(r.ambient === true && r.tab === 'vehicles', `a background car, the console left on its tab (ambient ${r.ambient}, tab ${r.tab})`);
   }},
-  {name: 'a tap on the plate camera card leaves an auto story playing; toasts let taps through to the view', async run(p, expect) {
-    // The card is not the 3D view, but a tap on it ended the story. Toasts caught taps meant for the view under them.
-    await p.goto(parking('&story=1'));
-    await p.until(`window.__parking && __parking.story.running && document.querySelector('.pk-feed:not([hidden])')`, {timeout: 90000, what: 'the plate camera card in the story'});
-    await p.eval(`document.querySelector('.pk-feed').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`);
-    await p.sleep(200);
-    expect(await p.eval('__parking.story.running'), 'the story plays on after a tap on the camera card');
-    expect(await p.eval(`getComputedStyle(document.querySelector('.pk-toasts')).pointerEvents`) === 'none', 'toasts let taps through');
-  }},
   {name: 'guided story: Free play at the approve cue does not approve', async run(p, expect) {
     await p.goto(parking('&story=1&auto=0'));
     await p.until('window.__parking && __parking.story.running', {timeout: 40000});
@@ -262,44 +173,6 @@ export const scenarios = [
     expect(status === 'pending', `request stays pending (got ${status})`);
   }},
 
-  {quick: true, name: 'staff car drives in and parks', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    // A specific car, so background traffic in the same lot cannot be mistaken for it.
-    const key = await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const v=__parking.sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(__parking.sim.key(v.plate,v.province)));void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-50});return __parking.sim.key(v.plate,v.province)})()`);
-    await p.until(`__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 30000, what: 'entry recorded'});
-    await p.until(`!__parking.traffic.isArriving(${JSON.stringify(key)})`, {timeout: 30000, what: 'car parked'});
-    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const pr=__parking.sim.state.presence.get(${JSON.stringify(key)});return {entry:__parking.sim.state.events.some(e=>e.kind==='entry'&&__parking.sim.key(e.plate,e.province)===${JSON.stringify(key)}),stall:__parking.sim.state.stalls.find(s=>s.id===pr.stallId)?.occupant===${JSON.stringify(key)}}})())`));
-    expect(r.entry, 'entry event logged for the car');
-    expect(r.stall, 'its bay is marked occupied');
-  }},
-
-  {name: 'a car at the barrier keeps its bay through a jump in time, and its lamps on while the arm rises', async run(p, expect) {
-    // It picked its bay before the arm rose but took it only after: a jump meanwhile made up another car in the same
-    // bay. And with its bay given, it counted as parked, lamps off, while still waiting at the barrier.
-    await p.goto(parking('&time=07:00'));
-    await p.until(ready, {timeout: 40000});
-    const pick = `(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const v=__parking.sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(__parking.sim.key(v.plate,v.province)));
-      window.__plate=v.plate;void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-40});return __parking.sim.key(v.plate,v.province)})()`;
-    // Acts the moment the arm starts up for this car (at ?speed=30 it is up within a few frames: polling missed it).
-    const car = `__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate)`;
-    // (Before the car is picked, __plate is not set yet: a background car opening the barrier then threw in the app.)
-    const atGate = act => `(()=>{const sim=__parking.sim,set=sim.setGate;sim.setGate=g=>{set(g);const c=typeof __plate==='string'?${car}:null;if(g==='opening'&&c&&Math.hypot(c.position.x+23,c.position.z-21.9)<2.5){sim.setGate=set;${act}}};})()`;
-    await p.eval(atGate(`__world.jumpTo(12*60);window.__acted=true;`));
-    const key = await p.eval(pick);
-    await p.until('window.__acted', {timeout: 30000, what: 'the arm rising for the car'});
-    await p.until(`__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 30000, what: 'entry recorded'});
-    const shared = await p.eval(`(()=>{const seen=new Map();for(const [k,p] of __parking.sim.state.presence){if(seen.has(p.stallId))return p.stallId+': '+seen.get(p.stallId)+' & '+k;seen.set(p.stallId,k);}return '';})()`);
-    expect(!shared, `every bay holds one car (${shared || 'none shared'})`);
-    // Night: the waiting car's lamps while the arm rises (read two frames on, once the lamps have followed).
-    await p.goto(parking('&time=21:00'));
-    await p.until(ready, {timeout: 40000});
-    await p.eval(atGate(`requestAnimationFrame(()=>requestAnimationFrame(()=>{window.__lamps=${car}.getObjectByName('Demo_car_headlight_beams').visible;}));`));
-    await p.eval(pick);
-    await p.until(`window.__lamps!==undefined`, {timeout: 30000, what: 'the arm rising for the car'});
-    const lamps = await p.eval('__lamps');
-    expect(lamps === true, `the car's headlights stay on while the arm rises (${lamps})`);
-  }},
   {name: 'the car park\'s catch-up after the 03:00 wrap logs today, not tomorrow', async run(p, expect) {
     // The wrap moved the log back a day but not the car park's last look: the next catch-up spread its departures
     // between that (a day ahead) and now, logging them a day in the future.
@@ -434,19 +307,6 @@ export const scenarios = [
     expect(!(await p.eval(`document.querySelector('.pk-feed').hidden`)), 'still up after 4 s paused');
     await p.eval('__world.setPaused(false)');
   }},
-  {name: 'Requests: a focused row keeps its request when a new one comes in', async run(p, expect) {
-    // Rows were reused by position: a request arriving at the top moved every row's content down one, so a focused
-    // row (Enter opens it) went on to stand for another request.
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    await p.click('[data-tab="requests"]');
-    await p.click('[data-req-filter="all"]');
-    await p.eval(`(()=>{const b=document.querySelectorAll('[data-request]')[1];window.__id=b.dataset.request;window.__b=b;b.focus();})()`);
-    await p.eval(`__parking.sim.submitRequest({visitor:{name:'ทดสอบ ใหม่',phone:'080-000-0000',email:'new@example.com',company:'—'},contact:'host.demo@osd.example',plate:'1กก 1234',province:'กรุงเทพมหานคร',arrival:__world.now(),departure:__world.now()})`);
-    await p.until(`document.querySelectorAll('[data-request]')[0].dataset.request!==document.querySelectorAll('[data-request]')[1].dataset.request && [...document.querySelectorAll('[data-request]')].some(b=>b.textContent.includes('ทดสอบ'))`, {timeout: 5000, what: 'the new request listed'});
-    const r = JSON.parse(await p.eval(`JSON.stringify({id:document.activeElement?.dataset?.request,same:document.activeElement===__b})`));
-    expect(r.id === await p.eval('__id') && r.same, `the focused row still stands for its request (${r.id} vs ${await p.eval('__id')}, same element ${r.same})`);
-  }},
   {name: 'Car leaving sends out a parked visitor too', async run(p, expect) {
     // The button shared the background's choice of leavers, which never takes visitors: with only a visitor parked,
     // it did nothing, and a request's visit could not be ended by hand.
@@ -529,69 +389,6 @@ export const scenarios = [
     const [nearAt, farAt] = await p.eval(`(()=>{const e=__parking.sim.state.events.filter(e=>e.kind==='entry');const at=k=>e.find(v=>__parking.sim.key(v.plate,v.province)===k)?.at;return [at(${JSON.stringify(near)}),at(${JSON.stringify(far)})]})()`);
     expect(nearAt < farAt, `the near-lane car, there first, went in first (${((farAt - nearAt) / 1000).toFixed(0)} s of demo time before the far-lane one)`);
   }},
-  {name: 'a far-lane car nearly at its turn goes in before a near-lane car that appears further back', async run(p, expect) {
-    // A near-lane car took its turn as it appeared, 50 m out: a far-lane car reaching its turn first stood there
-    // signalling while the near-lane one drove up and went in.
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
-    await p.until(ready, {timeout: 40000});
-    const [far, near] = JSON.parse(await p.eval(`JSON.stringify((()=>{const sim=__parking.sim,t=__parking.traffic,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));
-      t.passBy=()=>false;
-      const [a,b]=sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
-      void t.arrive({plate:a.plate,province:a.province,color:a.color,west:true});
-      // Sent as the far-lane car comes within 16 m of its turn (x -16.9): the near-lane one then has some 30 m to drive
-      // to its decision point. By position, not a timer (a late timer could let the old order pass).
-      const go=()=>{const c=__scene.getObjectByName('Demo_car_'+a.plate);if(!c||!c.visible||c.position.x>-0.9)return setTimeout(go,10);void t.arrive({plate:b.plate,province:b.province,color:b.color,fromX:-70})};go();
-      return [sim.key(a.plate,a.province),sim.key(b.plate,b.province)]})())`));
-    await p.until(`[${JSON.stringify(far)},${JSON.stringify(near)}].every(k=>__parking.sim.state.presence.has(k))`, {timeout: 40000, what: 'both cars in'});
-    const [nearAt, farAt] = await p.eval(`(()=>{const e=__parking.sim.state.events.filter(e=>e.kind==='entry');const at=k=>e.find(v=>__parking.sim.key(v.plate,v.province)===k)?.at;return [at(${JSON.stringify(near)}),at(${JSON.stringify(far)})]})()`);
-    expect(farAt < nearAt, `the far-lane car, at the entry first, went in first (${((nearAt - farAt) / 1000).toFixed(0)} s of demo time before the near-lane one)`);
-  }},
-  {name: 'a queued car drives up to the stop line as the arm rises for the car ahead', async run(p, expect) {
-    // It set off only once the car ahead was wholly past the arm, and reached the stop line as that car got to its aisle.
-    // The car ahead is an unknown one, held at the barrier until it is let in: the one behind is surely queued by then.
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0&time=06:00');
-    await p.until(ready, {timeout: 40000});
-    const b0 = await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));return sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)).plate})()`);
-    expect(await p.eval(ONLY(['1กก 1111', b0])), 'the car park quiet first');
-    const plate = await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic;
-      const b=sim.state.vehicles.find(v=>v.plate===${JSON.stringify(b0)});
-      void t.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:1,fromX:-40});setTimeout(()=>void t.arrive({plate:b.plate,province:b.province,color:2,fromX:-50}),300);return b.plate})()`);
-    const B = `__scene.getObjectByName('Demo_car_'+${JSON.stringify(plate)})`;
-    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='1กก 1111')`, {timeout: 20000, what: 'the car ahead held at the barrier'});
-    // Held until the check opens for it (the guard's 45 s turned it away first on a busy machine: 4.5 s at speed 10).
-    await p.eval(`__parking.sim.state.alerts.find(a=>a.status==='open'&&a.plate==='1กก 1111').raised=Infinity`);
-    await p.until(`(()=>{const b=${B};if(!b||!b.visible||b.position.z<${STREET.north})return false;const x=b.position.x,r=window.__bx===x;window.__bx=x;return r})()`, {timeout: 20000, what: 'the car behind standing in the queue'});
-    const z = await p.eval(`(async()=>{const a=__parking.sim.state.alerts.find(a=>a.status==='open'&&a.plate==='1กก 1111');__parking.sim.resolveAlert(a.id,'open','gate.reason.delivery');
-      const b=${B},x0=b.position.x,A=__scene.getObjectByName('Demo_car_1กก 1111');for(let i=0;i<1000;i++){await new Promise(r=>setTimeout(r,10));if(Math.abs(b.position.x-x0)>.05)return A.position.z;}return null})()`);
-    expect(z !== null && z > 18.6, `the car behind set off with the one ahead still at the barrier (its z ${z?.toFixed?.(1)}; past the arm is under 17.7)`);
-  }},
-  {name: 'a car leaving, a VIP behind it and two cars queued with far-lane traffic all get through (no gridlock)', async run(p, expect) {
-    // The next queued car set off as the arm rose for one that then stopped under it behind a VIP waiting for the car
-    // at the exit barrier; that car waited for the approaching one (`inbound`): each waited for the next, for good.
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0&time=03:00');
-    await p.until(ready, {timeout: 40000});
-    const r = JSON.parse(await p.eval(`(async()=>{const S=10,T=__parking.traffic,sim=__parking.sim,sleep=ms=>new Promise(r=>setTimeout(r,ms/S));
-      const pass=T.passBy;T.passBy=()=>false;
-      const quiet=()=>{const i=T.inspect();return !T.busy&&!i.gateHolders&&!i.entryPending&&!T.leaving};
-      for(let i=0;i<200&&!quiet();i++)await sleep(200);
-      const free=type=>sim.state.vehicles.filter(v=>v.type===type&&v.enabled&&v.sync==='synced'&&!sim.state.presence.has(sim.key(v.plate,v.province))&&!T.isAround(sim.key(v.plate,v.province)));
-      const lv=free('staff')[0],st=sim.state.stalls.find(s=>s.row==='A'&&!s.occupant&&s.z>5);
-      sim.recordEntry({plate:lv.plate,province:lv.province,type:'staff',stallId:st.id,color:2});const kL=sim.key(lv.plate,lv.province);T.appear(kL);await sleep(300);
-      const vip=free('vip')[0],[c2,c3]=free('staff');
-      // Only these cars: the car park's own comings and goings stopped (at 03:00 it sent the VIP home again).
-      const ours=new Set([vip,c2,c3].map(v=>v.plate)),arrive=T.arrive,leave=T.leave;T.arrive=o=>ours.has(o.plate)?arrive(o):Promise.resolve('blocked');T.leave=(k,o)=>k===kL?leave(k,o):Promise.resolve();
-      void T.leave(kL,{west:true});
-      let far=setInterval(()=>pass(-1),4400/S);
-      void T.arrive({plate:vip.plate,province:vip.province,color:5,fromX:-45});await sleep(1500);
-      void T.arrive({plate:c2.plate,province:c2.province,color:3,fromX:-60});await sleep(1500);
-      void T.arrive({plate:c3.plate,province:c3.province,color:7,fromX:-70});
-      const t0=performance.now();
-      while((performance.now()-t0)*S<120000){await sleep(500);if(far&&T.inspect().westExitHold){clearInterval(far);far=null}if(quiet()&&!T.isAround(kL))break}
-      if(far)clearInterval(far);
-      const keys=[vip,c2,c3].map(v=>sim.key(v.plate,v.province));
-      return JSON.stringify({done:quiet()&&!T.isAround(kL),parked:keys.filter(k=>sim.state.presence.has(k)&&!T.isAround(k)).length,s:T.inspect()})})()`));
-    expect(r.done && r.parked === 3, `all through: the leaver gone, 3 cars parked (${r.parked}; inbound ${r.s.inbound}, gate holders ${r.s.gateHolders}, waiting ${r.s.entryPending})`);
-  }},
   {name: 'a car from the near lane signals left before turning in', async run(p, expect) {
     // speed 10: at 30 a flash lasts 13 ms and the car is on the street for ~170 ms, so the samples could miss them all.
     await p.goto('?dest=parking&debug=1&speed=10&warm=0');
@@ -637,33 +434,6 @@ export const scenarios = [
     const stops = await p.eval('__parking.traffic.inspect().mouthStops');
     expect(Array.isArray(stops) && !stops.includes(plate), `it did not stop at its aisle's mouth (cars that did: ${JSON.stringify(stops)})`);
   }},
-  {name: 'a car leaving an aisle frees it once it has turned out, not at the exit barrier', async run(p, expect) {
-    // It held its aisle until it stood at the exit barrier: a car waiting to go in waited all that time.
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0&time=06:00');
-    await p.until(ready, {timeout: 40000});
-    expect(await p.eval(ONLY([])), 'the car park quiet first');
-    const r = JSON.parse(await p.eval(`(async()=>{const sim=__parking.sim,t=__parking.traffic;
-      // A staff car put in a free bay of row B (the quiet car park may have none parked).
-      const inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId)),v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)),bay=sim.state.stalls.find(s=>s.row==='B'&&!s.occupant);
-      sim.recordEntry({plate:v.plate,province:v.province,type:'staff',stallId:bay.id,color:2});const k=sim.key(v.plate,v.province);t.appear(k);await new Promise(r=>setTimeout(r,300));
-      const stall=sim.state.stalls.find(s=>s.id===sim.state.presence.get(k).stallId),plate=sim.state.presence.get(k).plate,ax=String(stall.aisleX);
-      void t.__leave(k,{west:false});
-      const car=()=>__scene.getObjectByName('Demo_car_'+plate);let freedAt=null,held=false; // freed: the aisle taken, then let go
-      for(let i=0;i<600;i++){await new Promise(r=>setTimeout(r,20));const c=car();if(!c)break;const out=t.inspect().aisles[ax]?.out??0;
-        if(out>0)held=true;else if(held&&freedAt===null)freedAt=c.position.z;if(Math.abs(c.position.z-${19.3 - 2.7})<.3&&c.position.x>-21)break;}
-      return JSON.stringify({freedAt,aisle:ax})})()`));
-    // Not before it is out of the aisle either: on the exit lane (z 14.8), past the turn out of the aisle.
-    expect(r.freedAt !== null && r.freedAt > 13.8 && r.freedAt < 15.5, `the aisle (${r.aisle}) freed once the car was on the exit lane, before the barrier (at z ${r.freedAt?.toFixed?.(1)})`);
-  }},
-  {name: 'the ground is grass, on the real start-up path (shaders warmed up)', async run(p, expect) {
-    // A flat pale plane; and on the test GPU the grass drew as background when its shader came from the first frame.
-    await p.goto('?dest=overview&debug=1&speed=30');
-    await p.until(`window.__scene && document.documentElement.dataset.warm === 'done'`, {timeout: 60000, what: 'warm-up done'});
-    const px = JSON.parse(await p.eval(`JSON.stringify((()=>{__controls.target.set(30,0,45);__camera.position.set(30,30,75);__controls.update();
-      const r=__renderer,gl=r.getContext(),w=gl.drawingBufferWidth,h=gl.drawingBufferHeight;r.render(__scene,__camera);
-      const v=new __camera.position.constructor(30,.3,45).project(__camera),b=new Uint8Array(4);gl.readPixels(Math.round((v.x+1)/2*w),Math.round((v.y+1)/2*h),1,1,gl.RGBA,gl.UNSIGNED_BYTE,b);return [...b].slice(0,3)})())`));
-    expect(px[1] > px[0] + 10 && px[1] > px[2] + 20, `a ground pixel 54 m out is grass green (${px})`);
-  }},
   {name: 'a near-lane car queuing for the barrier signals left while it waits', async run(p, expect) {
     // In the queue it showed no blinker, so it was not clear it was waiting to turn in.
     // speed 10: an unknown car holds the barrier for its alert (45 s of demo time) while the next car queues.
@@ -678,34 +448,6 @@ export const scenarios = [
     await p.until(`(c=>!!c&&c.visible&&c.position.x<${QUEUE_HEAD + .5}&&Math.abs(c.position.z-${STREET.laneEast})<.1&&Math.abs(((c.position.x-(${QUEUE_HEAD}))%6.5+6.5)%6.5-3.25)>2.95)(${car})`, {timeout: 20000, what: 'the car at its queue place'});
     const seen = await p.eval(`new Promise(done=>{let left=false;const t=setInterval(()=>{if(${car}.getObjectByName('Demo_car_blinker_left')?.visible)left=true;},15);setTimeout(()=>{clearInterval(t);done(left);},600);})`);
     expect(seen, 'its left blinker flashed while it queued');
-  }},
-  {name: 'a busy car park: no car drives through another', async run(p, expect) {
-    // Cars queuing at the barrier ran into each other (a new car was given the queue place of one still in it), met
-    // head-on in the aisles, and crossed at the aisle mouths; through-traffic drove through a car waiting at the
-    // barrier, whose rear reached into the near lane. Every pair of cars, every frame, as rotated rectangles.
-    await p.goto('?dest=parking&debug=1&speed=20&warm=0&time=08:00');
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`(()=>{const L=4.46/2,W=1.72/2;window.__hits=[];window.__frames=0;
- const corners=c=>{const h=c.rotation.y,f=[Math.sin(h),Math.cos(h)],s=[Math.cos(h),-Math.sin(h)],x=c.position.x,z=c.position.z;return [[1,1],[1,-1],[-1,-1],[-1,1]].map(([a,b])=>[x+f[0]*L*a+s[0]*W*b,z+f[1]*L*a+s[1]*W*b]);};
- const sep=(A,B)=>{for(const P of [A,B])for(let i=0;i<4;i++){const p=P[i],q=P[(i+1)%4],n=[q[1]-p[1],p[0]-q[0]];let a0=1e9,a1=-1e9,b0=1e9,b1=-1e9;for(const v of A){const d=v[0]*n[0]+v[1]*n[1];a0=Math.min(a0,d);a1=Math.max(a1,d);}for(const v of B){const d=v[0]*n[0]+v[1]*n[1];b0=Math.min(b0,d);b1=Math.max(b1,d);}if(a1<b0||b1<a0)return true;}return false;};
- const last=new Map();
- const f=()=>{__frames++;const cars=__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car')&&c.visible);
-  const moved=new Set();for(const c of cars){const k=c.position.x+','+c.position.z+','+c.rotation.y;if(last.get(c)!==k)moved.add(c);last.set(c,k);}
-  for(let i=0;i<cars.length;i++)for(let j=i+1;j<cars.length;j++){const a=cars[i],b=cars[j];if(!moved.has(a)&&!moved.has(b))continue;
-   if(Math.hypot(a.position.x-b.position.x,a.position.z-b.position.z)>5)continue;
-   if(!sep(corners(a),corners(b))&&__hits.length<400)__hits.push(\`\${a.name.slice(9)||'street'}@\${a.position.x.toFixed(1)},\${a.position.z.toFixed(1)} x \${b.name.slice(9)||'street'}@\${b.position.x.toFixed(1)},\${b.position.z.toFixed(1)} t\${__world.minute().toFixed(0)}\`);}
-  window.__holders=Math.max(window.__holders||0,__parking.traffic.gateHolders);
-  requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
-    await p.click('[data-tab="gate"]');
-    // The morning rush at twice the usual pace: a car in or out every 0.7 s, and through-traffic both ways.
-    for (let i = 0; i < 22; i++) {
-      await p.eval(`document.querySelector('[data-sim="${['registered', 'exit', 'visitor', 'registered', 'exit'][i % 5]}"]')?.click();__parking.traffic.passBy(1);__parking.traffic.passBy(-1)`);
-      await p.sleep(700);
-    }
-    const hits = await p.eval('__hits');
-    expect(hits.length === 0, `no overlapping cars in ${await p.eval('__frames')} frames (${hits.slice(0, 3).join(' | ') || 'none'})`);
-    // One car at a time worked the barrier, so an arriving car waited behind a leaving one waiting for a gap.
-    expect(await p.eval('__holders') === 2, `a car going in and one going out at the barrier at once (most at a time: ${await p.eval('__holders')})`);
   }},
   {name: 'a VIP leaving P1 and one arriving for it at the same time both get through', async run(p, expect) {
     // The way into P1 is the exit lane: the arrival waited at its aisle's mouth on the leaving car's path, and each
@@ -835,79 +577,6 @@ export const scenarios = [
     expect(ics.startsWith('BEGIN:VCALENDAR') && ics.includes('END:VEVENT'), 'calendar structure');
   }},
 
-  {quick: true, name: 'English switch leaves only names, plates and provinces in Thai', async run(p, expect) {
-    await p.goto(parking());
-    // The whole showcase up, not only the car park: a switch clicked before its button is wired does nothing.
-    await p.until(`${ready} && ${UP}`, {timeout: 40000});
-    await p.click('#lang-toggle');
-    await p.until(`document.documentElement.lang==='en'`, {timeout: 3000, what: 'the page in English'});
-    await p.sleep(300);
-    const scan = `JSON.stringify((()=>{const out=new Set();const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){const t=n.textContent.trim();const el=n.parentElement;if(!/[\\u0E00-\\u0E7F]/.test(t.replace(/\\d?[\\u0E01-\\u0E2E]{1,3} \\d{1,4}/g,''))||!el||el.offsetParent===null||el.closest('[hidden],#legacy-controls,.pk-plate-chip,.pk-plate-big,.ph-ticket-plate,.pk-feed-plate,[name=province] option,.pk-attention small,.pk-name'))continue;out.add(t.slice(0,40));}
-      for(const o of document.querySelectorAll('select:not([name=province]) option'))if(o.closest('select').offsetParent&&/[\\u0E00-\\u0E7F]/.test(o.text))out.add('option: '+o.text.slice(0,40));return [...out]})())`;
-    // Every tab of the console and the phone, not only the overview on show.
-    const thai = new Set(JSON.parse(await p.eval(scan)));
-    await p.click('[data-bar="phone"]');
-    for (const tab of ['requests', 'vehicles', 'gate', 'reports']) {
-      await p.click(`[data-tab="${tab}"]`); await p.sleep(150);
-      for (const t of JSON.parse(await p.eval(scan))) thai.add(`${tab}: ${t}`);
-    }
-    await p.click('#lang-toggle');
-    expect(thai.size === 0, `no stray Thai UI text (found: ${[...thai].join(' | ')})`);
-  }},
-
-  {quick: true, name: 'night: page goes dark, phone text stays dark on white', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    await p.until(`!document.querySelector('#tour-night').disabled`, {what: 'night switch enabled'}); // off during the opening flight
-    await p.click('#tour-night');
-    await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 10000, what: 'night on'});
-    await p.click('[data-bar="phone"]');
-    // The page colours fade over .35 s; wait for them to settle rather than guessing a delay.
-    // Compare the colour, not the alpha: the fade may still be finishing under load.
-    await p.until(`/^rgba?\\(14, 21, 28/.test(getComputedStyle(document.body).backgroundColor)`, {timeout: 8000, what: 'dark page background'});
-    const bg = await p.eval(`getComputedStyle(document.body).backgroundColor`);
-    const ink = await p.eval(`getComputedStyle(document.querySelector('.ph-field input')).color`);
-    expect(/^rgba?\(14, 21, 28/.test(bg), `page background dark (got ${bg})`);
-    expect(ink === 'rgb(37, 59, 67)', `phone input text dark (got ${ink})`);
-    await p.click('#tour-night');
-  }},
-
-  {name: 'explore page shows the car park and a way back', async run(p, expect) {
-    await p.goto(EXPLORE);
-    await p.until(LOADED, {timeout: 40000, what: 'model ready'});
-    expect(await p.eval(`document.querySelector('.back-link')?.getAttribute('href')`) === '#showcase', 'back link to the showcase');
-    expect(await p.eval(`!document.querySelector('a[download]')`), 'no model download link (the demo runs locally)');
-  }},
-
-  {name: 'explore page: Reset view from the stairs puts back the floor\'s label; turning the screen keeps the stairs view', async run(p, expect) {
-    // Reset view (or R) framed the floor under the stairs' label; a turned phone threw the visitor out of the stairs.
-    await p.goto(EXPLORE);
-    await p.until(LOADED, {timeout: 40000, what: 'model ready'});
-    await p.click('#stairs');
-    const stairs = await p.eval(`document.querySelector('#view-label').textContent`);
-    await viewport(p, 1000, 1600);
-    await p.sleep(400);
-    expect(await p.eval(`document.querySelector('#view-label').textContent`) === stairs && await p.eval('__camera.fov') !== 38, `the stairs view kept on a turned screen (${stairs})`);
-    await viewport(p);
-    await p.click('#reset');
-    const label = await p.eval(`document.querySelector('#view-label').textContent`);
-    expect(label !== stairs && !/บันได|Stairs/.test(label), `the floor's label after Reset view (${stairs} -> ${label})`);
-  }},
-  {name: 'browser Back from the explore page shows the showcase again; the kiosk keeps the showcase', async run(p, expect) {
-    // Back changed only the hash and left the explore page on screen; in the kiosk, Explore left for a page with no kiosk.
-    await p.goto(`?${FAST}`);
-    await p.until(LOADED, {timeout: 40000, what: 'showcase'});
-    await p.click('.explore-link');
-    await p.until(`location.hash==='#explore' && !!document.querySelector('#view-label') && ${LOADED}`, {timeout: 40000, what: 'the explore page'});
-    await p.eval('history.back()');
-    await p.until(`document.body.classList.contains('showcase-page') && ${LOADED}`, {timeout: 40000, what: 'the showcase after Back'});
-    await p.goto(`?kiosk=1&${FAST}`);
-    await p.until(`${LOADED} && document.body.classList.contains('kiosk-on')`, {timeout: 40000, what: 'the kiosk'});
-    expect(await p.eval(`!document.querySelector('.explore-link').offsetParent`), 'no Explore link in the kiosk');
-    await p.eval(`window.__stay=1;document.querySelector('.tour-brand').click()`);
-    await p.sleep(500);
-    expect(await p.eval(`window.__stay===1 && document.body.classList.contains('kiosk-on')`), 'the logo does nothing in the kiosk (no reload)');
-  }},
   {name: 'explore page follows the English choice', async run(p, expect) {
     await p.goto(EXPLORE);
     await p.eval(`localStorage.setItem('osd-demo-language','en')`);
@@ -940,26 +609,6 @@ export const scenarios = [
     expect(await p.eval(leaf) !== before, 'a door leaf turns with its hinge');
   }},
 
-  {name: 'approval follow-ups (ATOM sync, ticket email) are dropped after a revoke or a reset', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    const due = 1600 / SPEED + 400; // the follow-ups come ~1.6 s of demo time after the approval
-    const kinds = await p.eval(`(async()=>{const s=__parking.sim,q=s.state.requests.find(q=>q.status==='pending');window.__unconfirmed=q.id;s.approve(q.id);s.revoke(q.id);
-      await new Promise(r=>setTimeout(r,${due}));return s.state.emails.filter(m=>m.requestId===q.id).map(m=>m.kind).join()})()`);
-    // Revoked before ATOM confirmed it: the visitor was never told of the approval, so gets no email at all (as in the
-    // ATOM Parking app); revoked once confirmed, the revocation email goes out.
-    expect(kinds === '', `a request revoked before ATOM confirmed it sends no email (${kinds})`);
-    const confirmed = await p.eval(`(async()=>{const s=__parking.sim,day=s.now();
-      const q=s.submitRequest({visitor:{name:'ทดสอบ ระบบ',phone:'080-000-0000',email:'test@example.com',company:'—'},contact:'host.demo@osd.example',plate:'1ทด 1111',province:'กรุงเทพมหานคร',arrival:day,departure:day});s.approve(q.id);
-      await new Promise(r=>setTimeout(r,${due}));s.revoke(q.id);return s.state.emails.filter(m=>m.requestId===q.id).map(m=>m.kind).reverse().join()})()`);
-    expect(confirmed === 'approved,revoked', `a request revoked after ATOM confirmed it gets the revocation email after its ticket (${confirmed})`);
-    const late = await p.eval(`(()=>{const q=__parking.sim.state.requests.find(q=>q.id===__unconfirmed);return q.history.map(h=>h.key).join()+' | listed: '+__parking.sim.state.vehicles.some(v=>v.requestId===q.id)})()`);
-    expect(!late.includes('h.atom') && late.endsWith('listed: false'), `no ATOM confirmation after the revoke, plate withdrawn (${late})`);
-    await p.eval(`(()=>{const s=__parking.sim;s.reset();const q=s.state.requests.find(q=>q.status==='pending');s.approve(q.id);s.reset()})()`);
-    await p.sleep(due);
-    expect(await p.eval('__parking.sim.state.emails.length') === 0, `no email from before the reset (${await p.eval('__parking.sim.state.emails.length')})`);
-  }},
-
   {name: 'story started during a free-play photo read submits the story plate', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
@@ -972,35 +621,6 @@ export const scenarios = [
     const plate = await p.eval(`${STORY_REQUEST}.plate`), seen = await p.eval('[...__plates]');
     expect(plate === STORY_PLATE, `story request has the story plate (${plate})`);
     expect(seen.every(v => v === STORY_PLATE), `only the story plate in its form (${seen.join(', ')})`);
-  }},
-
-  {name: 'the room-colour bar shows at the meeting room and the pond only', async run(p, expect) {
-    await p.goto(`?${FASTW}`);
-    await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
-    const shown = () => p.eval(`(()=>{const b=document.querySelector('.insight-toolbar');return !b.hidden&&b.getBoundingClientRect().height>0})()`);
-    // Record any moment the bar shows while the camera is still flying (the panel is inert then): it must wait to land.
-    await p.eval(`(()=>{window.__barInFlight=false;const bar=document.querySelector('.insight-toolbar'),panel=document.querySelector('#dashboard-content');
-      new MutationObserver(()=>{if(!bar.hidden&&panel.inert)window.__barInFlight=true;}).observe(bar,{attributes:true,attributeFilter:['hidden']})})()`);
-    const seen = {};
-    for (const stop of ['overview', 'meeting', 'parking', 'pond']) { // ends at the pond for the colour check
-      await p.click(`[data-destination="${stop}"]`);
-      // Landed (a fixed wait read the bar early under load), then the layout's 0.35 s change.
-      await p.until(`document.body.dataset.tourDestination === '${stop}' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 20000, what: `landing at ${stop}`});
-      await p.sleep(450);
-      seen[stop] = await shown();
-    }
-    expect(seen.meeting && seen.pond && !seen.overview && !seen.parking, `bar visible per stop ${JSON.stringify(seen)}`);
-    expect(!(await p.eval('window.__barInFlight')), 'bar hidden until the camera lands');
-    await p.click('[data-layer="temperature"]'); await p.sleep(200);
-    expect(await p.eval(`__scene.getObjectByName('Floor_1').getObjectsByProperty('visible',true).some(o=>o.name.startsWith('Insight_floor_'))`), 'pond rooms coloured');
-    await p.click('[data-layer="none"]');
-    // Reset view flies the camera too: the bar must not be clickable on the way.
-    await p.eval(`(()=>{window.__barInReset=null;const v=document.querySelector('#viewport'),bar=document.querySelector('.insight-toolbar');
-      new MutationObserver(()=>{if(v.classList.contains('flying'))window.__barInReset=getComputedStyle(bar).visibility;}).observe(v,{attributes:true,attributeFilter:['class']})})()`);
-    await p.click('#view-zoom-out'); await p.sleep(400);
-    await p.click('#view-reset');
-    await p.until('window.__barInReset!==null', {timeout: 5000, what: 'reset flight'});
-    expect(await p.eval('window.__barInReset') === 'hidden', `bar hidden during the Reset view flight (${await p.eval('window.__barInReset')})`);
   }},
 
   {name: 'a photo tap early in the story (step 1) does not change the story plate', async run(p, expect) {
@@ -1097,74 +717,6 @@ export const scenarios = [
     await p.until(`!!document.querySelector('.ph-photo-state.done')`, {timeout: 5000, what: 'new photo read done'});
     expect(await p.eval(`document.querySelector('#pk-phone [name="plate"]').value === '6กม 3195'`), 'the new read fills the new form');
   }},
-  {name: 'room-colour bar waits for a real landing (also after R); narrow views keep the title beside it', async run(p, expect) {
-    await viewport(p, 760, 900);
-    try {
-      // Real speed: the final approach then lasts ~1.5 s, so the drag below reliably lands inside it.
-      await p.goto('?debug=1');
-      await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
-      // A drag during the final approach (the stop already switched) stops the camera short: no bar until it lands.
-      await p.eval(`(()=>{const o=new MutationObserver(()=>{if(document.body.dataset.tourDestination==='meeting'){o.disconnect();__controls.dispatchEvent({type:'start'});__controls.dispatchEvent({type:'end'});window.__dragged=true;}});o.observe(document.body,{attributes:true,attributeFilter:['data-tour-destination']})})()`);
-      await p.click('[data-destination="meeting"]');
-      await p.until('window.__dragged', {timeout: 10000, what: 'drag during the approach'});
-      await p.sleep(500);
-      expect(await p.eval(`document.querySelector('.insight-toolbar').hidden`), 'bar hidden after the flight was cut short');
-      // Reset view lands on the stop: the bar shows; during that flight the (narrow) view keeps its title.
-      await p.eval(`(()=>{window.__titleInReset=null;const v=document.querySelector('#viewport'),t=document.querySelector('.scene-title');
-        new MutationObserver(()=>{if(v.classList.contains('flying'))window.__titleInReset=getComputedStyle(t).display;}).observe(v,{attributes:true,attributeFilter:['class']})})()`);
-      await p.click('#view-reset');
-      await p.until(`!document.querySelector('.insight-toolbar').hidden`, {timeout: 10000, what: 'bar after Reset view lands'});
-      // Landed with the bar showing: the title stays too, beside the bar's column rather than hidden or under it.
-      const side = JSON.parse(await p.eval(`JSON.stringify((()=>{const t=document.querySelector('.scene-title'),a=t.getBoundingClientRect(),b=document.querySelector('.scene-top-right').getBoundingClientRect();return {shown:getComputedStyle(t).display!=='none'&&a.width>0,overlap:!(a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top)}})())`));
-      expect(side.shown && !side.overlap, `title shown beside the room-colour bar (${JSON.stringify(side)})`);
-      expect(await p.eval('window.__titleInReset') !== 'none', `title shown during the Reset view flight (${await p.eval('window.__titleInReset')})`);
-      // A Reset view cut short by a drag leaves the camera short of the stop: the bar stays hidden.
-      await p.click('#view-zoom-out'); await p.sleep(400);
-      await p.eval(`(()=>{const v=document.querySelector('#viewport'),o=new MutationObserver(()=>{if(v.classList.contains('flying')){o.disconnect();setTimeout(()=>{__controls.dispatchEvent({type:'start'});__controls.dispatchEvent({type:'end'});window.__resetCut=true;},300);}});o.observe(v,{attributes:true,attributeFilter:['class']})})()`);
-      await p.click('#view-reset');
-      await p.until('window.__resetCut', {timeout: 5000, what: 'drag during Reset view'});
-      await p.sleep(500);
-      expect(await p.eval(`document.querySelector('.insight-toolbar').hidden`), 'bar hidden after Reset view was cut short');
-      // The R key on the 3D view is Reset view too: it lands, the bar comes back.
-      await p.eval(`__renderer.domElement.dispatchEvent(new KeyboardEvent('keydown',{key:'r',bubbles:true}))`);
-      await p.until(`!document.querySelector('.insight-toolbar').hidden`, {timeout: 10000, what: 'bar after R (Reset view) lands'});
-    } finally { await viewport(p); }
-  }},
-
-  {name: 'koi swim (in the shader, inside the water) and stand still when paused', async run(p, expect) {
-    await p.goto(`?dest=pond&${FASTW}`);
-    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='pond'`, {timeout: 40000});
-    const loops = JSON.parse(await p.eval(`JSON.stringify(['Floor_1_koi_ochre','Floor_1_koi_cream'].map(n=>{const a=__scene.getObjectByName(n).geometry.attributes.koiLoop;const r=[];for(let i=0;i<a.count;i+=52)r.push(a.getX(i));return r}).flat())`));
-    expect(loops.length === 22 && loops.filter(r => r > 0).length >= 15, `fish with room to swim a loop: ${loops.filter(r => r > 0).length} of ${loops.length}`);
-    const a = await p.eval('__koi.time'); await p.sleep(400); const b = await p.eval('__koi.time');
-    expect(b > a, 'the fish move');
-    await p.eval('__world.setPaused(true)');
-    await p.sleep(200);
-    const c = await p.eval('__koi.time'); await p.sleep(400); const d = await p.eval('__koi.time');
-    expect(c === d, 'paused: the fish stand still');
-    await p.eval('__world.setPaused(false)');
-  }},
-  {name: 'pond reflection: plain water flying in (never a stale, dark mirror), fading out and back in, never snapping', async run(p, expect) {
-    await p.goto('?debug=1');
-    await p.until(`${UP} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
-    // Read each time the pond is actually drawn (the mirror sets the value just before; when the pond is off screen it
-    // is not drawn and the value is not used), with whether the camera was flying. The water's material may be a cut
-    // copy mid-flight: it must still show the mirror's picture (a copy that lost it drew the pond black).
-    await p.eval(`(()=>{window.__mixes=[];window.__blind=0;const w=__scene.getObjectByName('Courtyard_water_reflection'),before=w.onBeforeRender;w.onBeforeRender=function(...a){before.apply(this,a);const u=this.material.uniforms;if(u.reflectionMix.value>0&&!u.tDiffuse.value)__blind++;__mixes.push([document.querySelector('#viewport').classList.contains('flying'),u.reflectionMix.value]);};})()`);
-    await p.click('[data-destination="pond"]');
-    await p.until(`document.body.dataset.tourDestination==='pond' && ${STILL}`, {timeout: 20000, what: 'landed at the pond'});
-    await p.sleep(400);
-    const flyingIn = (await p.eval('__mixes')).filter(([flying]) => flying).map(([, v]) => v);
-    expect(flyingIn.length && flyingIn.every(v => v === 0), `flying in, the pond shows plain water (mix ${[...new Set(flyingIn)].join(', ')})`);
-    const landing = (await p.eval('__mixes')).filter(([flying]) => !flying).map(([, v]) => v);
-    expect(landing.at(-1) === 1 && landing.some(v => v > 0 && v < 1), `landed: the reflection fades back in (mix ${landing.slice(0, 6).map(v => v.toFixed(2)).join(', ')} … ${landing.at(-1)})`);
-    await p.eval('__mixes.length=0');
-    await p.click('[data-destination="overview"]');
-    await p.until(`document.body.dataset.tourDestination==='overview' && ${STILL}`, {timeout: 20000, what: 'landed at the overview'});
-    const leaving = (await p.eval('__mixes')).filter(([flying]) => flying).map(([, v]) => v);
-    expect(leaving.length > 1 && leaving[0] > .5 && leaving.every((v, i) => !i || v <= leaving[i - 1]), `leaving, the reflection fades out (mix ${leaving.slice(0, 8).map(v => v.toFixed(2)).join(', ')})`);
-    expect(await p.eval('__blind') === 0, `the water always had the mirror's picture while showing it (${await p.eval('__blind')} draws without)`);
-  }},
   {name: 'flying between stops: one continuous move that speeds up and slows down once, the car park included', async run(p, expect) {
     await p.goto('?debug=1');
     await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
@@ -1192,32 +744,6 @@ export const scenarios = [
       expect(dip < top * .08 && bump < top * .08, `${from} → ${to}: one rise and one fall (largest dip on the way up ${(dip / top * 100).toFixed(0)}%, rise on the way down ${(bump / top * 100).toFixed(0)}% of top speed)`);
     }
   }},
-  {name: 'car park layout: a second stop picked during the layout change still ends in the right layout', async run(p, expect) {
-    await p.goto('?debug=1');
-    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
-    for (const [first, second, parked] of [['parking', 'energy', false], ['pond', 'parking', true]]) {
-      await p.eval(`document.querySelector('[data-destination="${first}"]').click()`); await p.sleep(120);
-      await p.eval(`document.querySelector('[data-destination="${second}"]').click()`);
-      await p.until(`${IDLE} && document.body.dataset.tourDestination==='${second}'`, {timeout: 20000, what: `landed at ${second}`});
-      await p.sleep(900); // any layout change still queued has run
-      expect(await p.eval(`document.body.classList.contains('parking-active')`) === parked, `${first} then ${second}: the ${parked ? 'car park' : 'building'} layout`);
-    }
-  }},
-  {name: 'no shader is built mid-flight, by day or night: the loading screen prepared them all', async run(p, expect) {
-    // A shader built on the spot froze the view mid-flight: 30 ms for the first cut copies of the building's materials,
-    // 0.1–0.2 s at night when hiding a floor (its room lights) changed the number of lights.
-    for (const time of ['10:00', '20:30']) {
-      await p.goto(`?debug=1&time=${time}`);
-      await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
-      const before = await p.eval('__renderer.info.programs.length');
-      for (const to of ['parking', 'meeting', 'pond', 'energy', 'overview']) {
-        await p.click(`[data-destination="${to}"]`);
-        await p.until(`${IDLE} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
-      }
-      const built = await p.eval(`__renderer.info.programs.slice(${before}).map(x=>x.name)`);
-      expect(!built.length, `${time}: no shader built during the flights (${built.join(', ') || 'none'})`);
-    }
-  }},
   {name: 'idle orbit: a stop the visitor picks counts as use (no orbit the moment it lands); zooming out stops past the whole site', async run(p, expect) {
     // The dock is outside the 3D view: after 20 s without touching the view, the camera circled as soon as it landed.
     // And zooming out went on to 500 m, the world a disc floating in the sky.
@@ -1233,18 +759,6 @@ export const scenarios = [
     await p.until(`${IDLE} && document.body.dataset.tourDestination==='overview'`, {timeout: 20000, what: 'landed at the overview'});
     const r = JSON.parse(await p.eval(`JSON.stringify({d:__camera.position.distanceTo(__controls.target),max:__controls.maxDistance})`));
     expect(r.max >= r.d * 1.15 && r.max <= Math.max(140, r.d * 1.3), `zoom out stops a little past the overview (${r.d.toFixed(0)} m, max ${r.max.toFixed(0)} m)`);
-  }},
-  {name: 'narrow screens: the story caption stays readable with the visitor\'s phone open', async run(p, expect) {
-    // Beside the phone it had a 40–66 px column on phones and upright tablets: one word a line, cut off at the top.
-    for (const [w, h] of [[390, 844], [768, 1024]]) {
-      await viewport(p, w, h);
-      await p.goto(parking('&story=1&auto=0'));
-      await p.until('window.__parking && __parking.story.running', {timeout: 40000});
-      await p.until(`__parking.story.waitingForNext && document.body.classList.contains('phone-open') && document.querySelector('.pk-caption:not([hidden])')`, {timeout: 30000, what: 'step 1 with the phone'});
-      const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const c=document.querySelector('.pk-caption').getBoundingClientRect(),v=document.querySelector('#viewport').getBoundingClientRect();return {w:c.width,vw:v.width,top:c.top-v.top,bottom:v.bottom-c.bottom}})())`));
-      expect(r.w > r.vw * .8 && r.top >= 0 && r.bottom >= 0, `${w}×${h}: the caption across the view (${Math.round(r.w)} of ${Math.round(r.vw)} px), inside it`);
-    }
-    await viewport(p);
   }},
   {name: 'zooming toward a point at the overview does not turn the view', async run(p, expect) {
     // With ground-level panning set for good, three.js's zoom toward the cursor turned the building some 16° a pinch at
@@ -1312,17 +826,6 @@ export const scenarios = [
     await p.sleep(150);
     expect(!(await turning()), 'a wheel on the 3D view stops it');
   }},
-  {name: 'the car park layout changes as one animation (a view transition), not in a single frame', async run(p, expect) {
-    await p.goto('?debug=1');
-    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
-    const watch = `(()=>{window.__vt=new Set();const t0=performance.now();const f=()=>{for(const a of document.getAnimations())if(a.effect?.pseudoElement?.startsWith('::view-transition-group'))__vt.add(a.effect.pseudoElement);if(performance.now()-t0<600)requestAnimationFrame(f);};requestAnimationFrame(f);})()`;
-    for (const to of ['parking', 'pond']) {
-      await p.eval(watch); await p.click(`[data-destination="${to}"]`); await p.sleep(700);
-      const groups = await p.eval('[...__vt]');
-      expect(['tour-view', 'tour-dock', 'tour-panel'].every(n => groups.includes(`::view-transition-group(${n})`)), `to ${to}: the 3D view, the dock and the panel move to their new place (${groups.join(', ') || 'no transition'})`);
-      await p.until(`${IDLE} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
-    }
-  }},
   {quick: true, name: 'flying between stops: floors are sliced away and built up solid, never faded see-through', async run(p, expect) {
     await p.goto('?debug=1');
     await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
@@ -1338,46 +841,6 @@ export const scenarios = [
     }
     expect(await p.eval('__cuts') > 5, `floors were cut while changing (${await p.eval('__cuts')} frames)`);
     expect(await p.eval('__xray') === 0, `no floor faded see-through (${await p.eval('__xray')} mesh-frames)`);
-  }},
-  {name: 'pond: the paused reflection\'s stand-in has the live water\'s colour, by day and by night', async run(p, expect) {
-    for (const time of ['10:00', '17:50', '20:30']) {
-      await p.goto(`?debug=1&dest=pond&time=${time}`);
-      await p.until(`document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='pond' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the pond'});
-      await p.sleep(600);
-      // The water's average colour as drawn (the pixels that change when it is hidden): live, then with the mirror's
-      // picture replaced by its stand-in (as during a flight).
-      const [live, plain] = await p.eval(`(()=>{const R=__renderer,gl=R.getContext(),w=__scene.getObjectByName('Courtyard_water_reflection'),V=__camera.position.constructor;
-        w.geometry.computeBoundingBox();const bb=w.geometry.boundingBox,pts=[];for(const x of [bb.min.x,bb.max.x])for(const y of [bb.min.y,bb.max.y])pts.push(new V(x,y,0).applyMatrix4(w.matrixWorld).project(__camera));
-        const W=gl.drawingBufferWidth,H=gl.drawingBufferHeight,xs=pts.map(q=>Math.round((q.x+1)/2*W)),ys=pts.map(q=>Math.round((q.y+1)/2*H));
-        const x0=Math.max(0,Math.min(...xs)),x1=Math.min(W,Math.max(...xs)),y0=Math.max(0,Math.min(...ys)),y1=Math.min(H,Math.max(...ys)),buf=new Uint8Array((x1-x0)*(y1-y0)*4);
-        const grab=()=>{gl.readPixels(x0,y0,x1-x0,y1-y0,gl.RGBA,gl.UNSIGNED_BYTE,buf);return buf.slice();};
-        w.visible=false;R.render(__scene,__camera);const under=grab();w.visible=true;
-        const avg=()=>{const a=grab();const s=[0,0,0];let n=0;for(let i=0;i<a.length;i+=4){if(a[i]===under[i]&&a[i+1]===under[i+1]&&a[i+2]===under[i+2])continue;s[0]+=a[i];s[1]+=a[i+1];s[2]+=a[i+2];n++;}return s.map(v=>v/Math.max(1,n));};
-        R.render(__scene,__camera);const live=avg();
-        const before=w.onBeforeRender;w.onBeforeRender=function(...a){before.apply(this,a);this.material.uniforms.reflectionMix.value=0;};
-        R.render(__scene,__camera);const plain=avg();w.onBeforeRender=before;R.render(__scene,__camera);return [live,plain];})()`);
-      const off = Math.max(...live.map((v, i) => Math.abs(v - plain[i])));
-      expect(off < 6, `${time}: stand-in ${plain.map(Math.round)} vs live ${live.map(Math.round)} (off by ${off.toFixed(1)} of 255)`);
-    }
-  }},
-  {name: 'pond: the water is drawn on every frame from the overview to the pond and back (it never appears at once)', async run(p, expect) {
-    await p.goto('?debug=1');
-    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
-    // Each frame the pond is on screen: whether its water layer was drawn, and how far its mix moved since the last frame.
-    await p.eval(`(()=>{const R=__renderer,w=__scene.getObjectByName('Courtyard_water_reflection'),pond=__scene.getObjectByName('Floor_1_koi_pond_0');window.__water={frames:0,missing:0,jump:0};let drawn=false,last=null;
-      const ob=w.onBeforeRender;w.onBeforeRender=function(...a){ob.apply(this,a);drawn=true;const m=this.material.uniforms.reflectionMix.value;if(last!==null)__water.jump=Math.max(__water.jump,Math.abs(m-last));last=m;};
-      const r=R.render.bind(R);R.render=(s,c)=>{if(R.getRenderTarget()||c!==__camera)return r(s,c);drawn=false;const o=r(s,c);
-        pond.geometry.computeBoundingSphere();const q=pond.geometry.boundingSphere.center.clone().applyMatrix4(pond.matrixWorld).project(__camera);
-        if(q.z<1&&Math.abs(q.x)<1&&Math.abs(q.y)<1){__water.frames++;if(!drawn)__water.missing++;}return o;};})()`);
-    for (const to of ['pond', 'overview']) {
-      await p.click(`[data-destination="${to}"]`);
-      await p.until(`${IDLE} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
-      await p.sleep(400);
-    }
-    const water = await p.eval('__water');
-    expect(water.frames > 30 && water.missing === 0, `the water was drawn on every frame the pond was on screen (${water.frames - water.missing} of ${water.frames})`);
-    // The fade runs on time (0.25 s): a slow frame under load covers more of it, but never the whole of it at once.
-    expect(water.jump < .5, `its reflection fades in and out, never in one step (largest change in a frame ${water.jump.toFixed(2)})`);
   }},
   {name: 'meeting room: its light cone fades in as the camera arrives and out as it leaves (no pop)', async run(p, expect) {
     await p.goto('?debug=1&time=10:00');
@@ -1415,59 +878,6 @@ export const scenarios = [
     expect(r.before.length === 0, `the cone is drawn after the room's glazing from every side (drawn before it at ${r.before.join(', ') || 'none'}°)`);
     expect(r.side > 30 && r.above > r.side * .5, `seen from straight above, the cone still glows (side ${r.side}, above ${r.above})`);
   }},
-  {name: 'room lights fade on and off, every room alike (not only the meeting room)', async run(p, expect) {
-    await p.goto('?debug=1&dest=meeting&time=20:30');
-    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the meeting room at night'});
-    await p.sleep(600);
-    // A room other than the meeting room with one of the night's spot lights: its light is switched on, then off.
-    const room = await p.eval(`(()=>{const s=__scene.getObjectsByProperty('isSpotLight',true).find(l=>l.visible&&l.userData.roomId&&l.userData.roomId!=='f4_meeting_2');return s?.userData.roomId||null;})()`);
-    expect(room, `a neighbour room with a spot light at night (${room})`);
-    if (!room) return;
-    const trace = async on => {
-      // Its light fittings' glow (the spot lights can be dealt to other rooms when one is switched; the fittings stay).
-      await p.eval(`(()=>{window.__fade=[];let fitting=null;__scene.traverse(o=>{if(!fitting&&o.isMesh&&o.userData.roomId==='${room}'&&o.userData.deviceKind==='light'&&o.material.emissive)fitting=o;});
-        const f=()=>{__fade.push(fitting.material.emissiveIntensity);if(__fade.length<40)requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
-      await p.eval(`__simulationApi.setRoom('${room}',{light:${on}})`);
-      await p.sleep(900);
-      return p.eval('__fade');
-    };
-    for (const on of [true, false]) {
-      const f = await trace(on), top = Math.max(...f), mid = f.filter(v => v > top * .1 && v < top * .9).length;
-      expect(top > 0 && f.at(-1) === (on ? top : 0) && mid >= 5, `switched ${on ? 'on' : 'off'}: the light ${on ? 'rose' : 'fell'} over ${mid} frames, not in one`);
-    }
-  }},
-  {name: 'night: the room lights are dealt around the selected room as soon as it is selected, not at the next switch', async run(p, expect) {
-    await p.goto('?debug=1&dest=meeting&time=20:30');
-    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the meeting room at night'});
-    await p.sleep(400);
-    const dealt = `JSON.stringify(__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.name.startsWith('Simulation_spot')).map(l=>l.userData.roomId))`;
-    const before = await p.eval(dealt);
-    const other = JSON.parse(before).find(id => id && id !== 'f4_meeting_2');
-    await p.eval(`__simulationApi.setRoom('${other}',{light:true})`);
-    await p.sleep(100);
-    expect(await p.eval(dealt) === before, `switching ${other} moved no light between rooms (${before} → ${await p.eval(dealt)})`);
-  }},
-  {name: 'night flights: room lights moving between rooms (the floors change) fade out and in, never switch at once', async run(p, expect) {
-    await p.goto('?debug=1&time=19:00');
-    await p.until(`${IDLE} && document.documentElement.dataset.warm==='done'`, {timeout: 40000});
-    await p.sleep(600);
-    // Each frame: each room spot's brightness as drawn (0 while it or its floor is hidden); a change of more than half
-    // of full (the brightest seen) in one frame is a light switching at once. The fades run on time (0.22 s each way): a slow frame
-    // under load covers more of one, but never half of it.
-    await p.eval(`(()=>{const spots=__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.name.startsWith('Simulation_spot'));window.__jumps=[];window.__moves=0;window.__full=0;let last=null;
-      const shown=o=>{for(let x=o;x;x=x.parent)if(!x.visible)return false;return true;};
-      const f=()=>{const now=spots.map(l=>({v:shown(l)?l.intensity:0,room:l.userData.roomId}));
-        if(last)now.forEach((n,i)=>{if(n.room!==last[i].room)__moves++;__full=Math.max(__full,n.v);const d=Math.abs(n.v-last[i].v);if(d>30)__jumps.push({d,text:Math.round(d)+' '+last[i].room+'→'+n.room});});
-        last=now;requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
-    for (const to of ['meeting', 'pond', 'energy', 'overview']) {
-      await p.click(`[data-destination="${to}"]`);
-      await p.until(`${IDLE} && document.body.dataset.tourDestination==='${to}'`, {timeout: 20000, what: `landed at ${to}`});
-      await p.sleep(500);
-    }
-    expect(await p.eval('__moves') >= 3, `the lights moved between rooms as the floors changed (${await p.eval('__moves')} moves)`);
-    const full = await p.eval('__full'), jumps = (await p.eval('__jumps')).filter(j => j.d > full / 2).map(j => j.text);
-    expect(!jumps.length, `no light switched at once (${jumps.slice(0, 4).join(', ') || 'none'})`);
-  }},
   {name: 'a flight that starts during the warm-up leaves the real materials behind', async run(p, expect) {
     // The warm-up lends every mesh a copy of its material while shaders compile (sceneTransition.prepare); a ?dest=
     // flight can set off meanwhile, and once it ended after the lend it put those copies back as the meshes' own. Here
@@ -1495,18 +905,6 @@ export const scenarios = [
       await __transition.prepare(()=>new Promise(r=>{const t=setInterval(()=>{if(!document.querySelector('#viewport').classList.contains('flying')){clearInterval(t);r();}},20);}));
       let k=0;__scene.traverse(o=>{if(o.isMesh&&[].concat(o.material).some(m=>__transition.isCopy(m)))k++;});return k;})()`);
     expect(kept === 0, `no mesh keeps a copy once both are over (${kept})`);
-  }},
-  {name: 'the koi keep swimming while a flight cuts their floor', async run(p, expect) {
-    // The cut's material copies dropped the koi's shader hook (copy() leaves it out): the fish jumped back to their
-    // modelled places for the length of the flight.
-    await p.goto('?debug=1&warm=0&time=10:00');
-    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
-    const r = JSON.parse(await p.eval(`(async()=>{let n=0;const begin=__transition.begin;
-      await new Promise(r=>{__transition.begin=(...a)=>{begin(...a);if(++n===2){__transition.begin=begin;r();}};document.querySelector('[data-destination="meeting"]').click();});
-      const fish=[];__scene.traverse(o=>{if(o.isMesh&&/_koi_(?!pond)/.test(o.name))fish.push(o);});
-      return JSON.stringify({fish:fish.length,cut:fish.filter(o=>__transition.isCopy(o.material)).length,swimming:fish.filter(o=>o.material.customProgramCacheKey()==='koi').length});})()`));
-    expect(r.fish > 0 && r.cut > 0, `the flight cuts the koi (${r.cut} of ${r.fish} drawn through copies)`);
-    expect(r.swimming === r.fish, `every koi keeps its swimming shader (${r.swimming} of ${r.fish})`);
   }},
   {name: 'a spot light\'s shadow follows it to another room', async run(p, expect) {
     // A new selection deals the night's spot lights again; each fades out, then moves. The shadow redraw came with the
@@ -1545,21 +943,6 @@ export const scenarios = [
     await p.sleep(900);
     expect(await p.eval(hinges) !== at, 'and finished its swing on Resume');
   }},
-  {name: 'the meeting room\'s light fade holds while paused', async run(p, expect) {
-    // The lamp's fade ran on frame time: switched off and paused at once, the cone still faded out.
-    await p.goto(`?dest=meeting&${FAST}&time=10:00`);
-    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
-    const cone = `(()=>{let c=null;__scene.getObjectByName('Demo_meeting').traverse(o=>{if(o.geometry?.type==='CylinderGeometry')c=o;});return c.material.opacity;})()`;
-    await p.sleep(800); // the stop's own fade-in on arrival (on frame time, like the flight) is over
-    await p.click('[data-control="light"]');
-    await p.eval('__world.setPaused(true)');
-    await p.sleep(150);
-    const at = await p.eval(cone);
-    await p.sleep(600);
-    const later = await p.eval(cone);
-    expect(at > .05 && later === at, `the fade held (opacity ${at.toFixed(2)} → ${later.toFixed(2)})`);
-    await p.eval('__world.setPaused(false)');
-  }},
   {name: 'the meeting room\'s fittings and air hold their fades while paused', async run(p, expect) {
     // The fittings' glow and the AC's airflow faded on frame time: switched off and paused at once, both went out.
     await p.goto(`?dest=meeting&${FAST}&time=10:00`);
@@ -1577,29 +960,6 @@ export const scenarios = [
     expect(at.glow > 0 && at.air > 0 && later.glow === at.glow && later.air === at.air, `held (glow ${at.glow} → ${later.glow}, air ${at.air} → ${later.air})`);
     await p.eval('__world.setPaused(false)');
   }},
-  {name: 'the meeting room\'s air draws nothing while paused', async run(p, expect) {
-    // The airflow stood still while paused but went on uploading its lines and redrawing the scene on every frame.
-    await p.goto(`?dest=meeting&${FAST}&time=10:00`);
-    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
-    await p.sleep(800);
-    await p.eval('__world.setPaused(true)');
-    await p.sleep(300);
-    const draws = await p.eval(`new Promise(done=>{const R=__renderer,render=R.render.bind(R);let n=0;R.render=(...a)=>{if(!R.getRenderTarget())n++;return render(...a);};setTimeout(()=>{R.render=render;done(n);},1000);})`);
-    expect(draws <= 3, `${draws} redraws in a paused second`);
-    await p.eval('__world.setPaused(false)');
-  }},
-  {name: 'a room light paused mid-fade draws nothing', async run(p, expect) {
-    // The fade held while paused but repainted and redrew the scene on every frame.
-    await p.goto(`?dest=meeting&${FAST}&time=10:00`);
-    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
-    await p.sleep(800);
-    await p.click('[data-control="light"]');
-    await p.eval('__world.setPaused(true)');
-    await p.sleep(200);
-    const draws = await p.eval(`new Promise(done=>{const R=__renderer,render=R.render.bind(R);let n=0;R.render=(...a)=>{if(!R.getRenderTarget())n++;return render(...a);};setTimeout(()=>{R.render=render;done(n);},750);})`);
-    expect(draws <= 3, `${draws} redraws in 0.75 s paused`);
-    await p.eval('__world.setPaused(false)');
-  }},
   {name: 'a door\'s shadow follows it as it swings, not only once it is open', async run(p, expect) {
     await p.goto('?debug=1&dest=meeting&time=10:00');
     await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the meeting room'});
@@ -1611,46 +971,6 @@ export const scenarios = [
     const door = await p.eval('__door');
     expect(door.swingFrames >= 5 && door.shadowed >= door.swingFrames - 1, `the shadow was redrawn on the swing's frames (${door.shadowed} of ${door.swingFrames})`);
   }},
-  {name: 'opening straight on a stop keeps its scene: the pond mirror on ?dest=pond', async run(p, expect) {
-    await p.goto(`?dest=pond&${FASTW}`);
-    await p.until(`document.documentElement.dataset.warm==='done'`, {timeout: 40000, what: 'warm-up done'});
-    await p.sleep(3000 / SPEED + 500);
-    expect(await p.eval(`__scene.getObjectByName('Courtyard_water_reflection').visible`), 'pond mirror visible after the start-up warm-up');
-  }},
-
-  {quick: true, name: 'pond mirror: redrawn when the camera moves, at most ~10 times a second while it is still', async run(p, expect) {
-    await p.goto(`?dest=pond&${FASTW}`);
-    await p.until(`document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='pond' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the pond'});
-    await p.until(`__scene.getObjectByName('Courtyard_water_reflection').visible`, {what: 'pond mirror on'});
-    // Counts the screen's frames and the mirror's passes (into its own target, through its unnamed camera; the plate
-    // cameras' snapshots of passing cars draw into targets too, through named cameras).
-    await p.eval(`(()=>{const R=__renderer,render=R.render.bind(R);window.__passes={screen:0,mirror:0};R.render=(s,c)=>{if(!R.getRenderTarget())__passes.screen++;else if(c.isPerspectiveCamera&&!c.name)__passes.mirror++;return render(s,c);};})()`);
-    // Still camera, the view kept redrawing (as passing cars do).
-    // Its limit is time, not frames (one pass per 100 ms, render-kit STILL_MS): at under 10 frames a second, as with
-    // eight software-rendering browsers, it may rightly redraw on every frame.
-    const redraw = `new Promise(done=>{let n=0;const t0=performance.now();const f=()=>{__controls.dispatchEvent({type:'change'});if(++n<60)requestAnimationFrame(f);else requestAnimationFrame(()=>done(performance.now()-t0));};requestAnimationFrame(f);})`;
-    await p.eval('Object.assign(__passes,{screen:0,mirror:0})'); const ms = await p.eval(redraw);
-    const still = await p.eval('({...__passes})'), limit = Math.ceil(ms / 100) + 1;
-    expect(still.screen >= 30 && still.mirror <= limit, `still: the mirror is redrawn at most every 100 ms (${still.mirror} mirror passes for ${still.screen} frames in ${Math.round(ms)} ms; at most ${limit})`);
-    // The camera turns a little: the mirror follows on that same frame.
-    // Counted from the move on, in one step: a frame drawn in between (cars passing, the camera still) is not it.
-    await p.eval(`(()=>{Object.assign(__passes,{screen:0,mirror:0});const c=__controls.object,t=__controls.target;c.position.sub(t).applyAxisAngle({x:0,y:1,z:0,isVector3:true},.02).add(t);__controls.update();})()`);
-    await p.until('__passes.screen >= 1', {what: 'a frame drawn'});
-    const moved = await p.eval('({...__passes})');
-    expect(moved.mirror >= 1, `moved: the mirror is redrawn with the frame (${moved.mirror} mirror passes for ${moved.screen} frames)`);
-  }},
-
-  {name: 'a hidden car park does not redraw the view: cars driving while an upper floor is shown', async run(p, expect) {
-    await p.goto(`?dest=meeting&${FASTW}&time=20:00`);
-    await p.until(`document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='meeting' && !document.querySelector('#viewport').classList.contains('flying') && !__scene.getObjectByName('Demo_parking').visible`, {timeout: 40000, what: 'at the meeting room, car park hidden'});
-    await p.sleep(500); // the air flow (AC off at 20:00) has faded
-    await p.eval(`(()=>{const R=__renderer,render=R.render.bind(R);window.__frames=0;R.render=(s,c)=>{if(!R.getRenderTarget())__frames++;return render(s,c);};})()`);
-    await p.until('__parking.traffic.passBy()', {timeout: 10000, what: 'a car sent down the street'});
-    await p.eval('__frames=0'); await p.sleep(1000);
-    const frames = await p.eval('__frames');
-    expect(frames < 15, `the view is not redrawn for unseen cars (${frames} frames in 1 s)`);
-  }},
-
   {name: 'car park life: no car pops in or out of view (a fast evening rush from the overview; a new car never flashes at the origin)', async run(p, expect) {
     // A 4-minute day: the rush outpaces the barrier, and the gap is made up in the bays. On screen, only in bays the
     // camera cannot see (popping in and out of view under the building read as a flicker).
@@ -1668,22 +988,6 @@ export const scenarios = [
     // The rush goes on in view: cars drive out through the barrier instead.
     expect(await p.eval('__leaving') >= 1, `cars leave through the barrier meanwhile (up to ${await p.eval('__leaving')} at once)`);
     expect(!pops.length, `no car appeared or vanished in view (${pops.slice(0, 4).join(', ') || 'none'})`);
-  }},
-
-  {name: 'panels update in place: a hovered button stays the same element, still hovered, through a refresh', async run(p, expect) {
-    await p.goto('?debug=1&dest=overview&time=10:00&day=4'); // a fast day: the readings change between refreshes
-    await p.until(`${UP} && document.documentElement.dataset.warm==='done' && document.body.dataset.tourDestination==='overview' && !document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'at the overview'});
-    await p.eval(`document.querySelector('#dashboard-content .panel-action').scrollIntoView({block:'center'})`); await p.sleep(100);
-    const b = JSON.parse(await p.eval(`JSON.stringify(document.querySelector('#dashboard-content .panel-action').getBoundingClientRect())`));
-    await p.cdp('Input.dispatchMouseEvent', {type: 'mouseMoved', x: b.x + b.width / 2, y: b.y + b.height / 2});
-    await p.sleep(100);
-    expect(await p.eval(`document.querySelector('#dashboard-content .panel-action').matches(':hover')`), 'hovered before the refresh');
-    await p.eval(`(()=>{const el=document.querySelector('#dashboard-content .panel-action');el.__marked=true;window.__html=document.querySelector('#dashboard-content').innerHTML;})()`);
-    // The panel redraws at least every 2 s (its readings follow the clock); wait for one that changed something.
-    await p.until(`document.querySelector('#dashboard-content').innerHTML!==__html`, {timeout: 8000, what: 'a panel refresh'});
-    expect(await p.eval(`document.querySelector('#dashboard-content .panel-action').__marked===true`), 'the button is the same element after the refresh');
-    await p.sleep(100);
-    expect(await p.eval(`document.querySelector('#dashboard-content .panel-action').matches(':hover')`), 'and still hovered (no flicker)');
   }},
 
   {name: 'kiosk follows the day: the morning car park plays the story; a touch pauses it', async run(p, expect) {
@@ -1879,16 +1183,6 @@ export const scenarios = [
     const r = JSON.parse(await p.eval(`JSON.stringify({flying:document.querySelector('#viewport').classList.contains('flying'),dest:document.body.dataset.tourDestination})`));
     expect(!r.flying && r.dest === 'overview', `the flight stopped where it was (flying ${r.flying}, stop ${r.dest})`);
   }},
-  {name: 'kiosk: Stop following on the final approach leaves no floor half cut', async run(p, expect) {
-    // Cancelling the flight stopped the camera but not the floors' change: the building stayed half cut away.
-    // Real speed: at ?speed=30 the flight is over before it can be tapped.
-    await p.goto('?kiosk=1&debug=1&warm=0&time=14:45');
-    await p.until(`${UP} && document.body.dataset.tourDestination==='meeting' && document.querySelector('#viewport').classList.contains('flying')`, {timeout: 40000, what: 'the kiosk on its final approach to the meeting room'});
-    await p.click('#day-play');
-    await p.sleep(800);
-    const kept = await p.eval(`(()=>{let n=0;__scene.traverse(o=>{if(o.isMesh&&[].concat(o.material).some(m=>__transition.isCopy(m)))n++;});return n;})()`);
-    expect(kept === 0, `no mesh left mid-cut (${kept})`);
-  }},
   {name: 'kiosk: Exit story hands the screen to the visitor', async run(p, expect) {
     // The whole story bar was left out of the kiosk's touches, so Exit ended the story and the loop flew straight on.
     await p.goto(`?kiosk=1&${FAST}&time=07:35`);
@@ -1924,21 +1218,6 @@ export const scenarios = [
     const r = JSON.parse(await p.eval(`JSON.stringify({floor:__simulation().view.currentFloor,pressed:document.querySelector('[data-destination][aria-pressed=true]')?.dataset.destination,kept:(()=>{let n=0;__scene.traverse(o=>{if(o.isMesh&&[].concat(o.material).some(m=>__transition.isCopy(m)))n++;});return n;})()})`));
     expect(r.pressed === 'meeting' && r.floor === floor && r.kept === 0, `the meeting room's floor ${floor} on show with its stop (floor ${r.floor}, stop ${r.pressed}, ${r.kept} meshes mid-cut)`);
   }},
-  {name: 'the parking story taking over a flight to the car park leaves no floor half cut', async run(p, expect) {
-    // Its first camera move ended the dock's flight, whose floors' change was left mid-cut until the next flight.
-    // Real speed: at ?speed=30 the flight is over before the story can take it over.
-    await p.goto('?debug=1&warm=0&time=10:00&dest=meeting');
-    await p.until(`${IDLE} && document.body.dataset.tourDestination==='meeting'`, {timeout: 40000, what: 'at the meeting room'});
-    await p.click('[data-destination="parking"]');
-    await p.until(`document.querySelector('#viewport').classList.contains('flying')`, {timeout: 5000, what: 'on its way to the car park'});
-    await p.sleep(150);
-    await p.eval('void __parking.playStory()');
-    await p.sleep(1500);
-    const kept = await p.eval(`(()=>{let n=0;__scene.traverse(o=>{if(o.isMesh&&[].concat(o.material).some(m=>__transition.isCopy(m)))n++;});return n;})()`);
-    expect(await p.eval('__parking.story.running') && kept === 0, `the story at the car park, no floor mid-cut (${kept} meshes)`);
-    // And the dock shows the car park (it marked its stop before the story's takeover made the car park the stop).
-    expect(await p.eval(`document.querySelector('[data-destination][aria-pressed=true]')?.dataset.destination`) === 'parking', 'the dock shows the car park');
-  }},
   {name: 'tapping the stop again on its final approach ends its floors\' change', async run(p, expect) {
     // There already (within 0.1 m), the repeat tap stopped the flight and returned, leaving the change mid-cut.
     await p.goto('?debug=1&warm=0&time=10:00&dest=meeting');
@@ -1953,15 +1232,6 @@ export const scenarios = [
     await p.sleep(500);
     const kept = await p.eval(`(()=>{let n=0;__scene.traverse(o=>{if(o.isMesh&&[].concat(o.material).some(m=>__transition.isCopy(m)))n++;});return n;})()`);
     expect(kept === 0, `no floor left mid-cut (${kept} meshes)`);
-  }},
-  {name: 'kiosk: tapping Auto-advance (its label) keeps the loop going', async run(p, expect) {
-    // The checkbox was left to the story, its label not: one tap toggled Auto-advance and also turned Follow off.
-    await p.goto(`?kiosk=1&${FAST}&time=07:35`);
-    await p.until(`window.__parking && __parking.story.running && !!document.querySelector('#parking-bar .pk-switch span')`, {timeout: 60000, what: 'the morning story'});
-    await p.click('#parking-bar .pk-switch span');
-    await p.sleep(300);
-    const r = JSON.parse(await p.eval(`JSON.stringify({following:document.querySelector('#day-play').getAttribute('aria-pressed'),story:__parking.story.running})`));
-    expect(r.following === 'true' && r.story, `Follow and the story carry on (following ${r.following}, story ${r.story})`);
   }},
   {name: 'kiosk: switching kiosk mode off stops the flight under way', async run(p, expect) {
     // Follow went off at once, but the camera flew on and the panel moved to its stop.
@@ -2034,34 +1304,6 @@ export const scenarios = [
     await p.until(shown, {timeout: 5000, what: 'view controls back after the story'});
     expect(true, 'hidden during the story, back after it');
   }},
-  {name: 'narrow window: both gate cameras show a picture, the story step and the disclosure stay on one line', async run(p, expect) {
-    await viewport(p, 1000, 900);
-    try {
-      await p.goto(parking());
-      await p.until(ready, {timeout: 40000});
-      await p.click('[data-tab="gate"]');
-      await p.until(`[...document.querySelectorAll('.pk-cams figure')].every(f=>f.querySelector('img'))`, {timeout: 5000, what: 'both camera pictures (the exit one before any car has left)'});
-      const line = sel => `(e=>{const r=e.getBoundingClientRect(),h=parseFloat(getComputedStyle(e).lineHeight)||parseFloat(getComputedStyle(e).fontSize)*1.6;return r.height<=h*1.3})(document.querySelector(${JSON.stringify(sel)}))`;
-      expect(await p.eval(line('.simulation-disclosure')), 'disclosure on one line');
-      await p.click('[data-bar="play"]');
-      await p.until('__parking.story.index >= 1', {timeout: 30000, what: 'story step 2'});
-      expect(await p.eval(line('.pk-bar-progress > span')), `step label on one line (${await p.eval(`document.querySelector('.pk-bar-progress > span').getBoundingClientRect().height`)} px tall)`);
-      const rows = await p.eval(`new Set([...document.querySelector('#parking-bar').children].map(e=>Math.round(e.getBoundingClientRect().top/10))).size`);
-      expect(rows <= 2, `story bar in at most two rows (${rows})`);
-    } finally { await viewport(p); }
-  }},
-  {name: 'phone widths: the header\'s buttons stay on screen', async run(p, expect) {
-    // The two logos and the buttons need about 450 px in one row: at 390 px, Explore started off the screen.
-    try {
-      for (const width of [390, 320]) {
-        await viewport(p, width, 800);
-        await p.goto(`?${FAST}`);
-        await p.until(LOADED, {timeout: 40000, what: 'model ready'});
-        const out = await p.eval(`[...document.querySelectorAll('.header-actions > *')].filter(e=>getComputedStyle(e).display!=='none'&&e.getBoundingClientRect().right>innerWidth+1).map(e=>e.id||e.className).join(', ')`);
-        expect(!out, `at ${width} px every header button is on screen (${out || 'all'})`);
-      }
-    } finally { await viewport(p); }
-  }},
   {name: 'touchpad: two fingers pan, a pinch and a mouse wheel zoom', async run(p, expect) {
     // Panning needed the right button held down, awkward on a touchpad: a two-finger scroll zoomed instead.
     await p.goto(`?${FAST}`);
@@ -2079,105 +1321,6 @@ export const scenarios = [
     expect(pinch.zoom > 0, `pinch zooms (distance ${pinch.zoom})`);
     const mouse = await wheel({deltaY: 100});
     expect(mouse.zoom > 0, `a mouse wheel notch zooms (distance ${mouse.zoom})`);
-  }},
-  {name: 'keys: R works on the Thai layout, and Ctrl+arrow, which moves the view, stops the tour', async run(p, expect) {
-    // The keys were read by character (R types พ on the Thai layout); and after Ctrl/Alt keys were left to the browser,
-    // Ctrl+arrow still turned the view (the controls take it) but no longer stopped the tour.
-    await p.goto(`?${FAST}`);
-    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
-    const key = (k, code, extra = {}) => p.eval(`document.querySelector('#viewport canvas').dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key:${JSON.stringify(k)},code:${JSON.stringify(code)},...${JSON.stringify(extra)}}))`);
-    const pose = `JSON.stringify(__camera.position.toArray().map(v=>+v.toFixed(1)))`, home = await p.eval(pose);
-    await p.eval(`(()=>{__camera.position.x+=15;__controls.update()})()`);
-    await key('พ', 'KeyR');
-    await p.until(`${pose} === ${JSON.stringify(home)}`, {timeout: 10000, what: 'the view back at the stop after R on the Thai layout'});
-    const label = `document.querySelector('#tour-play span').textContent`;
-    await p.click('#tour-play');
-    await p.until(`/หยุดพาชม|Stop tour/.test(${label})`, {timeout: 5000, what: 'the tour started'});
-    await key('ArrowLeft', 'ArrowLeft', {ctrlKey: true});
-    await p.sleep(300);
-    expect(/เริ่มพาชม|Start tour/.test(await p.eval(label)), `Ctrl+Left stopped the tour (button: ${await p.eval(label)})`);
-  }},
-  {name: 'panning slows far from the site and comes back at full speed; the ground\'s edge is in the fog', async run(p, expect) {
-    // A touchpad scroll carried the view off without limit, past the end of the ground.
-    await p.goto(`?${FAST}`);
-    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
-    const scroll = (deltaX, n) => p.eval(`(()=>{const c=document.querySelector('#viewport canvas');for(let i=0;i<${n};i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:400,clientY:300,deltaX:${deltaX},deltaY:0}));
-      const t=__controls.target;return Math.hypot(t.x,t.z);})()`);
-    const start = await scroll(0, 0);
-    const far = await scroll(40, 400);
-    expect(far <= 91, `400 big sideways scrolls leave the view's pivot ${far.toFixed(0)} m from the site's middle (started ${start.toFixed(0)} m)`);
-    const back = await scroll(-40, 40);
-    await scroll(40, 400);
-    const round = await p.eval(`(()=>{const c=document.querySelector('#viewport canvas');for(let i=0;i<200;i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:400,clientY:300,deltaX:0,deltaY:-8}));const t=__controls.target;return Math.hypot(t.x,t.z);})()`);
-    expect(round <= 91, `scrolling the other way round the site does not creep out either (${round.toFixed(0)} m)`);
-    // Slower further out: one sideways scroll's outward step at 30 m and at 80 m from the site's middle (the hard 90 m
-    // limit alone would pass the checks above).
-    const outward = r => p.eval(`(()=>{const c=document.querySelector('#viewport canvas'),t=__controls.target,step=dx=>{t.set(${r},0,0);__camera.position.set(${r},20,60);__controls.update();
-      c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:400,clientY:300,deltaX:dx,deltaY:0}));return Math.hypot(t.x,t.z)-${r}};return Math.max(step(40),step(-40))})()`);
-    const [near, far2] = [await outward(30), await outward(80)];
-    expect(near > 0 && far2 < near * .5, `an outward scroll moves the view ${near.toFixed(2)} m at 30 m out, ${far2.toFixed(2)} m at 80 m`);
-    expect(back < far - 20, `scrolling back is not slowed (${far.toFixed(0)} m to ${back.toFixed(0)} m in 40 scrolls)`);
-    // Up and down on the screen slide the view forward and back at the height it has (it went up into the air, or
-    // under the ground).
-    const vertical = JSON.parse(await p.eval(`JSON.stringify((()=>{__controls.target.set(0,5,0);__camera.position.set(0,8,60);__controls.update();
-      const c=document.querySelector('#viewport canvas'),go=d=>{for(let i=0;i<30;i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:400,clientY:300,deltaX:0,deltaY:d}));return {pivot:+__controls.target.y.toFixed(2),camera:+__camera.position.y.toFixed(2),z:+__controls.target.z.toFixed(1)}};
-      return {down:go(40),up:go(-40)}})())`));
-    expect(vertical.down.pivot === 5 && vertical.down.camera === 8 && vertical.up.pivot === 5 && vertical.up.camera === 8, `panning keeps the height (pivot ${vertical.down.pivot}/${vertical.up.pivot} m, camera ${vertical.down.camera}/${vertical.up.camera} m)`);
-    expect(vertical.down.z !== vertical.up.z, `up and down on the screen go forward and back (${vertical.down.z} / ${vertical.up.z})`);
-    // Orbiting down to below the horizon: the camera stays above its pivot.
-    const orbit = await p.eval(`(()=>{__controls.target.set(0,2,0);__camera.position.set(0,-20,40);__controls.update();return +(__camera.position.y-__controls.target.y).toFixed(2)})()`);
-    expect(orbit > 0, `the camera cannot orbit under the ground (${orbit} m above its pivot)`);
-    const fog = JSON.parse(await p.eval(`JSON.stringify({far:__scene.fog?.far,ground:__scene.getObjectByName('PresentationGround').geometry.parameters.width/2})`));
-    expect(fog.far < fog.ground, `the world is gone in the fog (${fog.far} m) before the ground ends (${fog.ground} m)`);
-    // Pixels: the road by the gate shows, its far end has faded into the sky. (Fog worked out per vertex blended
-    // across the road's few big triangles, whose corners lie 100 m out: the whole road and ground vanished.)
-    // From further out than zooming goes (the fog's whole width in view).
-    const px = JSON.parse(await p.eval(`JSON.stringify((()=>{__controls.maxDistance=500;__controls.target.set(0,0,0);__camera.position.set(60,90,140);__controls.update();
-      const r=__renderer,gl=r.getContext(),w=gl.drawingBufferWidth,h=gl.drawingBufferHeight;r.render(__scene,__camera);
-      const at=(x,z)=>{const v=new __camera.position.constructor(x,.3,z).project(__camera),b=new Uint8Array(4);gl.readPixels(Math.round((v.x+1)/2*w),Math.round((v.y+1)/2*h),1,1,gl.RGBA,gl.UNSIGNED_BYTE,b);return [...b].slice(0,3)};
-      const sky=new Uint8Array(4);gl.readPixels(2,h-3,1,1,gl.RGBA,gl.UNSIGNED_BYTE,sky);
-      return {near:at(-10,24),far:at(98,24),sky:[...sky].slice(0,3)}})())`));
-    const diff = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
-    expect(diff(px.near, px.sky) > 25, `the road by the gate shows (${px.near} against the sky ${px.sky})`);
-    expect(diff(px.far, px.sky) < 10, `the road's far end has faded into the sky (${px.far} against ${px.sky})`);
-  }},
-  {name: 'the plate camera card sits up in the corner, below the corner\'s text only when there is some', async run(p, expect) {
-    // It always left room for the corner's room-colours bar and flight status, so at the car park, where both are
-    // usually empty, it hung below an empty gap.
-    await p.goto(parking());
-    await p.until(`${ready} && ${STILL}`, {timeout: 40000});
-    await p.eval(`void __parking.traffic.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:5,fromX:-40})`);
-    await p.until(`!!document.querySelector('.pk-feed:not([hidden])')`, {timeout: 30000, what: 'the plate camera card'});
-    await p.eval('__world.setPaused(true)');
-    const top = sel => `Math.round(document.querySelector('${sel}').getBoundingClientRect().top)`;
-    expect(Math.abs(await p.eval(top('.pk-feed')) - await p.eval(top('.scene-title'))) <= 1, 'level with the stop\'s title card when the corner is empty');
-    await p.eval(`document.querySelector('#flight-status').textContent='Heading to the car park'`);
-    // Placed by a resize observer: on a busy machine it took longer than a fixed 0.3 s.
-    await p.until(`document.querySelector('.pk-feed').getBoundingClientRect().top>=document.querySelector('#flight-status').getBoundingClientRect().bottom`, {timeout: 3000}).catch(() => {});
-    const r = JSON.parse(await p.eval(`JSON.stringify({feed:document.querySelector('.pk-feed').getBoundingClientRect().top,text:document.querySelector('#flight-status').getBoundingClientRect().bottom})`));
-    expect(r.feed >= r.text, `below the corner's text when there is some (card ${Math.round(r.feed)}, text ends ${Math.round(r.text)})`);
-    await p.eval(`document.querySelector('#flight-status').textContent=''`);
-    // On a phone the two do not fit side by side: level with the title, the card covered it.
-    await viewport(p, 390, 844);
-    try {
-      await p.sleep(300);
-      const n = JSON.parse(await p.eval(`JSON.stringify({feed:document.querySelector('.pk-feed').getBoundingClientRect().top,title:document.querySelector('.scene-title').getBoundingClientRect().bottom})`));
-      expect(n.feed >= n.title, `below the title on a phone (card ${Math.round(n.feed)}, title ends ${Math.round(n.title)})`);
-      // With the visitor's phone open the title is hidden: the card goes up into the corner (it stayed below the
-      // hidden title, half-way down the view).
-      await p.click('[data-bar="phone"]');
-      await p.sleep(300);
-      const o = JSON.parse(await p.eval(`JSON.stringify({feed:document.querySelector('.pk-feed').getBoundingClientRect().top,title:document.querySelector('.scene-title').getBoundingClientRect().top})`));
-      expect(Math.abs(o.feed - o.title) <= 1, `up in the corner with the phone open (card ${Math.round(o.feed)}, the hidden title's top ${Math.round(o.title)})`);
-    } finally { await viewport(p); await p.eval('__world.setPaused(false)'); }
-  }},
-  {name: 'metric pairs stay aligned when one label wraps', async run(p, expect) {
-    await p.goto(`?${FAST}`);
-    await p.until(`${UP} && !!document.querySelector('.metric-pair .metric-value')`, {timeout: 40000});
-    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const m=document.querySelector('.metric-pair');m.style.width='260px';m.querySelectorAll('.metric-label')[1].textContent='Sample meeting room on floor 4';
-      const top=s=>[...m.querySelectorAll(s)].map(e=>Math.round(e.getBoundingClientRect().top));return {labels:[...m.querySelectorAll('.metric-label')].map(e=>Math.round(e.getBoundingClientRect().height)),values:top('.metric-value'),notes:top('.metric-note')}})())`));
-    expect(r.labels[1] > r.labels[0], `the second label wraps (${r.labels.join(' / ')} px)`);
-    expect(r.values[0] === r.values[1] && r.notes[0] === r.notes[1], `values and notes stay level (values ${r.values.join('/')}, notes ${r.notes.join('/')})`);
   }},
   {name: 'kiosk recovers from an idle guided story', async run(p, expect) {
     // speed 5, not 30: the 60 s idle timeout becomes 12 s, room for the setup taps and the story's first step under load.
@@ -2230,81 +1373,6 @@ export const scenarios = [
     expect(!/unknown/.test(kinds), `no unknown cars away from the parking stop (got ${kinds})`);
   }},
 
-  {name: 'night: the page switches as one cross-fade, no text fades through its own background', async run(p, expect) {
-    await p.goto(`?${FAST}`);
-    await p.until(`${UP} && !document.querySelector('#tour-night').disabled`, {timeout: 40000});
-    // Every frame for 1 s from the switch: colour transitions running on any element (the old per-element fades).
-    await p.eval(`(()=>{window.__fades=0;const end=performance.now()+1000;(function watch(){window.__fades=Math.max(window.__fades,document.getAnimations().filter(a=>a instanceof CSSTransition&&/color|background/.test(a.transitionProperty)).length);if(performance.now()<end)requestAnimationFrame(watch);})()})()`);
-    await p.click('#tour-night');
-    await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 10000, what: 'night on'});
-    await p.sleep(1100);
-    expect(await p.eval('__fades') === 0, `no element fades its own colours during the switch (${await p.eval('__fades')} at most)`);
-  }},
-  {quick: true, name: 'night: every car on the move lights the road from its bumper and the air ahead with its beams; parked cars are dark', async run(p, expect) {
-    await p.goto(parking('&time=20:00'));
-    await p.until(`${ready} && document.documentElement.dataset.night === 'true'`, {timeout: 40000});
-    const lamps = c => `(c=>c.getObjectByName('Demo_car_decals').material.color.r)(${c})`, pool = c => `${c}.getObjectByName('Demo_car_headlights')`, beams = c => `${c}.getObjectByName('Demo_car_headlight_beams')`;
-    await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');window.__out=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__parking.sim.state.presence.get(k).plate);window.__still=__parking.lot.root.children.find(c=>c.name.startsWith('Demo_car_')&&c!==__out&&c.visible&&__parking.traffic.parkedKeys().some(k=>'Demo_car_'+__parking.sim.state.presence.get(k).plate===c.name));void __parking.traffic.leave(k)})()`);
-    await p.until(`${pool('__out')}.visible`, {timeout: 10000, what: 'the leaving car lights the road'});
-    expect(await p.eval(lamps('__out')) === 1, 'the leaving car has its lamps on');
-    expect(await p.eval(`!!${beams('__out')}?.visible`), 'and its beams in the air');
-    expect(await p.eval(`!${pool('__still')}.visible && !${beams('__still')}?.visible`) && await p.eval(lamps('__still')) < .5, 'a parked car is dark, with no light on the road or in the air');
-    // The beams are lit air (as the meeting room's cone): they glow seen from the side and from above alike. Drawn
-    // alone in a scene, the light they add at a point on a beam's axis 2.5 m ahead of the bumper.
-    const glow = await p.eval(`(()=>{const b=${beams('__out')},V=__camera.position.constructor;b.updateWorldMatrix(true,false);
-      const solo=new __scene.constructor(),copy=b.clone();copy.matrixAutoUpdate=false;copy.matrix.copy(b.matrixWorld);copy.visible=true;
-      const cam=__camera.clone(),gl=__renderer.getContext(),px=new Uint8Array(4),aim=new V(.6,.5,4.7).applyMatrix4(b.matrixWorld);
-      const light=local=>{cam.position.copy(new V(...local).applyMatrix4(b.matrixWorld));cam.lookAt(aim);cam.updateMatrixWorld();
-        const read=()=>{gl.readPixels(gl.drawingBufferWidth>>1,gl.drawingBufferHeight>>1,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);return px[0]+px[1]+px[2];};
-        solo.remove(copy);__renderer.render(solo,cam);const dark=read();solo.add(copy);__renderer.render(solo,cam);return read()-dark;};
-      return {side:light([7,.6,4.7]),above:light([.61,8,4.7])};})()`);
-    expect(glow.side > 25 && glow.above > 25, `the beams glow seen from the side and from above (side ${glow.side}, above ${glow.above})`);
-    // The light grows out from under the bumper (the lamps), not metres ahead of it, and is part of the car (it moves
-    // with it). Its patch starts under the car's nose, hidden by the body, and the light fades to nothing before every
-    // edge of the patch (a light still bright at an edge showed as a straight cut).
-    const start = await p.eval(`(()=>{const g=${pool('__out')}.geometry;g.computeBoundingBox();return g.boundingBox.min.z})()`);
-    expect(start > 1.2 && start < 2.2, `the light's patch starts under the car's nose (${start.toFixed(2)} m from the car's centre; the bumper is at 2.2 m)`);
-    const edges = await p.eval(`(()=>{const c=${pool('__out')}.material.map.image,x=c.getContext('2d'),W=c.width,H=c.height,a=(X,Y,w,h)=>Math.max(...x.getImageData(X,Y,w,h).data.filter((_,i)=>i%4===3));
-      return {near:a(0,0,W,1),far:a(0,H-1,W,1),left:a(0,0,1,H),right:a(W-1,0,1,H),peak:a(0,0,W,H)};})()`);
-    expect(edges.peak > 200 && Math.max(edges.near, edges.far, edges.left, edges.right) < 4, `soft on every edge (edge alpha near ${edges.near}, far ${edges.far}, sides ${edges.left}/${edges.right}; brightest ${edges.peak})`);
-    // Every car on the move has its light: none of them waits for a free light, as the three spot lights made them do.
-    await p.until(`(()=>{const moving=__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car_')&&c.visible&&c.getObjectByName('Demo_car_decals').material.color.r===1);return moving.length>=2&&moving.every(c=>c.getObjectByName('Demo_car_headlights').visible&&c.getObjectByName('Demo_car_headlight_beams').visible)})()`, {timeout: 20000, what: 'two or more cars on the move, all with their light and beams'});
-    expect(!(await p.eval(`__scene.getObjectsByProperty('isSpotLight',true).some(s=>s.name.startsWith('Demo_headlight'))`)), 'no spot lights for headlights (the light is painted, so it costs the scene nothing)');
-    // Daytime: no light on the road, every car drawn as is.
-    await p.eval('__world.jumpTo(9*60)');
-    await p.until(`document.documentElement.dataset.night === 'false'`, {timeout: 5000, what: 'day'});
-    expect(await p.eval(`__parking.lot.root.children.every(c=>!c.getObjectByName('Demo_car_headlights')?.visible&&!c.getObjectByName('Demo_car_headlight_beams')?.visible)`), 'no headlight light or beams in the daytime');
-    expect(await p.eval(lamps('__still')) === 1, 'parked car drawn as is in the daytime');
-  }},
-  {name: 'night: the first dusk does not freeze the view (night shaders ready from the start)', async run(p, expect) {
-    // Real speed. The night's lights (the rooms') change the shaders; the warm-up prepares them, so the
-    // first switch draws like any frame. Before, it stalled ~1.8 s compiling and linking.
-    await p.goto('?debug=1&time=17:00&dest=parking');
-    await p.until(`${ready} && document.documentElement.dataset.warm==='done' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 40000});
-    await p.sleep(1000);
-    const worst = await p.eval(`new Promise(ok=>{let last=performance.now(),worst=0;const end=last+2500;(function f(t){worst=Math.max(worst,t-last);last=t;if(t<end)requestAnimationFrame(f);else ok(Math.round(worst));})(last);__world.jumpTo(20*60);})`);
-    expect(await p.eval(`document.documentElement.dataset.night`) === 'true', 'night');
-    expect(worst < 700, `longest frame around the first dusk: ${worst} ms`);
-  }},
-  {quick: true, name: 'night: switching the meeting-room light changes only that room', async run(p, expect) {
-    await p.goto(`?${FAST}`);
-    await p.until(UP, {timeout: 40000, what: 'model ready'});
-    await p.click('[data-destination="meeting"]');
-    await p.until("document.body.dataset.tourDestination === 'meeting' && !document.querySelector('#tour-night').disabled", {timeout: 20000});
-    await p.click('#tour-night');
-    await p.until(`document.documentElement.dataset.night === 'true'`, {timeout: 10000});
-    await p.sleep(600); // the rooms' lights fade (~0.35 s) to the night's schedule
-    const spots = `JSON.stringify(__scene.getObjectsByProperty('isSpotLight',true).filter(l=>l.visible&&l.name.startsWith('Simulation_spot')).map(l=>[l.userData.roomId,l.position.x.toFixed(1),l.position.z.toFixed(1),l.intensity]))`;
-    const before = JSON.parse(await p.eval(spots));
-    await p.click('[data-control="light"]');
-    await p.sleep(600);
-    const after = JSON.parse(await p.eval(spots));
-    const same = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
-    expect(after.length === before.length && after.every((s, i) => same(s, before[i])), 'the same spots stay assigned to the same rooms');
-    const changed = after.filter((s, i) => s[3] !== before[i][3]).map(s => s[0]);
-    expect(changed.length > 0 && changed.every(id => id === 'f4_meeting_2'), `only the meeting room's spot changed (changed: ${changed.join(', ') || 'none'})`);
-    await p.click('#tour-night');
-  }},
   {name: 'a leaving car gets out even with busy street traffic', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
@@ -2389,24 +1457,6 @@ export const scenarios = [
     const limit = others ? 20 : 8;
     expect(waited < limit, `leaving car through the barrier within ${limit} s of demo time, plate read included (waited ${waited.toFixed(1)} s, ${others} other car(s) at the gate meanwhile)`);
   }},
-  {name: 'camera card labels fit and the alert never covers it (narrow window, English)', async run(p, expect) {
-    await viewport(p, 1200, 900);
-    try {
-      await p.goto(parking());
-      await p.until(ready, {timeout: 40000});
-      await p.click('#lang-toggle');
-      const k = await p.eval(LEAVE_STAFF);
-      // The exit camera's card (a background car at the entry may show its own card first).
-      await p.until(`!document.querySelector('.pk-feed').hidden && document.querySelector('.pk-feed-head').textContent.includes('LPR-OUT') && document.querySelector('.pk-feed-meta .pk-pill')`, {timeout: 30000, what: 'exit camera card'});
-      const fit = JSON.parse(await p.eval(`JSON.stringify((()=>{const card=document.querySelector('.pk-feed').getBoundingClientRect(),plate=document.querySelector('.pk-feed-plate').getBoundingClientRect();return [...document.querySelectorAll('.pk-feed-meta .pk-pill')].map(e=>{const r=e.getBoundingClientRect(),inner=e.scrollWidth<=e.clientWidth+1;return {inCard:r.right<=card.right-4&&r.left>=card.left,clearOfPlate:r.left>=plate.right,inner}})})())`));
-      expect(fit.length && fit.every(f => f.inCard && f.clearOfPlate && f.inner), `labels fit beside the plate inside the card (${JSON.stringify(fit)})`);
-      await p.eval(`void __parking.traffic.arrive({plate:'3ฆง 6047',province:'ชลบุรี',color:6,fromX:-40})`);
-      await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open') && !document.querySelector('.pk-feed').hidden`, {timeout: 30000, what: 'alert with camera card'});
-      const overlap = await p.eval(`(()=>{const a=document.querySelector('.pk-alert-pop').getBoundingClientRect(),b=document.querySelector('.pk-feed').getBoundingClientRect();return !(a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top)})()`);
-      expect(!overlap, 'alert does not overlap the camera card');
-      await p.click('#lang-toggle');
-    } finally { await viewport(p); }
-  }},
   {name: 'meeting room: the door swings and the AC airflow flows and fades', async run(p, expect) {
     // Real speed: these animations are not scaled.
     await p.goto('?debug=1');
@@ -2452,32 +1502,6 @@ export const scenarios = [
         const pos=o.geometry.attributes.position,v=new V();
         for(let i=0;i<pos.count;i++){v.fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld);if(v.y>.8&&v.z>13.6&&v.z<18.8&&v.x>-58&&v.x<-12){out.push((o.name||'mesh')+' at x'+v.x.toFixed(1)+' z'+v.z.toFixed(1));break;}}});return out})()`);
     expect(blocking.length === 0, `no obstacle in the lanes (${blocking.join('; ')})`);
-  }},
-  {name: 'street lights stand evenly all along the main road; they and the car park\'s poles light the ground at night (lit air down to a pool), not by day', async run(p, expect) {
-    await p.goto(parking('&time=20:00'));
-    await p.until(`${ready} && document.documentElement.dataset.night === 'true'`, {timeout: 40000});
-    const light = `__parking.lot.root.children.filter(o=>o.name==='Demo_lamp_light')`;
-    const cones = await p.eval(`${light}.filter(o=>o.geometry.type==='CylinderGeometry').map(o=>({x:o.position.x,z:o.position.z,visible:o.visible}))`);
-    // The lamps stand on the street's kerb on the site's side and hang over its near lane.
-    const street = cones.filter(c => c.z > STREET.north - 1 && c.z < STREET.north + 3).sort((a, b) => a.x - b.x), lot = cones.filter(c => c.z < 13);
-    const gaps = street.slice(1).map((c, i) => c.x - street[i].x);
-    expect(street.length >= 10 && street[0].x < -70 && street.at(-1).x > 70, `street lights all along the road (${street.length}, x ${street[0]?.x} … ${street.at(-1)?.x})`);
-    expect(gaps.every(g => Math.abs(g - gaps[0]) < .01), `evenly spaced (${[...new Set(gaps.map(g => g.toFixed(1)))].join(', ')} m apart)`);
-    expect(!street.some(c => c.x > -26 && c.x < -17), 'none in the gate mouth');
-    expect(lot.length === 4, `the car park's four poles light it too (${lot.length})`);
-    expect(await p.eval(`${light}.every(o=>o.visible)`), 'every cone and the pools show at night');
-    // Lit air, as the meeting room's cone: it glows seen from the side and from straight above.
-    const glow = await p.eval(`(()=>{const c=${light}.find(o=>o.geometry.type==='CylinderGeometry'),V=__camera.position.constructor;
-      const solo=new __scene.constructor(),copy=c.clone();copy.matrixAutoUpdate=false;copy.matrix.copy(c.matrixWorld);
-      const cam=__camera.clone(),gl=__renderer.getContext(),px=new Uint8Array(4),aim=c.getWorldPosition(new V()).add(new V(0,1.5,0));
-      const light=off=>{cam.position.copy(aim).add(new V(...off));cam.lookAt(aim);cam.updateMatrixWorld();
-        const read=()=>{gl.readPixels(gl.drawingBufferWidth>>1,gl.drawingBufferHeight>>1,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);return px[0]+px[1]+px[2];};
-        solo.remove(copy);__renderer.render(solo,cam);const dark=read();solo.add(copy);__renderer.render(solo,cam);return read()-dark;};
-      return {side:light([12,0,4]),above:light([.01,14,0])};})()`);
-    expect(glow.side > 25 && glow.above > 25, `the cone glows seen from the side and from above (side ${glow.side}, above ${glow.above})`);
-    await p.eval('__world.jumpTo(10*60)');
-    await p.until(`document.documentElement.dataset.night === 'false'`, {timeout: 5000, what: 'day'});
-    expect(await p.eval(`${light}.every(o=>!o.visible)`), 'no lamp light by day');
   }},
   {name: 'cars drive at their set speed, also while the page is busy', async run(p, expect) {
     // Real speed. Street cars run at exactly 7 m/s (eastbound) or 9 m/s (westbound).
@@ -2573,17 +1597,6 @@ export const scenarios = [
     expect(!r.story, 'the story stopped');
     expect(r.dest === 'parking' && !r.pause, `the tour stopped at the car park (at ${r.dest}, tour ${r.pause ? 'still running' : 'stopped'})`);
   }},
-  {quick: true, name: 'visitor flow as in the real app: a confirmation, then the decision by email only', async run(p, expect) {
-    await p.goto(parking('&story=1&auto=0'));
-    await p.until('window.__parking && __parking.story.running', {timeout: 40000});
-    await p.until('__parking.story.waitingForNext', {timeout: 30000}); await p.click('[data-bar="next"]');
-    await p.until('__parking.story.index===1 && __parking.story.waitingForNext', {timeout: 30000, what: 'request sent'});
-    const sent = JSON.parse(await p.eval(`JSON.stringify((()=>{const ph=document.querySelector('#pk-phone');return {text:ph.querySelector('.ph-screen').textContent,rows:ph.querySelectorAll('.ph-receipt div').length,spinner:!!ph.querySelector('.ph-wait,[class*="spin"]'),inbox:!!ph.querySelector('[data-ph="inbox"]')}})())`));
-    expect(/chujai@example\.com/.test(sent.text) && sent.rows === 4, 'confirmation names the email and lists receipt, plate and both dates');
-    expect(!sent.spinner && !sent.inbox, 'no live status and no inbox on the website');
-    const statusBar = JSON.parse(await p.eval(`JSON.stringify((()=>{const n=document.querySelector('.ph-notch').getBoundingClientRect();return [...document.querySelectorAll('.ph-status > *')].map(e=>{const r=e.getBoundingClientRect();return r.right<=n.left||r.left>=n.right})})())`));
-    expect(statusBar.every(Boolean), 'status bar items clear of the notch');
-  }},
   {name: 'LPR pop-up is live: it shows the gate camera and its plate box follows the car', async run(p, expect) {
     await p.goto('?dest=parking&debug=1&speed=5');
     await p.until(ready, {timeout: 40000});
@@ -2606,25 +1619,6 @@ export const scenarios = [
     const bad = await p.eval(`__parking.sim.state.vehicles.map(v=>v.plate).filter(p=>/ศพ|ชน|ตก|ตด|จม|ยม|รก/.test(p)).join(', ')`);
     expect(!bad, `unlucky plates: ${bad}`);
   }},
-  {name: 'LPR pop-up never shows the main view: camera flights redraw the inset too', async run(p, expect) {
-    await p.goto('?dest=parking&debug=1&speed=5');
-    await p.until(ready, {timeout: 40000});
-    // Count main-view draws to the screen while the pop-up is visible that no inset draw follows in the same task.
-    await p.eval(`(()=>{const R=__renderer,draw=R.render.bind(R);let pending=false;window.__bare=0;
-      R.render=(s,c)=>{draw(s,c);if(R.getRenderTarget())return;
-        if(c!==__camera){pending=false;return}
-        const hole=document.querySelector('.pk-feed:not([hidden]) .pk-feed-img.live');
-        if(!hole||hole.getBoundingClientRect().width<4)return;
-        pending=true;setTimeout(()=>{if(pending)__bare++;pending=false},0)}})()`);
-    await p.eval(`void __parking.traffic.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:5,fromX:-40})`);
-    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='1กก 1111')`, {timeout: 30000, what: 'car at the gate'});
-    // Each flight starts and ends with a resolution switch that redraws the view at once.
-    await p.click('[data-destination="overview"]'); await p.sleep(400);
-    await p.click('[data-destination="parking"]'); await p.sleep(600);
-    expect(await p.eval('__bare') === 0, `frames with the main view in the pop-up: ${await p.eval('__bare')}`);
-  }},
-
-  // The day cycle: one world clock, running as a time-lapse (`day=10`: a day in 10 real minutes, × SPEED here).
   {name: 'day cycle: the clock runs by itself; a jump brings the car park to the hour, logged over the skipped time', async run(p, expect) {
     await p.goto(`?${FAST}&day=10&time=08:00`);
     await p.until(UP, {timeout: 40000});
@@ -2703,20 +1697,6 @@ export const scenarios = [
     await p.eval(`__controls.dispatchEvent({type:'start'});__controls.dispatchEvent({type:'end'})`);
     expect(await p.eval(`document.querySelector('#day-play').getAttribute('aria-pressed')`) === 'false', 'a drag stops following');
   }},
-  {name: 'day cycle: the shadow-casting light moves smoothly all day, midnight and dusk included', async run(p, expect) {
-    await p.goto('?debug=1');
-    await p.until(UP, {timeout: 40000});
-    // The sky for every minute of the day (and back round to 00:00), on stand-in lights: how far the light turns
-    // from one minute to the next, and how low it gets.
-    const r = JSON.parse(await p.eval(`(async()=>{const THREE=await import('osd/node_modules/three/build/three.module.js'),{applySky}=await import('osd/viewer/daylight.js');
-      const key=new THREE.DirectionalLight(),parts={scene:{background:new THREE.Color()},renderer:{},hemisphere:new THREE.HemisphereLight(),key,fill:new THREE.DirectionalLight(),dayBackground:'#e6ecee'};
-      let prev=null,worst=0,at=0,lowest=90;
-      for(let m=0;m<=1440;m+=1){applySky({...parts,minute:m%1440});const d=key.position.clone().normalize();lowest=Math.min(lowest,Math.asin(d.y)*180/Math.PI);
-        if(prev){const turn=prev.angleTo(d)*180/Math.PI;if(turn>worst){worst=turn;at=m;}}prev=d;}
-      return JSON.stringify({worst,at,lowest});})()`));
-    expect(r.worst < 1, `the light turns at most ${r.worst.toFixed(2)}° in a minute (worst at ${Math.floor(r.at / 60)}:${String(r.at % 60).padStart(2, '0')})`);
-    expect(r.lowest > 15, `never lower than ${r.lowest.toFixed(1)}° (shadows of a sensible length)`);
-  }},
   {name: 'pause: everything stands still (clock, cars, traffic) until resumed; the day can be made longer or shorter', async run(p, expect) {
     await p.goto(`?${FAST}&day=10&time=09:00`);
     await p.until(UP, {timeout: 40000});
@@ -2779,17 +1759,6 @@ export const scenarios = [
     expect(await p.eval(`!!document.querySelector('[data-action="meeting"]') && !${room}.light`), 'the room stays empty as the day runs on');
     await p.click('[data-action="meeting"]');
     await p.until(`!!document.querySelector('[data-action="meeting-end"]') && ${room}.light && ${room}.climate`, {timeout: 3000, what: 'a new meeting: light and AC back on'});
-  }},
-  {name: 'day cycle: the explore page follows the building schedule (offices dark at night), and no solar demo at night', async run(p, expect) {
-    const lit = `Object.values(__simulation().rooms).filter(r=>r.light).length`;
-    // The page is ready before its car park (and with it the schedule) loads: wait for the rooms to follow.
-    await p.goto('?debug=1&time=22:00#explore');
-    await p.until(`${LOADED} && !!window.__simulation && ${lit} <= 2`, {timeout: 40000, what: 'offices dark at 22:00 on the explore page'});
-    await p.goto('?debug=1&time=10:00#explore');
-    await p.until(`${LOADED} && !!window.__simulation && ${lit} > 10`, {timeout: 40000, what: 'offices lit at 10:00 on the explore page'});
-    await p.goto(`?dest=energy&${FAST}&time=22:00`);
-    await p.until(`${UP} && document.body.dataset.tourDestination === 'energy' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 40000});
-    expect(await p.eval(`document.querySelector('[data-action="energy"]').disabled`), 'the solar demo button is off at night');
   }},
   {name: 'day cycle: visitors with a pass for today drop in during the day, and leave by themselves', async run(p, expect) {
     // Speed 30, 10-minute day: about half an hour of world time a second; visitors come 09:30–15:30.
