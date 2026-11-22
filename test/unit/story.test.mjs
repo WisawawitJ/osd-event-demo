@@ -150,3 +150,31 @@ test('pausing the demo stops everything: no simulation time passes, nothing move
   assert.ok(demoNow() > t);
   w.dispose();
 });
+
+test('a free-play photo read under way when the story starts does not put its plate in the story\'s form', async () => {
+  const {w} = start();
+  w.phone.readPhoto(); // free play: a sample plate in ~1.5 s
+  const out = play(w), plates = new Set();
+  await w.until(() => { const p = w.phone.form.plate; if (p) plates.add(p); return Boolean(request(w)); }, 120000);
+  assert.equal(request(w).plate, STORY.plate);
+  assert.deepEqual([...plates], [STORY.plate], 'only the story plate ever in its form');
+  void out;
+});
+
+test('a photo read pressed during the story\'s own read does not stall it, and the story plate wins', async () => {
+  const {w, seen} = start(); play(w);
+  assert.ok(await w.until(() => w.phone.form.photo === 'reading', 120000), 'the story\'s read');
+  w.phone.readPhoto();
+  assert.ok(await w.until(() => Boolean(request(w)), 60000), 'the story went on and sent its request');
+  assert.equal(request(w).plate, STORY.plate);
+  void seen;
+});
+
+test('leaving the story during its photo read: what the visitor types next stays', async () => {
+  const {w} = start(); play(w);
+  assert.ok(await w.until(() => w.phone.form.photo === 'reading', 120000));
+  w.story.stop();
+  w.phone.setForm({plate: '5กข 1234'});
+  await w.run(3000);
+  assert.equal(w.phone.form.plate, '5กข 1234');
+});

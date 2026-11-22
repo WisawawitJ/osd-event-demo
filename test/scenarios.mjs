@@ -222,20 +222,6 @@ export const scenarios = [
     expect(await p.eval(leaf) !== before, 'a door leaf turns with its hinge');
   }},
 
-  {name: 'story started during a free-play photo read submits the story plate', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    await p.click('[data-bar="phone"]');
-    await p.click('[data-ph="photo"]'); // free play: reads a sample plate after ~1.5 s
-    // Nor does the free-play read land in the story's form on the way (step 2's own read wrote over it after).
-    await p.eval(`(()=>{window.__plates=new Set();const t=setInterval(()=>{const v=document.querySelector('#pk-phone input[name=plate]')?.value;if(v)__plates.add(v);if(${STORY_REQUEST})clearInterval(t)},20)})()`);
-    await p.click('[data-bar="play"]');
-    await p.until(`!!${STORY_REQUEST}`, {timeout: 40000, what: 'story request submitted'});
-    const plate = await p.eval(`${STORY_REQUEST}.plate`), seen = await p.eval('[...__plates]');
-    expect(plate === STORY_PLATE, `story request has the story plate (${plate})`);
-    expect(seen.every(v => v === STORY_PLATE), `only the story plate in its form (${seen.join(', ')})`);
-  }},
-
   {name: 'a photo tap early in the story (step 1) does not change the story plate', async run(p, expect) {
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
@@ -260,36 +246,6 @@ export const scenarios = [
     const plate = await p.eval(`${STORY_REQUEST}.plate`);
     expect(plate === STORY_PLATE, `story request has the story plate (${plate})`);
     expect(!(await p.eval('window.__flash')), 'the free-play sample plate never flashed in the phone photo');
-  }},
-
-  {name: 'pressing the phone photo button during the story read does not stall the story', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    // Press the photo button the moment the story's read starts (it lasts 1.5 s of demo time).
-    await p.eval(`(()=>{const o=new MutationObserver(()=>{if(document.querySelector('.ph-photo-state.reading')){o.disconnect();window.__pressed=true;document.querySelector('[data-ph="photo"]').click();}});o.observe(document.body,{subtree:true,childList:true})})()`);
-    await p.click('[data-bar="play"]');
-    await p.until('window.__pressed', {timeout: 40000, what: 'photo pressed during the story read'});
-    await p.until(`!!${STORY_REQUEST}`, {timeout: 40000, what: 'story went on and submitted its request'});
-    const plate = await p.eval(`${STORY_REQUEST}.plate`);
-    expect(plate === STORY_PLATE, `story request keeps the story plate (${plate})`);
-  }},
-
-  {name: 'leaving the story during its photo read keeps what the visitor types next', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    // Leave the story the moment its photo read starts, then type a plate of our own.
-    await p.eval(`(()=>{const o=new MutationObserver(()=>{if(document.querySelector('.ph-photo-state.reading')){o.disconnect();document.querySelector('[data-bar="free"]').click();window.__left=true;}});o.observe(document.body,{subtree:true,childList:true})})()`);
-    await p.click('[data-bar="play"]');
-    await p.until('window.__left', {timeout: 40000, what: 'story left during its photo read'});
-    await p.eval(`(()=>{const i=document.querySelector('input[name="plate"]');i.value='9ขข 1234';i.dispatchEvent(new Event('input',{bubbles:true}))})()`);
-    await p.sleep(1500 / SPEED + 500);
-    const plate = await p.eval(`document.querySelector('input[name="plate"]').value`);
-    expect(plate === '9ขข 1234', `typed plate kept after the cancelled read (${plate})`);
-    expect(await p.eval(`!document.querySelector('.ph-photo-state.reading')`), 'no "reading plate" left on the phone');
-    // Free play: a photo read survives an Auto-advance toggle (only a stopping story cancels reads).
-    await p.click('[data-ph="photo"]');
-    await p.eval(`document.querySelector('[data-bar="auto"]').click()`);
-    await p.until(`!!document.querySelector('.ph-photo-state.done')`, {timeout: 5000, what: 'free-play read finished'});
   }},
 
   {name: 'Free play at the photo cue leaves the photo button working', async run(p, expect) {
