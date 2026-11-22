@@ -178,3 +178,29 @@ test('leaving the story during its photo read: what the visitor types next stays
   await w.run(3000);
   assert.equal(w.phone.form.plate, '5กข 1234');
 });
+
+test('a story left after its visitor parked lets that car leave once its visit is over', async () => {
+  const {w} = start({onScreen: false}); play(w);
+  const k = w.sim.key(STORY.plate, STORY.province);
+  assert.ok(await w.until(() => w.sim.state.presence.has(k) && !w.traffic.isAround(k), 300000), 'the visitor parked');
+  w.story.stop();
+  world.jumpTo(world.minute() + 240);
+  assert.ok(await w.until(() => !w.sim.state.presence.has(k), 30000), 'gone after its visit');
+});
+
+test('guided: Free play at the Approve cue does not approve', async () => {
+  const {w, seen} = start(); play(w, false);
+  for (let i = 0; i < 3; i++) { assert.ok(await w.until(() => w.story.index === i && w.story.waitingForNext, 120000)); w.story.next(); }
+  assert.ok(await w.until(() => seen.cue === 'approve', 60000));
+  w.story.stop();
+  await w.run(10000);
+  assert.equal(request(w).status, 'pending');
+});
+
+test('a story stopped while it resets the world does not go on into its first step', async () => {
+  const {w} = start();
+  play(w); w.story.stop();
+  await w.run(5000);
+  assert.equal(w.story.index, -1);
+  assert.equal(w.phone.isOpen, false, 'step 1 never opened the phone');
+});

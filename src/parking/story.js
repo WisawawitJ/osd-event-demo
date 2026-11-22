@@ -199,10 +199,12 @@ export function createStory(ctx) {
     emit();
     try {
       await ctx.resetWorld();
-      for (index = 0; index < steps.length; index++) {
-        // Stopped meanwhile (while the world reset, or a step's hold): no further step, which would set the clock.
-        const step = steps[index], s = api(my);
+      for (let i = 0; i < steps.length; i++) {
+        // Stopped meanwhile (while the world reset, or a step's hold): no further step, which would set the clock (nor
+        // its number: stopped during the reset, the story was left at step 1).
+        const step = steps[i], s = api(my);
         s.alive();
+        index = i;
         if (step.skip?.()) continue;
         shownVariant = undefined; ctx.caption(captionFor(index));
         emit();

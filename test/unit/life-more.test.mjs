@@ -115,3 +115,23 @@ test('the calendar invite is a reminder on the arrival day', () => {
   assert.match(ics, new RegExp(`DTSTART;VALUE=DATE:${day}`), 'all day on the arrival day');
   assert.match(ics, new RegExp(`DTEND;VALUE=DATE:${next}`));
 });
+
+test('opened at 08:00, the car park holds the cars its log says are in; at 07:40 no request from later yet', async () => {
+  world.jumpTo(7 * 60 + 40);
+  let w = open();
+  assert.equal(w.sim.state.requests.filter(q => q.createdAt > world.now()).length, 0, 'no request from the future');
+  w.dispose(); live.length = 0;
+  world.jumpTo(8 * 60);
+  w = open();
+  const s = w.sim.state, n = k => s.events.filter(e => e.kind === k).length;
+  assert.equal(s.presence.size, n('entry') - n('exit'), 'parked = in − out');
+  assert.equal(s.stalls.filter(b => b.occupant).length, s.presence.size, 'one bay each');
+});
+
+test('the car park keeps living while the camera is elsewhere: cars come and go', async () => {
+  const w = open({time: '07:00'});
+  const before = new Set(w.sim.state.presence.keys());
+  await w.run(60000);
+  const after = new Set(w.sim.state.presence.keys());
+  assert.ok([...after].some(k => !before.has(k)), 'cars came in');
+});

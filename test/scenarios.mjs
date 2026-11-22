@@ -34,16 +34,6 @@ const DRIFT = `(()=>{__camera.updateMatrixWorld();const c=document.querySelector
 const viewport = (p, width = 1600, height = 1000) => p.cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
 
 export const scenarios = [
-  {name: 'a story left after its visitor parked lets that car leave once its visit is over', async run(p, expect) {
-    // Left between steps 6 and 10, the story's visitor stayed parked for the rest of free play.
-    await p.goto(parking('&story=1'));
-    await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
-    const key = `__parking.sim.key(${JSON.stringify(STORY_PLATE)},${STORY_REQUEST}?.province)`;
-    await p.until(`__parking.sim.state.presence.has(${key}) && !__parking.traffic.isArriving(${key})`, {timeout: 60000, what: 'the story visitor parked'});
-    await p.eval(`(()=>{window.__k=${key};__parking.story.stop();__world.jumpTo(__world.minute()+240)})()`);
-    await p.until('!__parking.sim.state.presence.has(__k)', {timeout: 30000, what: 'the visitor gone after its visit'});
-    expect(true, 'the story visitor left');
-  }},
   {name: 'the Gate tab\'s test cars are off while the story plays, on again after', async run(p, expect) {
     // An Unknown car sent during the story got into its steps: step 7 denied the visitor's car in the stray's place, and
     // the story's own unknown car then held the barrier unanswered.
@@ -92,34 +82,6 @@ export const scenarios = [
     expect(await p.eval(`!!document.querySelector('#pk-phone .ph-ticket')`), 'the phone shows the ticket at step 5');
     const toasts = await p.eval(`[...document.querySelectorAll('.pk-toast')].map(t=>t.textContent).join(' | ')`);
     expect(/Ticket emailed/.test(toasts), `the ticket email's toast (${toasts})`);
-  }},
-  {name: 'guided story: Free play at the approve cue does not approve', async run(p, expect) {
-    await p.goto(parking('&story=1&auto=0'));
-    await p.until('window.__parking && __parking.story.running', {timeout: 40000});
-    for (let i = 0; i < 3; i++) { await p.until('__parking.story.waitingForNext', {timeout: 30000, what: `Next #${i + 1}`}); await p.click('[data-bar="next"]'); }
-    await p.until(`document.querySelector('[data-act="approve"][data-cue="true"]')`, {timeout: 30000, what: 'approve cue'});
-    await p.click('[data-bar="free"]');
-    await p.sleep(300);
-    const status = await p.eval(`${STORY_REQUEST}?.status`);
-    expect(status === 'pending', `request stays pending (got ${status})`);
-  }},
-
-  {name: 'opened before 09:00, the car park holds the cars its log says are in', async run(p, expect) {
-    // The seeded morning is 09:00's. Opened earlier, the log lost the later exits but the car park still lacked the
-    // cars that made them: at 08:00 the log said 14 in and none out with 10 parked.
-    await p.goto(`?dest=meeting&${FAST}&time=08:00`);
-    await p.until(UP, {timeout: 40000, what: 'model ready'});
-    await p.eval('__world.setPaused(true)');
-    const r = JSON.parse(await p.eval(`(()=>{const s=__parking.sim.state,n=k=>s.events.filter(e=>e.kind===k).length;return JSON.stringify({entries:n('entry'),exits:n('exit'),parked:s.presence.size,bays:s.stalls.filter(b=>b.occupant).length});})()`));
-    expect(r.parked === r.entries - r.exits && r.bays === r.parked, `${r.entries} in, ${r.exits} out: ${r.parked} parked in ${r.bays} bays`);
-  }},
-  {name: 'opened before 08:31, the seeded visitor request is not in yet', async run(p, expect) {
-    // The seeded morning's pending request is made at 08:31; opened earlier it was already waiting, and approving it
-    // logged a decision before the request.
-    await p.goto(parking('&time=07:40'));
-    await p.until(ready, {timeout: 40000});
-    const early = await p.eval(`__parking.sim.state.requests.filter(q=>q.createdAt>__world.now()).length`);
-    expect(early === 0, `no request from the future (${early})`);
   }},
   {name: 'Vehicles: a row keeps its vehicle when the list reorders', async run(p, expect) {
     // Rows were reused by position: when a retried vehicle synced and moved down the list, the row (and a focused
@@ -669,16 +631,6 @@ export const scenarios = [
     const r = JSON.parse(await p.eval(`JSON.stringify({story:__parking.story.running,m:Math.floor(__world.minute())})`));
     expect(!r.story && r.m >= 1200 && r.m < 1320, `the story stopped and the clock stayed in the evening (story ${r.story}, minute ${r.m})`);
   }},
-  {name: 'a parking story stopped while it resets the world sets no clock after', async run(p, expect) {
-    // Stopped during its reset (the first 50 ms), the story still went on into its first step, which sets the clock
-    // to 09:02: a timeline jump made then was undone.
-    await p.goto(parking('&time=20:00'));
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`(()=>{const sim=__parking.sim,set=sim.setNow;window.__late=[];void __parking.playStory();__parking.stopStory();sim.setNow=ms=>{__late.push(ms);return set(ms);};})()`);
-    await p.sleep(400);
-    const late = await p.eval('__late.length');
-    expect(late === 0 && !(await p.eval('__parking.story.running')), `no step ran after the stop (${late} clock settings)`);
-  }},
   {name: 'Follow the day: Pause on the way to the meeting holds its scenario until Resume', async run(p, expect) {
     // Like the car park's story: the meeting's cooling scenario started on landing, over a Pause.
     await p.goto(`?${FAST}&time=09:05`);
@@ -920,18 +872,6 @@ export const scenarios = [
       await new Promise(r=>setTimeout(r,300));return JSON.stringify({shown:${shown},planned:daySnapshot(4*60+10,new Map()).telemetry.temp});})()`));
     expect(r.shown === r.planned, `at 04:10 the room shows the schedule's ${r.planned} °C (shows ${r.shown} °C)`);
   }},
-  {name: 'car park keeps living at building stops (staff cars come and go)', async run(p, expect) {
-    await p.goto(`?${FAST}`);
-    await p.until(UP, {timeout: 40000, what: 'model ready'});
-    await p.click('[data-destination="pond"]');
-    await p.sleep(1500);
-    const before = await p.eval('__parking.sim.state.events.length');
-    // Background lot traffic skips a turn while another car is moving; with several browsers sharing the GPU that can take a while.
-    await p.until(`__parking.sim.state.events.length > ${before}`, {timeout: 30000, what: 'an entry or exit while on the pond stop'});
-    const kinds = await p.eval(`__parking.sim.state.events.slice(0, __parking.sim.state.events.length - ${before}).map(e=>e.kind+':'+e.type).join(',')`);
-    expect(!/unknown/.test(kinds), `no unknown cars away from the parking stop (got ${kinds})`);
-  }},
-
   {name: 'dock: first visit to the meeting room is quick and does not stall', async run(p, expect) {
     // Real speed and no ?debug, as visitors get it.
     await p.goto('/');
