@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/serve.mjs 8080",
-    "test": "node test/run.mjs",
-    "test:quick": "node test/run.mjs quick",
+    "test:unit": "node --import ./test/unit/setup.mjs --test test/unit/",
+    "test": "npm run test:unit && node test/run.mjs",
+    "test:quick": "npm run test:unit && node test/run.mjs quick",
     "bench": "node test/bench.mjs"
   }
 }

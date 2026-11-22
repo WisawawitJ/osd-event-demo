@@ -2,7 +2,7 @@
 // alerts, audit and outbox. Nothing here talks to ATOM, Keycloak, mail or cameras.
 import {buildStalls} from './layout.js';
 import {bkk} from './i18n.js';
-import {later, world, demoNow} from './clock.js';
+import {later, world, demoNow, rng as dice} from './clock.js';
 
 const DAY_START = bkk(2026, 11, 24, 0, 0);
 
@@ -219,7 +219,7 @@ export function createParkingSim() {
     if (!pool.length) return null;
     // Visitors get the first free visitor bay nearest the driveway; others spread through the lot.
     if (type === 'guest') return pool.sort((a, b) => b.z - a.z)[0];
-    return pool[Math.floor(Math.random() * pool.length)];
+    return pool[Math.floor(dice() * pool.length)];
   }
 
   // `at` is for the car park catching up on time it did not show (a jump, or while off screen); calls go oldest first.
@@ -248,7 +248,7 @@ export function createParkingSim() {
   }
 
   function raiseAlert({plate, province, snapshot, color, ambient = false}) {
-    // `raised` is demo time (demoNow): how long a car has waited is not world-clock time, which may run fast.
+    // `raised` is simulation time (demoNow): how long a car has waited is not world-clock time, which may run fast.
     const alert = {id: uid('a'), at: now(), raised: demoNow(), plate, province, snapshot, color, status: 'open', ambient};
     state.alerts.unshift(alert);
     state.events.unshift({id: uid('e'), at: now(), kind: 'unknown', plate, province, type: 'unknown', camera: 'LPR-IN', confidence: .91, alertId: alert.id});
@@ -286,9 +286,9 @@ export function createParkingSim() {
     const email = e => String(e || '').trim().toLowerCase();
     const dup = state.requests.find(q => ['pending', 'approved'].includes(q.status) && normalizePlate(q.plate) === normalizePlate(data.plate) && q.province === data.province
       && q.arrival === data.arrival && q.departure === data.departure && email(q.visitor.email) === email(data.visitor.email));
-    const req = dup || {id: uid('r'), ref: `PK-${Math.random().toString(36).slice(2, 6).toUpperCase()}${String(state.requests.length + 41).padStart(3, '0')}`, status: 'pending', createdAt: at, history: [{at, key: 'h.submitted'}], ...data, color: data.color ?? Math.floor(Math.random() * 9)}; // the colour after the data: an undefined one in it overwrote the random pick (every visitor car white)
+    const req = dup || {id: uid('r'), ref: `PK-${dice().toString(36).slice(2, 6).toUpperCase()}${String(state.requests.length + 41).padStart(3, '0')}`, status: 'pending', createdAt: at, history: [{at, key: 'h.submitted'}], ...data, color: data.color ?? Math.floor(dice() * 9)}; // the colour after the data: an undefined one in it overwrote the random pick (every visitor car white)
     if (!dup) state.requests.unshift(req);
-    req.receipt = `RC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    req.receipt = `RC-${dice().toString(36).slice(2, 8).toUpperCase()}`;
     emit('request', req);
     return req;
   }
@@ -360,7 +360,7 @@ export function createParkingSim() {
   // same car twice). Returns null then.
   function addVehicle({plate, province, owner, type = 'staff'}) {
     if (state.vehicles.some(v => v.province === province && normalizePlate(v.plate) === normalizePlate(plate))) return null;
-    const v = {id: uid('v'), plate, province, owner, type, enabled: true, sync: 'pending', color: Math.floor(Math.random() * 9)};
+    const v = {id: uid('v'), plate, province, owner, type, enabled: true, sync: 'pending', color: Math.floor(dice() * 9)};
     state.vehicles.push(v);
     audit('staff.name', 'a.plateAdd', {target: plate});
     emit('vehicle', v);
@@ -371,7 +371,7 @@ export function createParkingSim() {
     const samples = [['6กฉ 2207', 'กรุงเทพมหานคร', 'อารี ทองคำ'], ['ขธ 5519', 'นนทบุรี', 'สุนทร ศรีสุข'], ['8กร 7340', 'กรุงเทพมหานคร', 'พิมพ์ใจ บุญมา']];
     // Imported again, the same plates are not listed twice.
     const listed = new Set(state.vehicles.map(v => key(v.plate, v.province)));
-    const added = samples.filter(([plate, province]) => !listed.has(key(plate, province))).map(([plate, province, owner]) => ({id: uid('v'), plate, province, owner, type: 'staff', enabled: true, sync: 'pending', color: Math.floor(Math.random() * 9)}));
+    const added = samples.filter(([plate, province]) => !listed.has(key(plate, province))).map(([plate, province, owner]) => ({id: uid('v'), plate, province, owner, type: 'staff', enabled: true, sync: 'pending', color: Math.floor(dice() * 9)}));
     if (!added.length) return 0;
     state.vehicles.push(...added);
     audit('staff.name', 'a.import', {target: String(added.length)});

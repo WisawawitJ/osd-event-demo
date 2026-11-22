@@ -1,7 +1,7 @@
 // This module is deliberately local: device state never leaves this page.
 // spotLights / shadowSpots: the night room light pool and how many of it cast shadows.
 import {L} from 'osd/parking/i18n.js';
-import {demoNow} from 'osd/parking/clock.js';
+import {realNow as demoNow} from 'osd/parking/clock.js';
 
 // Texts follow the saved TH/EN choice. The device map names rooms in Thai; English names are kept here by room id.
 const ROOM_EN = {

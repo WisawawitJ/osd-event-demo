@@ -1,33 +1,116 @@
-// Demo time scale. `?speed=N` (tests and rehearsals) runs the simulated clock, car motion, story waits
-// and camera flights N times faster; without it everything runs at real speed.
-const params = new URLSearchParams(location.search);
+// The simulation engine: one clock for everything that runs by itself (the world clock, the car park's records and
+// background life, cars and the barrier, the parking story, tour timers). Like a game engine's fixed step:
+// - Simulation time is a number of milliseconds that moves only when the engine is stepped, in ticks of at most
+//   TICK. Each tick fires the timers due in it, in order, then runs every per-tick system (cars moving, the world
+//   clock).
+// - In the browser a driver steps it each animation frame by the real time elapsed × SPEED (a frame's slice, so
+//   motion stays smooth at 60 fps); pausing stops the stepping, so everything stops together. In Node (tests)
+//   nothing steps it but the test, in whole ticks: runs are instant, and the same seed and inputs give the same
+//   result every time.
+// - Randomness comes from a seeded generator (rng), so a run can be repeated (`?seed=N` in the browser).
+// Between ticks the engine lets promise chains settle, so `await` code (the cars' and the story's steps) moves on
+// in step with the ticks.
+
+const params = new URLSearchParams(globalThis.location?.search ?? '');
+// `?speed=N` (tests and rehearsals): simulation time runs N times faster than real time (camera flights too).
 const requested = Number(params.get('speed'));
 export const SPEED = Number.isFinite(requested) && requested > 0 ? Math.min(requested, 30) : 1;
+export const TICK = 50; // ms of simulation time per step
 
-// Pause: the timeline's pause button stops everything that runs by itself (the world clock, cars and the barrier,
-// the story, scenarios, the tour and the idle orbit); the visitor can still move the camera. Demo time is real
-// time minus the paused spans: whatever waits or moves reads it (demoNow), or waits with later/sleep.
-let pausedAt = null, pausedFor = 0;
-export const demoNow = () => (pausedAt ?? performance.now()) - pausedFor;
-export const isPaused = () => pausedAt !== null;
-// Runs `fn` after `ms` of demo time (scaled by ?speed, stopped while paused). Cancel with cancelLater.
-export function later(fn, ms) {
-  const handle = {id: 0, due: demoNow() + ms / SPEED};
-  const check = () => {
-    const left = handle.due - demoNow();
-    if (isPaused() || left > 1) { handle.id = setTimeout(check, isPaused() ? 100 : left); return; }
-    handle.id = 0; fn();
-  };
-  handle.id = setTimeout(check, ms / SPEED);
-  return handle;
+// --- Seeded randomness -------------------------------------------------------------------------------------------
+let seedState = 0;
+// mulberry32: small, fast and good enough for a demo's dice.
+export function rng() {
+  seedState = (seedState + 0x6D2B79F5) | 0;
+  let t = seedState;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
-export const cancelLater = handle => { if (handle) clearTimeout(handle.id); };
-export const sleep = ms => new Promise(resolve => later(resolve, ms));
+export function seed(n) { seedState = n | 0; }
+seed(Number(params.get('seed')) || Math.floor(Math.random() * 2 ** 31));
 
-// World clock: one simulated day on the event date (24 Nov 2026, Bangkok time) that runs by itself and loops.
+// --- Simulation time and timers --------------------------------------------------------------------------------
+let simNow = 0, order = 0;
+const timers = []; // a binary heap by (due, order)
+const before = (a, b) => a.due < b.due || (a.due === b.due && a.order < b.order);
+function push(t) {
+  timers.push(t);
+  for (let i = timers.length - 1; i > 0;) { const p = (i - 1) >> 1; if (!before(timers[i], timers[p])) break; [timers[i], timers[p]] = [timers[p], timers[i]]; i = p; }
+}
+function pop() {
+  const top = timers[0], last = timers.pop();
+  if (timers.length) {
+    timers[0] = last;
+    for (let i = 0; ;) {
+      const l = 2 * i + 1, r = l + 1; let m = i;
+      if (l < timers.length && before(timers[l], timers[m])) m = l;
+      if (r < timers.length && before(timers[r], timers[m])) m = r;
+      if (m === i) break;
+      [timers[i], timers[m]] = [timers[m], timers[i]]; i = m;
+    }
+  }
+  return top;
+}
+// Simulation time, in ms. (`demoNow` kept as the name everything already reads.)
+export const demoNow = () => simNow;
+// Real milliseconds that stop while paused: for presentation animations that keep their real pace under ?speed
+// (the meeting room's airflow, door swings, a scenario's timing).
+export const realNow = () => simNow / SPEED;
+// Runs `fn` after `ms` of simulation time. Cancel with cancelLater.
+export function later(fn, ms) { const t = {due: simNow + Math.max(0, ms || 0), order: order++, fn, live: true}; push(t); return t; }
+export const cancelLater = t => { if (t) t.live = false; };
+export const sleep = ms => new Promise(resolve => later(resolve, ms));
+// A system that runs every tick, given the tick's length in seconds. Returns its removal.
+const systems = new Set();
+export const onTick = fn => { systems.add(fn); return () => systems.delete(fn); };
+
+// One tick of `ms`: due timers in order (each sees the time it was due), then every system. After each timer, the
+// `await`s it resolved carry on before the next timer fires, as when each was its own browser task: code that waits
+// for a condition and then claims it at once (one car on the far lane at a time) relies on that. (Run back to back,
+// two cars waiting for the far lane both saw it free and appeared on the same spot.)
+const microtasks = async () => { for (let i = 0; i < 12; i++) await null; };
+async function tickOnce(ms) {
+  const end = simNow + ms;
+  while (timers.length && timers[0].due <= end) {
+    const t = pop();
+    if (!t.live) continue;
+    simNow = Math.max(simNow, t.due);
+    t.fn();
+    await microtasks();
+  }
+  simNow = end;
+  for (const fn of [...systems]) fn(ms / 1000);
+}
+// Advances simulation time by `ms`, in ticks of at most TICK, letting promise chains settle after each (`settle`:
+// the host's way to wait out its microtasks). Steps already running take the extra time on instead of starting a
+// second loop.
+// While paused nothing is owed and a run under way stops at its next tick (it ran on through Pause).
+let owed = 0, stepping = null, halted = false;
+export function advance(ms, settle = defaultSettle) {
+  if (halted) return stepping ?? Promise.resolve();
+  owed += ms;
+  if (!stepping) stepping = (async () => {
+    try { while (owed > 1e-6 && !halted) { const d = Math.min(owed, TICK); owed -= d; await tickOnce(d); await settle(); } } finally { stepping = null; }
+  })();
+  return stepping;
+}
+function halt(on) { halted = on; if (on) owed = 0; }
+// Node: a macrotask boundary (every microtask has run); the browser: a message-channel task (as fast, no 4 ms clamp).
+const defaultSettle = typeof setImmediate === 'function' ? () => new Promise(r => setImmediate(r))
+  : (() => { const ch = new MessageChannel(), queue = []; ch.port1.onmessage = () => queue.shift()?.(); return () => new Promise(r => { queue.push(r); ch.port2.postMessage(0); }); })();
+// Tests: runs simulation time on until `cond()` holds (checked every tick) or `ms` have passed; true if it held.
+export async function runUntil(cond, ms = 600000) {
+  const end = simNow + ms;
+  while (!cond()) { if (simNow >= end) return false; await advance(TICK); }
+  return true;
+}
+
+// --- World clock -----------------------------------------------------------------------------------------------
+// One simulated day on the event date (24 Nov 2026, Bangkok time) that runs by itself and loops.
 // Everything reads it: the sky, the building's rooms and solar, and the car park's traffic and logs.
 // - A day takes `?day=N` real minutes (default 20; the timeline's button picks 10, 20, 40 or 60); the night
-//   (21:00–05:00) goes 1.5× faster than the daytime. Pausing (above) stops it with everything else.
+//   (21:00–05:00) goes 1.5× faster than the daytime. Pausing stops it with everything else.
 // - `?day=0` turns the time-lapse off: the clock then runs at real speed, as one scene would (tests use this).
 // - `?time=HH:MM` sets the start (default 09:00).
 // Cars, flights and the story keep real speed: only the clock is sped up. While the parking story plays, it holds
@@ -46,37 +129,29 @@ const WRAP = DAY0 + DAY_MS + 3 * 3600e3;
 
 function createWorldClock() {
   const listeners = new Set();
-  let time = START, last = performance.now(), holds = 0, dayLength = DAY_REAL, paused = false;
+  let time = START, holds = 0, dayLength = DAY_REAL, paused = false;
   const emit = (kind, payload) => { for (const fn of [...listeners]) fn(kind, payload); };
-  const rate = () => { const lapse = lapseFor(dayLength); return paused ? 0 : holds ? SPEED : SPEED * (!lapse ? 1 : lapse * (isNightMinute(minuteOf(time)) ? 1.5 : 1)); };
-  function advance() {
-    const t = performance.now(), dt = t - last;
-    last = t;
-    if (dt > 0) time += dt * rate();
+  // World ms per simulation ms: the time-lapse (faster at night), or 1 while held or with the lapse off.
+  const rate = () => { const lapse = lapseFor(dayLength); return holds || !lapse ? 1 : lapse * (isNightMinute(minuteOf(time)) ? 1.5 : 1); };
+  onTick(dt => {
+    time += dt * 1000 * rate();
     if (time >= WRAP) { time -= DAY_MS; emit('wrap', -DAY_MS); }
-  }
-  setInterval(() => { advance(); emit('tick'); }, 250);
+  });
   return {
     // Real minutes a day takes (0: real speed, as with `?day=0`), and whether the clock is paused.
     get dayLength() { return dayLength; },
-    setDayLength(minutes) { advance(); dayLength = minutes; emit('rate'); },
+    setDayLength(minutes) { dayLength = minutes; emit('rate'); },
     get paused() { return paused; },
-    // Pauses (or resumes) everything, not only the clock: see isPaused.
-    setPaused(value) {
-      advance(); paused = Boolean(value);
-      if (paused && pausedAt === null) pausedAt = performance.now();
-      if (!paused && pausedAt !== null) { pausedFor += performance.now() - pausedAt; pausedAt = null; }
-      emit('rate');
-    },
-    now() { advance(); return Math.round(time); },
-    minute() { advance(); return minuteOf(time); },
+    // Pauses (or resumes) everything, not only the clock: the engine stops stepping (see the driver below).
+    setPaused(value) { paused = Boolean(value); halt(paused); emit('rate'); },
+    now() { return Math.round(time); },
+    minute() { return minuteOf(time); },
     // Sets the time outright (a reset or a story step). Listeners get the old and new time.
-    set(ms) { advance(); const from = time; time = ms >= WRAP ? ms - DAY_MS : ms; emit('set', {from, to: time}); },
+    set(ms) { const from = time; time = ms >= WRAP ? ms - DAY_MS : ms; emit('set', {from, to: time}); },
     // Moves forward to the next time of day `minute` (a jump never goes back: what happened stays in the past).
     // A jump past 03:00 wraps the day first, so listeners get the old and new time on the same (wrapped) day and
     // whatever they log for the skipped hours lands before the new time.
     jumpTo(minute) {
-      advance();
       // The minute it is already (at 15:00:20, the 15:00 moment) is now, not a day ahead; the next one is a few seconds on.
       const current = minuteOf(time), target = ((minute % 1440) + 1440) % 1440;
       if (Math.floor(current) === Math.floor(target)) return;
@@ -87,9 +162,29 @@ function createWorldClock() {
       emit('jump', {from, to: time});
     },
     // Real speed until the returned function is called (the story holds the clock while it plays).
-    hold() { advance(); holds++; let held = true; return () => { if (held) { held = false; advance(); holds--; } }; },
+    hold() { holds++; let held = true; return () => { if (held) { held = false; holds--; } }; },
     get held() { return holds > 0; },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+    // For the driver: tells listeners the time moved on (they repaint at most a few times a second, not every tick).
+    tick() { emit('tick'); },
   };
 }
 export const world = createWorldClock();
+export const isPaused = () => world.paused;
+
+// --- The browser's driver ----------------------------------------------------------------------------------------
+// Each animation frame steps the engine by the real time since the last (× SPEED), unless paused. A stall longer
+// than half a second (a background tab, the debugger) is dropped rather than caught up. The world clock's 'tick'
+// goes out about four times a second of real time.
+if (typeof requestAnimationFrame === 'function') {
+  let last = null, lastTick = 0;
+  const frame = time => {
+    // Behind (a busy page): at most one frame's worth is owed; the rest is dropped, so the simulation slows down
+    // rather than running on in a backlog.
+    if (last !== null && !world.paused && owed < 500 * SPEED) advance(Math.min(500, Math.max(0, time - last)) * SPEED);
+    last = time;
+    if (time - lastTick >= 250) { lastTick = time; world.tick(); }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}

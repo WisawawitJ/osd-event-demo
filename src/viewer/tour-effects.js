@@ -1,5 +1,5 @@
 import * as T from 'osd/node_modules/three/build/three.module.js';
-import {demoNow} from 'osd/parking/clock.js';
+import {realNow as demoNow} from 'osd/parking/clock.js';
 import {createLightConeMaterial, createLightConeGeometry} from 'osd/viewer/light-cone.js';
 // Presentation-only objects. No bindings to hardware or Home Assistant.
 export function createTourEffects({model,schedule,meetingRoom}){

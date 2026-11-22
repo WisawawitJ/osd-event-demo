@@ -2,7 +2,7 @@
 // so turns look like real cornering. Heading h means forward = (sin h, cos h) in (x, z).
 import {createCar, setCarLamps, setCarBlinker} from './cars.js';
 import {DRIVE, GATE, STREET, ENTRY_TURN, FAR_TURN, groundY} from './layout.js';
-import {SPEED, demoNow, isPaused} from './clock.js';
+import {demoNow, later, onTick, rng} from './clock.js';
 
 const EAST = Math.PI / 2, WEST = -Math.PI / 2, NORTH = Math.PI, SOUTH = 0;
 const LANE_IN = 17.6, LANE_OUT = 14.8; // driveway halves: westbound (in) / eastbound (out)
@@ -94,7 +94,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   // The entry's order: the last car to have taken its turn (`done` once it is through the barrier, or gone).
   let entryLast = {done: true, promise: Promise.resolve()}, entryShown = Promise.resolve(), exitLane = Promise.resolve();
   let gateLanes = {in: Promise.resolve(), out: Promise.resolve()}, plateReads = Promise.resolve();
-  let generation = 0, frame = 0, last = 0;
+  let generation = 0;
   // Street discipline: through-traffic keeps one speed per lane, yields to cars joining the eastbound lane,
   // and does not spawn into it while a car is driving up to the gate or pulling out.
   let entryPending = 0, exitingStreet = 0, eastHold = 0;
@@ -180,11 +180,11 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   async function eastGap(x0, x1, gen, also = () => true) { eastHold++; try { await waitFor(() => eastClear(x0, x1) && also(), gen); } finally { if (gen === generation) eastHold--; } }
   function waitFor(cond, gen = generation) {
     return new Promise((resolve, reject) => {
-      const check = () => (gen !== generation ? reject(ABORT) : cond() ? resolve() : setTimeout(check, 60));
+      const check = () => (gen !== generation ? reject(ABORT) : cond() ? resolve() : later(check, 60));
       check();
     });
   }
-  const wait = (ms, gen) => { const end = demoNow() + ms / SPEED; return waitFor(() => demoNow() >= end, gen); };
+  const wait = (ms, gen) => { const end = demoNow() + ms; return waitFor(() => demoNow() >= end, gen); };
 
   // A new car stays hidden until it is first placed: drawn before that, it stood for a frame at the scene's origin,
   // in the middle of the building (a car flashing up under it).
@@ -610,14 +610,14 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   }
 
   // Cosmetic through-traffic on the street.
-  function passBy(preferDir = Math.random() < .5 ? 1 : -1) {
+  function passBy(preferDir = rng() < .5 ? 1 : -1) {
     const now = demoNow();
-    // Spacing is in demo time, so ?speed keeps the same traffic density the visitors see.
-    const ok = dir => now - lastSpawn[dir] > 4200 / SPEED && (dir < 0 ? !westOnStreet && !westHold && !westExitHold : !laneCars(1).length && !exitingStreet && !eastHold && eastClear(-99, -84));
+    // Spacing is in simulation time, so ?speed keeps the same traffic density the visitors see.
+    const ok = dir => now - lastSpawn[dir] > 4200 && (dir < 0 ? !westOnStreet && !westHold && !westExitHold : !laneCars(1).length && !exitingStreet && !eastHold && eastClear(-99, -84));
     const dir = ok(preferDir) ? preferDir : ok(-preferDir) ? -preferDir : 0;
     if (!dir) return false;
     lastSpawn[dir] = now;
-    const agent = makeAgent({plate: '', province: '', type: 'unknown', color: Math.floor(Math.random() * 9)});
+    const agent = makeAgent({plate: '', province: '', type: 'unknown', color: Math.floor(rng() * 9)});
     agent.dir = dir;
     // Placed at once: unplaced, it stood at the origin, and the lanes' clear-behind checks did not see it coming.
     const route = passing(dir);
@@ -693,7 +693,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   // Returns whether any car is signalling (the frame loop keeps going to flash it) and whether a lamp changed (only
   // then is there something new to draw: a car waiting with its blinker on redrew the scene every frame).
   function updateBlinkers() {
-    const lit = Math.floor(demoNow() * SPEED / 380) % 2 === 0;
+    const lit = Math.floor(demoNow() / 380) % 2 === 0;
     let any = false, changed = false;
     for (const a of live) {
       const side = (movers.has(a.mover) && turnAhead(a.mover)) || signalling(a);
@@ -702,44 +702,29 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     }
     return {any, changed};
   }
-  // Frame loop: runs only while something moves.
-  function kick() { if (!frame) { last = performance.now(); frame = requestAnimationFrame(tick); } }
-  function tick(time) {
-    frame = 0;
-    // Paused: nothing moves; the loop keeps watching so cars carry on from where they stood.
-    if (isPaused()) { last = time; frame = requestAnimationFrame(tick); return; }
-    // Cars move in real time whatever the frame rate: a slow frame (a heavy zoomed-out view) is
-    // stepped in 50 ms slices. Only a stall longer than half a second (tab switch, debugger) is dropped.
-    const elapsed = Math.min(.5, Math.max(0, (time - last) / 1000)) * SPEED; last = time;
-    const steps = Math.max(1, Math.ceil(elapsed / .05)), dt = elapsed / steps;
-    let active = false;
-    for (let i = 0; i < steps; i++) {
-      if (lot.update(dt)) active = true;
-      // Room ahead, worked out again for every slice (once a frame, a slow frame at a high ?speed carried a car on
-      // further than the room it had), from where each car has got to.
-      if (i) for (const m of movers) place(m.agent, sample(m.route, m.s), m.reverse);
-      const caps = new Map([...movers].map(m => [m, Math.min(followCap(m), pathCap(m))]));
-      for (const m of [...movers]) {
-        const remaining = m.route.length - m.s;
-        const end = m.endSpeed?.(remaining) || 0, brake = Math.sqrt(end * end + 2 * m.accel * Math.max(0, remaining));
-        m.v = Math.min(m.vmax, m.v + m.accel * dt, Math.max(.5, brake), caps.get(m) ?? Infinity);
-        m.s = Math.min(m.route.length, m.s + m.v * dt);
-        if (m.s >= m.route.length - 1e-3) { movers.delete(m); m.agent.speed = m.v; place(m.agent, sample(m.route, m.s), m.reverse); m.resolve(); }
-        active = true;
-      }
+  // Movement: a system on the engine's tick (every 50 ms of simulation time), so cars move the same whatever the
+  // frame rate or ?speed, and tests can drive them without a browser. kick() is kept for callers: nothing to start.
+  function kick() {}
+  const offTick = onTick(dt => {
+    let active = lot.update(dt);
+    const caps = new Map([...movers].map(m => [m, Math.min(followCap(m), pathCap(m))]));
+    for (const m of [...movers]) {
+      const remaining = m.route.length - m.s;
+      const end = m.endSpeed?.(remaining) || 0, brake = Math.sqrt(end * end + 2 * m.accel * Math.max(0, remaining));
+      m.v = Math.min(m.vmax, m.v + m.accel * dt, Math.max(.5, brake), caps.get(m) ?? Infinity);
+      m.s = Math.min(m.route.length, m.s + m.v * dt);
+      if (m.s >= m.route.length - 1e-3) { movers.delete(m); m.agent.speed = m.v; place(m.agent, sample(m.route, m.s), m.reverse); m.resolve(); }
+      active = true;
     }
     for (const m of movers) place(m.agent, sample(m.route, m.s), m.reverse);
     const lamps = night && updateLamps(), blinkers = updateBlinkers();
     // A hidden car park (a view of an upper floor) has nothing to redraw: the cars still move, unseen.
     if (lot.root.visible && (active || lamps || blinkers.changed)) schedule();
-    if (blinkers.any) active = true;
-    // Chain straight to the next frame: going through kick() reset `last` to now and lost the time spent in this
-    // frame, so cars moved only ~75% as fast, and slower still whenever the page was busy (scrolling, zooming out).
-    if (active) frame = requestAnimationFrame(tick);
-  }
+  });
 
   return {
     syncParked, arrive, leave, passBy, refreshBays, setNight,
+    dispose: offTick,
     // A manual open with no car read: one pulse, held briefly, then closed.
     pulse(holdMs = 5000) { const gen = generation; return (async () => { await raiseFor(gen); await wait(holdMs, gen); passedUnder(gen, 0); })().catch(() => {}); },
     // Parked: in its bay (one still driving in from the barrier is not, and cannot be sent out yet).

@@ -1,7 +1,7 @@
 import {createBuildingInsights} from 'osd/viewer/building-insights.js';
 import {createTourEffects} from 'osd/viewer/tour-effects.js';
 import {t as pt, onLang, getLang, L} from 'osd/parking/i18n.js';
-import {SPEED, world, later, cancelLater, demoNow, isPaused} from 'osd/parking/clock.js';
+import {SPEED, world, later, cancelLater, realNow, isPaused} from 'osd/parking/clock.js';
 import {dayEvents} from 'osd/viewer/building-day.js';
 import {morph} from 'osd/parking/dom.js';
 const icons={building:'M3 21V5h12v16M15 11h6v10M7 9h4M7 13h4M7 17h4',light:'M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0l-1 2H9Z',air:'M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h5',water:'M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z',solar:'m5 9-2 10h18L19 9ZM8 9l-1 10m9-10 1 10M4 14h16M12 19v3M12 2v3M5 3l2 2m12-2-2 2',door:'M5 21V3h14v18M9 21V5l8 2v14M13 13h.01',arrow:'M4 12h16m-5-5 5 5-5 5',play:'m8 5 11 7-11 7Z',pause:'M8 5v14M16 5v14',check:'m5 12 4 4L19 6'};
@@ -164,7 +164,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
 
  function scenario(kind){
   if(traveling)return;
-  stopScenario();state.scenario=kind;scenarioStart=demoNow();lastTick=-1;let lastVisual=0;
+  stopScenario();state.scenario=kind;scenarioStart=realNow();lastTick=-1;let lastVisual=0;
   if(kind==='meeting'){state.occupied=true;state.temp=27.4;simulation.selectRoom(meetingId);simulation.setRoom(meetingId,{light:true,climate:true});}
   // Ending it by hand: the room empties and its light and AC go off, until the building's schedule next changes them.
   if(kind==='meeting-end'){state.scenario=null;state.occupied=false;simulation.selectRoom(meetingId);simulation.setRoom(meetingId,{light:false,climate:false});insights?.hold(['occupied']);render();return;}
@@ -173,7 +173,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
   // What a scenario changed by hand stays a while before the building's schedule takes it back.
   insights?.hold({meeting:['temp','occupied'],energy:['solar','load']}[kind]||[]);
   render();
-  function tick(time){if(disposed||document.hidden)return;const elapsed=(demoNow()-scenarioStart)/1000,limit=kind==='meeting'?12:5;
+  function tick(time){if(disposed||document.hidden)return;const elapsed=(realNow()-scenarioStart)/1000,limit=kind==='meeting'?12:5;
    if(kind==='meeting')state.temp=27.4-Math.min(1,elapsed/12)*2.6;
    if(!reduced.matches&&time-lastVisual>=50){effects.animate(elapsed);effects.update({...state,climate:actual().climate,light:actual().light});lastVisual=time;}
    if(Math.floor(elapsed*2)!==lastTick){lastTick=Math.floor(elapsed*2);render();}

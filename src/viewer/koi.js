@@ -3,7 +3,7 @@
 // vertex shader from one time uniform, so moving them costs no per-fish work on the CPU, only redraws: those run at
 // FPS (not the screen's rate), and only while the pond is in view, the page is visible and the demo is not paused.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
-import {SPEED, demoNow, isPaused} from 'osd/parking/clock.js';
+import {demoNow, isPaused} from 'osd/parking/clock.js';
 
 const FISH_VERTICES = 52, FPS = 15, NEAR = 45; // redraws a second; the pond counts as in view within NEAR metres
 // Per fish: where it was placed (x, z), its body direction and its loop (radius, direction, speed, phase).
@@ -109,7 +109,7 @@ export function createKoi({model, camera, schedule}) {
     frame = requestAnimationFrame(tick);
     if (now - last < 1000 / FPS - 2) return;
     last = now;
-    time.value = demoNow() / 1000 * SPEED; // demo time: they stop when the demo is paused
+    time.value = demoNow() / 1000; // simulation time: they stop when the demo is paused
     if (inView()) schedule();
   };
   frame = requestAnimationFrame(tick);
