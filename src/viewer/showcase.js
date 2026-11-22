@@ -2,6 +2,7 @@ import {createBuildingInsights} from 'osd/viewer/building-insights.js';
 import {createTourEffects} from 'osd/viewer/tour-effects.js';
 import {t as pt, onLang, getLang, L} from 'osd/parking/i18n.js';
 import {SPEED, world, later, cancelLater, realNow, isPaused} from 'osd/parking/clock.js';
+import {options} from 'osd/parking/options.js';
 import {dayEvents} from 'osd/viewer/building-day.js';
 import {morph} from 'osd/parking/dom.js';
 const icons={building:'M3 21V5h12v16M15 11h6v10M7 9h4M7 13h4M7 17h4',light:'M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0l-1 2H9Z',air:'M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h5',water:'M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z',solar:'m5 9-2 10h18L19 9ZM8 9l-1 10m9-10 1 10M4 14h16M12 19v3M12 2v3M5 3l2 2m12-2-2 2',door:'M5 21V3h14v18M9 21V5l8 2v14M13 13h.01',arrow:'M4 12h16m-5-5 5 5-5 5',play:'m8 5 11 7-11 7Z',pause:'M8 5v14M16 5v14',check:'m5 12 4 4L19 6'};
@@ -270,9 +271,8 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
  listen($('#lang-toggle'),'click',()=>parking?.toggleLang());
  const offLang=onLang(applyLanguage);signal.addEventListener('abort',offLang,{once:true});applyLanguage();
  void select('overview',{instant:true});
- const params=new URLSearchParams(location.search);
- if(params.get('kiosk')==='1')setTimeout(()=>setKiosk(true),600);
- else{const dest=params.get('dest');if(dest&&destinations[dest])setTimeout(async()=>{const arrived=await select(dest);if(arrived&&dest==='parking'&&params.get('story')==='1')void parking?.playStory({auto:params.get('auto')!=='0'});},300);}
+ if(options.kiosk==='1')setTimeout(()=>setKiosk(true),600);
+ else{const dest=options.dest;if(dest&&destinations[dest])setTimeout(async()=>{const arrived=await select(dest);if(arrived&&dest==='parking'&&options.story==='1')void parking?.playStory({auto:options.auto!=='0'});},300);}
  // Back to the current stop's own camera pose (the view controls and the R key use this).
  // During a flight it stops the flight, then flies to the stop on show (the flight's own stop once its approach has
  // begun): it only stopped the camera mid-air, as the flight had not yet ended when it looked.

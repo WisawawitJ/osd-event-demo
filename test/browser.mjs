@@ -152,7 +152,7 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
   } catch (error) { browser?.close(); server.stop(); throw error; }
   const {send, logs} = browser;
   const gone = () => browser.gone;
-  let shot = 0;
+  let shot = 0, optionsScript = null;
   const page = {
     renderer, logs, url: server.url, sleep,
     // Its browser died: the runner stops giving this page checks (each failed at once, and one dead browser failed the
@@ -169,6 +169,11 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
       const add = (name, value) => { if (new RegExp(`[?&]${name}=`).test(url)) return; const [before, hash = ''] = url.split('#'); url = `${before}${before.includes('?') ? '&' : '?'}${name}=${value}${hash ? '#' + hash : ''}`; };
       add('day', 0);
       if (gpu === 'software') add('render', .5);
+      // The page reads no settings from its address (the booth just opens it): the query's are handed to it as
+      // window.__demoOptions before it loads. (The address keeps them: a different one still loads a fresh page.)
+      const query = new URLSearchParams(url.split('#')[0].split('?')[1] || '');
+      if (optionsScript) await send('Page.removeScriptToEvaluateOnNewDocument', {identifier: optionsScript});
+      optionsScript = (await send('Page.addScriptToEvaluateOnNewDocument', {source: `window.__demoOptions = ${JSON.stringify(Object.fromEntries(query))};`})).result?.identifier;
       await send('Page.navigate', {url: server.url + url}); await sleep(300);
     },
     async eval(expression) {

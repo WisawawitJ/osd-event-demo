@@ -4,6 +4,7 @@ import {createSceneTransition} from 'osd/viewer/scene-transition.js';
 import {createShowcase,translatePage,pageString} from 'osd/viewer/showcase.js';
 import {L} from 'osd/parking/i18n.js';
 import {SPEED, world, isPaused} from 'osd/parking/clock.js';
+import {options} from 'osd/parking/options.js';
 import {applySky, isDark} from 'osd/viewer/daylight.js';
 import {createRoomSchedule} from 'osd/viewer/building-day.js';
 import {createKoi} from 'osd/viewer/koi.js';
@@ -47,7 +48,7 @@ const dayBackground=isShowcase?'#e6ecee':'#dce5e5'; // the 3D view's daytime bac
 // The camera keeps CAMERA_FLOOR metres up, above the grass (0.26 m).
 const WORLD_CLEAR=65,WORLD_GONE=95,PAN_FREE=55,PAN_LIMIT=90,PAN_TOP=35,CAMERA_FLOOR=.8;
 // ?debug=1 (tests, the benchmark: test/) exposes the scene and the demo's parts on window.
-const params=new URLSearchParams(location.search),debug=params.has('debug');
+const debug='debug' in options;
 // The page's night look (night.css) switches in one go and cross-fades as a whole (a view transition). Fading each
 // element's text and background colours instead took both through the same grey halfway, so text blinked out.
 let pageNight=null; // the look the page has or is switching to (the switch applies it a frame or two later)
@@ -101,7 +102,7 @@ try {
   const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 1000);
   // ?render=0.5 (the test harness sets it): the 3D view at that fraction of its resolution, without antialiasing and
   // with smaller shadow maps, so software WebGL keeps up (test/browser.mjs). The booth never sets it.
-  const renderScale = Math.min(1, Math.max(.25, Number(params.get('render')) || 1));
+  const renderScale = Math.min(1, Math.max(.25, Number(options.render) || 1));
   renderer = new THREE.WebGLRenderer({ antialias: renderScale === 1, powerPreference: 'default' });
   // Resolution adapts to the machine: start at up to 1.5x device pixels (2x only cost frames on laptops)
   // and step down (never back up) towards 1x while continuous rendering stays under ~38 fps.
@@ -256,7 +257,7 @@ try {
   scene.add(fill);
 
   // ?fps=1 shows how many frames per second the 3D view actually draws (for checking the event laptop).
-  const fpsMeter = params.has('fps') ? (() => {
+  const fpsMeter = 'fps' in options ? (() => {
     const el = Object.assign(document.createElement('div'), {style: 'position:fixed;left:8px;bottom:8px;z-index:99;padding:4px 8px;border-radius:6px;background:#0f1720cc;color:#9ff0b5;font:12px/1.4 ui-monospace,monospace;pointer-events:none'});
     document.body.append(el);
     let frames = 0, since = performance.now();
@@ -743,7 +744,7 @@ try {
        // the number of lights. Compile every material each way at load, draw one tiny off-screen frame each way
        // (shadows included), and upload every texture, before anyone clicks. `?warm=0` skips it (tests that do not
        // measure smoothness; it takes over a second of each page load).
-       if(params.get('warm')==='0')document.documentElement.dataset.warm='done';
+       if(options.warm==='0')document.documentElement.dataset.warm='done';
        else{
         const hidden=[];
         // Show the building once, then keep the loading message up while the warm-up runs (about 2 s).

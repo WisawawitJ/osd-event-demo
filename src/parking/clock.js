@@ -11,9 +11,10 @@
 // Between ticks the engine lets promise chains settle, so `await` code (the cars' and the story's steps) moves on
 // in step with the ticks.
 
-const params = new URLSearchParams(globalThis.location?.search ?? '');
-// `?speed=N` (tests and rehearsals): simulation time runs N times faster than real time (camera flights too).
-const requested = Number(params.get('speed'));
+import {options} from './options.js';
+
+// `speed` (tests): simulation time runs N times faster than real time (camera flights too).
+const requested = Number(options.speed);
 export const SPEED = Number.isFinite(requested) && requested > 0 ? Math.min(requested, 30) : 1;
 export const TICK = 50; // ms of simulation time per step
 
@@ -28,7 +29,7 @@ export function rng() {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 export function seed(n) { seedState = n | 0; }
-seed(Number(params.get('seed')) || Math.floor(Math.random() * 2 ** 31));
+seed(Number(options.seed) || Math.floor(Math.random() * 2 ** 31));
 
 // --- Simulation time and timers --------------------------------------------------------------------------------
 let simNow = 0, order = 0;
@@ -118,11 +119,11 @@ export async function runUntil(cond, ms = 600000) {
 const DAY_MS = 864e5, DAY0 = Date.UTC(2026, 10, 24, -7); // 24 Nov 2026 00:00 in Bangkok
 export const minuteOf = ms => (((ms - DAY0) % DAY_MS) + DAY_MS) % DAY_MS / 60000;
 const isNightMinute = m => m >= 21 * 60 || m < 5 * 60;
-const dayParam = params.get('day');
+const dayParam = options.day ?? null;
 const DAY_REAL = dayParam === null || !Number.isFinite(Number(dayParam)) ? 20 : Math.max(0, Number(dayParam));
 // Minutes of world time per real minute in the daytime for a day of `minutes`; the night's 8 hours take 1/1.5 of their share.
 const lapseFor = minutes => (minutes > 0 ? (16 * 60 + 8 * 60 / 1.5) / minutes : 0);
-const startParam = /^(\d{1,2}):(\d{2})$/.exec(params.get('time') || '');
+const startParam = /^(\d{1,2}):(\d{2})$/.exec(options.time || '');
 const START = DAY0 + (startParam ? (Number(startParam[1]) % 24) * 60 + Math.min(59, Number(startParam[2])) : 9 * 60) * 60000;
 // The day wraps at 03:00, when the car park is at its emptiest: 03:00 on the 25th becomes 03:00 on the 24th.
 const WRAP = DAY0 + DAY_MS + 3 * 3600e3;
