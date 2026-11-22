@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (161), about 115 s: run before a commit
+npm test                 # all behaviour checks (162), about 115 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -130,7 +130,7 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 - **Moving the view**: drag to rotate; Shift-drag (or Ctrl-drag), right-drag, the arrow keys or, on a touchpad, a
   two-finger scroll to pan; the mouse wheel or a pinch to zoom. Close in, zooming in walks forward instead of stalling.
   Panning slows the further the view goes from the site and stops 90 m out (coming back is never slowed), and keeps
-  between the ground and 25 m up; orbiting stops just above the horizon, so the camera never goes under the ground. The world
+  between the ground and 35 m up; orbiting stops just above the horizon, so the camera never goes under the ground. The world
   fades into the background from 65 m to 95 m out from the site's middle, so the ground's edge never shows. The ground
   is a field of mown grass with light and dark patches (a grass texture sampled twice at different sizes and angles, blended with patches worked out per pixel, so it never repeats).
 - **View controls** at the bottom right of the 3D view: zoom in, zoom out, **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.

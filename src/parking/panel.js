@@ -120,14 +120,16 @@ export function createPanel({root, sim, actions}) {
   // Vehicles -------------------------------------------------------------
   function vehicles() {
     const q = ui.vehSearch.trim().toLowerCase(), np = normalizePlate(ui.vehSearch);
-    const parked = new Set([...sim.state.presence.values()].map(p => p.vehicleId));
+    // Parked by plate, as presence is kept: a plate listed twice (a staff car also given a visitor pass) showed as parked
+    // on one row only.
+    const parked = new Set(sim.state.presence.keys());
     const list = sim.state.vehicles.filter(v => (ui.vehFilter === 'all' || v.type === ui.vehFilter) && (!q || (v.owner || '').toLowerCase().includes(q) || normalizePlate(v.plate).includes(np)))
       .sort((a, b) => (a.sync === 'synced') - (b.sync === 'synced') || VEHICLE_RANK[a.type] - VEHICLE_RANK[b.type]);
     const counts = {all: sim.state.vehicles.length, staff: 0, vip: 0, guest: 0};
     for (const v of sim.state.vehicles) counts[v.type]++;
     return `<div class="pk-toolbar"><div class="pk-chips">${['all', 'staff', 'vip', 'guest'].map(f => `<button data-veh-filter="${f}" aria-pressed="${ui.vehFilter === f}">${f === 'all' ? t('all') : t(`type.${f}`)} <small>${counts[f]}</small></button>`).join('')}</div><input type="search" data-focus="veh-search" placeholder="${t('search')}" value="${esc(ui.vehSearch)}"></div>
     <details class="pk-add"${ui.addOpen ? ' open' : ''}><summary>${icon('plus')}${t('veh.add')}</summary><form data-form="add"><input data-focus="add-plate" name="plate" placeholder="${t('req.plate')} · 1กข 2345" value="${esc(ui.add.plate)}" required><select name="province">${PROVINCES.map(([th]) => `<option${ui.add.province === th ? ' selected' : ''}>${th}</option>`).join('')}</select><input data-focus="add-owner" name="owner" placeholder="${t('veh.owner')}" value="${esc(ui.add.owner)}"><button class="pk-btn primary" type="submit">${t('save')}</button></form><button class="pk-btn" data-act="import">${icon('upload')}${t('veh.import')}</button></details>
-    <div class="pk-list">${list.map(v => `<div class="pk-vrow${v.enabled ? '' : ' disabled'}" data-key="${esc(v.id)}"><span class="pk-row-main">${plate(v.plate, v.province)}<small>${esc(v.owner || '—')} · ${typeLabel(v.type)}${v.validTo ? ` · ${t('veh.valid')} ${fmtShortDate(v.validTo)}` : ''}${parked.has(v.id) ? ` · <b class="pk-parked">${t('veh.parked')}</b>` : ''}</small>${v.sync === 'failed' && v.syncError ? `<small class="pk-error">${esc(tx(v.syncError))}</small>` : ''}</span><span class="pk-vrow-side">${pill(v.enabled ? t(`veh.sync.${v.sync}`) : t('veh.disabled'), v.enabled ? syncTone[v.sync] : 'mute')}${v.sync === 'failed' ? `<button class="pk-link" data-retry="${v.id}">${t('veh.retry')}</button>` : `<button class="pk-link" data-toggle="${v.id}">${v.enabled ? t('veh.disable') : t('veh.enable')}</button>`}</span></div>`).join('')}</div>`;
+    <div class="pk-list">${list.map(v => `<div class="pk-vrow${v.enabled ? '' : ' disabled'}" data-key="${esc(v.id)}"><span class="pk-row-main">${plate(v.plate, v.province)}<small>${esc(v.owner || '—')} · ${typeLabel(v.type)}${v.validTo ? ` · ${t('veh.valid')} ${fmtShortDate(v.validTo)}` : ''}${parked.has(sim.key(v.plate, v.province)) ? ` · <b class="pk-parked">${t('veh.parked')}</b>` : ''}</small>${v.sync === 'failed' && v.syncError ? `<small class="pk-error">${esc(tx(v.syncError))}</small>` : ''}</span><span class="pk-vrow-side">${pill(v.enabled ? t(`veh.sync.${v.sync}`) : t('veh.disabled'), v.enabled ? syncTone[v.sync] : 'mute')}${v.sync === 'failed' ? `<button class="pk-link" data-retry="${v.id}">${t('veh.retry')}</button>` : `<button class="pk-link" data-toggle="${v.id}">${v.enabled ? t('veh.disable') : t('veh.enable')}</button>`}</span></div>`).join('')}</div>`;
   }
 
   // Reports --------------------------------------------------------------
@@ -188,7 +190,7 @@ export function createPanel({root, sim, actions}) {
       case 'reject-confirm': sim.reject(ui.selected, ui.rejectText.trim()); ui.rejecting = false; break;
       case 'revoke': if (confirm(t('req.revoke.confirm'))) sim.revoke(ui.selected); break;
       case 'manual-open': actions.manualOpen(ui.manualReason); break;
-      case 'import': sim.importCsv(); actions.toast?.(t('veh.import.done')); break;
+      case 'import': { const n = sim.importCsv(); actions.toast?.(n ? t('veh.import.done', {n}) : t('veh.import.none')); break; }
       case 'csv-events': download(`osd-parking-events-${getLang()}.csv`, [['time', 'kind', 'plate', 'province', 'type', 'camera', 'by', 'reason'], ...sim.state.events.map(e => [fmtDateTime(e.at), t(KIND_KEY[e.kind]), e.plate, e.province, typeLabel(e.type), e.camera, e.by ? t(e.by) : '', e.reason ? t(e.reason) : ''])]); break;
       case 'csv-audit': download(`osd-parking-audit-${getLang()}.csv`, [['time', 'actor', 'action', 'target', 'reason'], ...sim.state.audit.map(a => [fmtDateTime(a.at), t(a.actor), t(a.key), a.target || '', a.reasonKey ? t(a.reasonKey) : ''])]); break;
     }
@@ -209,8 +211,9 @@ export function createPanel({root, sim, actions}) {
     e.preventDefault();
     actions.interact?.();
     if (!ui.add.plate.trim()) return;
-    sim.addVehicle({plate: ui.add.plate.trim(), province: ui.add.province, owner: ui.add.owner.trim() || '—'});
-    actions.toast?.(t('veh.added'));
+    const added = sim.addVehicle({plate: ui.add.plate.trim(), province: ui.add.province, owner: ui.add.owner.trim() || '—'});
+    actions.toast?.(t(added ? 'veh.added' : 'veh.exists'));
+    if (!added) return;
     ui.add = {plate: '', province: ui.add.province, owner: ''};
     ui.vehFilter = 'all'; ui.vehSearch = '';
     render();

@@ -253,7 +253,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     approve(id) { sim.approve(id); },
     resolveAlert(id, decision, reason) { sim.resolveAlert(id, decision === 'open' ? 'open' : 'deny', reason); },
     // While an unknown car's alert holds the barrier, the answer is Open/Deny on that alert, not a blind pulse.
-    manualOpen(reason) { if (sim.state.gate !== 'closed' || sim.state.alerts.some(a => a.status === 'open')) return; sim.manualGate('open', reason); traffic.pulse(5000); },
+    manualOpen(reason) { if (sim.state.gate !== 'closed' || sim.state.alerts.some(a => a.status === 'open')) return; sim.manualGate(reason); traffic.pulse(5000); },
     // `west`: the car comes along the far lane (by default a third do; the story's own steps keep the near lane).
     simulate(kind, {fromX = -70, quiet = false, west = fromFarLane()} = {}) {
       const presence = sim.state.presence;

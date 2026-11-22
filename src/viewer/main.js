@@ -42,9 +42,10 @@ const isShowcase=Boolean(document.querySelector('#showcase'));
 const dayBackground=isShowcase?'#e6ecee':'#dce5e5'; // the 3D view's daytime background (the sky darkens it at night)
 // The world (measured across the ground from the site's middle) is clear to WORLD_CLEAR metres out and gone in the fog by
 // WORLD_GONE; panning is free while the view's pivot stays within PAN_FREE and slows to a stop at PAN_LIMIT.
-// The pivot's height stays between the ground and PAN_TOP (the roof is about 20 m up).
+// The pivot's height stays between the ground and PAN_TOP (the roof is about 20 m up; the explore page's exploded view
+// lifts the top floor to about 30 m).
 // The camera keeps CAMERA_FLOOR metres up, above the grass (0.26 m).
-const WORLD_CLEAR=65,WORLD_GONE=95,PAN_FREE=55,PAN_LIMIT=90,PAN_TOP=25,CAMERA_FLOOR=.8;
+const WORLD_CLEAR=65,WORLD_GONE=95,PAN_FREE=55,PAN_LIMIT=90,PAN_TOP=35,CAMERA_FLOOR=.8;
 // ?debug=1 (tests, the benchmark: test/) exposes the scene and the demo's parts on window.
 const params=new URLSearchParams(location.search),debug=params.has('debug');
 // The page's night look (night.css) switches in one go and cross-fades as a whole (a view transition). Fading each
@@ -406,6 +407,8 @@ try {
   stairsButton.addEventListener('click',()=>interiorCamera('stairs'));
   canvas.addEventListener('keydown', event => {
     if (!model) return;
+    // Not with Ctrl, Alt or Cmd: those are the browser's (reload, its own zoom).
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key.toLowerCase() === 'r') { if (showcase) showcase.resetView(); else frameVisible(); }
     else if (['+', '=', '-'].includes(event.key)) {
       event.preventDefault();
@@ -580,7 +583,9 @@ try {
        sceneTransition=createSceneTransition({model,schedule,onFinish:()=>{renderer.shadowMap.needsUpdate=true;},onProgress:()=>{renderer.shadowMap.needsUpdate=true;}});
        if(debug)window.__transition=sceneTransition;
        const buildingBounds=new THREE.Box3().setFromObject(model),buildingCenter=buildingBounds.getCenter(new THREE.Vector3());
-       let navigation=0,lastDestination='overview',stopPoses=null,docking=false;
+       // zoomFrame: the zoom buttons' animation (below), stopped by any flight: with reduced motion a stop lands at
+       // once, and its leftover frames then moved the camera off it.
+       let navigation=0,lastDestination='overview',stopPoses=null,docking=false,zoomFrame=0;
        const markerMaterial=new THREE.MeshBasicMaterial({color:'#27a8b3',transparent:true,opacity:.6,depthTest:false,depthWrite:false,side:THREE.DoubleSide,forceSinglePass:true});
        const marker=new THREE.Mesh(new THREE.RingGeometry(1.05,1.2,48),markerMaterial);marker.rotation.x=-Math.PI/2;marker.renderOrder=100;marker.visible=false;scene.add(marker);
        abort.signal.addEventListener('abort',()=>{marker.removeFromParent();marker.geometry.dispose();markerMaterial.dispose();},{once:true});
@@ -626,12 +631,12 @@ try {
         // The floors' change ends with the flight (left mid-cut, the building stayed half cut away where it stopped), on the
         // scene of the stop on show: the new one once its approach has begun, else the one the flight left.
         // A cancelled flight is no longer docking (a later parking-story camera move settled the floors on its behalf).
-        cancelFlight:()=>{const flying=flight.running;navigation++;docking=false;flight.stop();if(flying)settle(lastDestination);marker.visible=false;schedule();},
+        cancelFlight:()=>{const flying=flight.running;navigation++;docking=false;cancelAnimationFrame(zoomFrame);flight.stop();if(flying)settle(lastDestination);marker.visible=false;schedule();},
         onUserOrbit:callback=>{controls.addEventListener('start',callback);
          // Capture: runs before the canvas's own key handler, so R (Reset view) starts after this has cancelled the old flight, as the button does.
-         canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','r','R','+','=','-'].includes(e.key))callback();},{capture:true,signal:abort.signal});},
+         canvas.addEventListener('keydown',e=>{if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','r','R','+','=','-'].includes(e.key))callback();},{capture:true,signal:abort.signal});},
         async navigate(id,{instant=false,onPhase=()=>{},onApproach=()=>{}}={}){
-          flight.stop();const ticket=++navigation,start=readPose();marker.visible=false;markerMaterial.opacity=.6;
+          flight.stop();cancelAnimationFrame(zoomFrame);const ticket=++navigation,start=readPose();marker.visible=false;markerMaterial.opacity=.6;
           const settings={
             meeting:{eye:meetingTarget.clone().add(new THREE.Vector3(5,7,8)).toArray(),target:meetingTarget.toArray(),fov:43},
             ...objectPoses(),
@@ -681,8 +686,7 @@ try {
           }
           docking=true;
           const arrived=await flight.flyPath(phases);
-          if(ticket===navigation)docking=false;
-          if(ticket===navigation){marker.visible=false;markerMaterial.opacity=.6;if(arrived)lastDestination=id;schedule();}
+          if(ticket===navigation){docking=false;marker.visible=false;markerMaterial.opacity=.6;if(arrived)lastDestination=id;schedule();}
           return arrived;
         }
        });
@@ -740,7 +744,6 @@ try {
        }
        // View controls: zoom, back to the stop's own view, and a slow orbit when nobody is using the screen.
        const userMove=()=>{controls.dispatchEvent({type:'start'});controls.dispatchEvent({type:'end'});};
-       let zoomFrame=0;
        function zoomBy(factor){
         userMove();cancelAnimationFrame(zoomFrame);
         if(factor<1&&camera.position.distanceTo(controls.target)<=closeRange()){pushForward(1.5);return;}

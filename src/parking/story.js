@@ -49,7 +49,9 @@ export function createStory(ctx) {
     return {alive, wait, until, userAction, cancelled: () => my !== token};
   }
 
-  const captionFor = i => ({step: t('story.step', {n: i + 1, total: steps.length}), title: t(`${steps[i].key}.t`), body: t(`${steps[i].key}.b`)});
+  // A step's `variant` picks other captions (the visitor's request rejected: no ticket, no pass).
+  const captionFor = i => { const key = steps[i].key + (steps[i].variant?.() || ''); return {step: t('story.step', {n: i + 1, total: steps.length}), title: t(`${key}.t`), body: t(`${key}.b`)}; };
+  const noPass = () => ctx.sim.state.requests.find(q => q.id === requestId)?.status !== 'approved';
   const steps = [
     {key: 's1', cam: 'lot', async run(s) {
       ctx.panel.show('overview');
@@ -85,37 +87,37 @@ export function createStory(ctx) {
       const req = () => ctx.sim.state.requests.find(q => q.id === requestId);
       ctx.panel.show('requests', {request: requestId});
       await s.userAction({cue: 'approve', hint: t('story.hint.approve'), done: () => req()?.status !== 'pending', perform: () => ctx.actions.approve(requestId)});
-      await s.until(() => req()?.history.some(h => h.key === 'h.email'), 8000);
+      // Rejected, no ticket email follows (it waited 8 s for one).
+      if (req()?.status === 'approved') await s.until(() => req()?.history.some(h => h.key === 'h.email'), 8000);
     }, hold: 2500},
-    {key: 's5', cam: 'lot', async run(s) {
+    {key: 's5', cam: 'lot', variant: () => (noPass() ? 'r' : ''), async run(s) {
       ctx.phone.setOpen(true);
       ctx.phone.setCue('banner');
       await s.wait(1300);
       ctx.phone.setCue(null);
       ctx.phone.setScreen('mail');
     }, hold: 5500},
-    {key: 's6', cam: 'gate', async run(s) {
+    {key: 's6', cam: 'gate', variant: () => (noPass() ? 'r' : ''), async run(s) {
       ctx.phone.setOpen(false);
       ctx.sim.setNow(at(9, 41));
       ctx.panel.show('gate');
-      const approved = ctx.sim.state.requests.find(q => q.id === requestId)?.status === 'approved';
+      // No pass (rejected at step 4, or disabled or revoked since): the barrier stays shut, the car is turned away and
+      // backs out, leaving the entry free. (It waited at the barrier for an alert nobody answered, and the story stalled.)
+      const approved = !noPass();
       let alertId = null;
-      const off = approved ? () => {} : ctx.sim.subscribe((kind, a) => { if (kind === 'alert' && a.plate === STORY.plate) alertId = a.id; });
+      const off = ctx.sim.subscribe((kind, a) => { if (kind === 'alert' && a.plate === STORY.plate) alertId = a.id; });
       const arrival = ctx.traffic.arrive({plate: STORY.plate, province: STORY.province, color: STORY.color, fromX: -52});
-      if (!approved) {
-        // Rejected at step 4 (the presenter pressed Reject): the plate has no pass, so the barrier stays shut, the guard
-        // turns the car away and it backs out, leaving the entry free. (It waited at the barrier for an alert nobody
-        // answered, and the story stalled here.)
-        try { await s.until(() => alertId, 40000); } finally { off(); }
+      try { await s.until(() => alertId || (approved && ctx.sim.state.gate === 'open'), 40000); } finally { off(); }
+      if (alertId) {
         ctx.hint(t('story.hint.noPass'));
         await s.wait(1800);
         if (ctx.sim.state.alerts.find(a => a.id === alertId)?.status === 'open') ctx.actions.resolveAlert(alertId, 'deny');
-        await arrival; s.alive();
+        // Not until it has driven off the map (some 20 s).
+        await Promise.race([arrival, s.wait(4500)]); s.alive();
         ctx.hint(null);
         ctx.panel.show('overview');
         return;
       }
-      await s.until(() => ctx.sim.state.gate === 'open', 40000);
       await s.wait(1200);
       ctx.fly('rowA', 2600);
       await arrival; s.alive();
@@ -148,12 +150,11 @@ export function createStory(ctx) {
       await s.wait(600);
       ctx.panel.flash(ctx.sim.state.audit[0]);
     }, hold: 7000},
-    {key: 's10', cam: 'rowA', async run(s) {
+    // Skipped when the visitor never parked (turned away at step 6): nothing to drive out.
+    {key: 's10', cam: 'rowA', skip: () => !ctx.sim.state.presence.has(ctx.sim.key(STORY.plate, STORY.province)), async run(s) {
       ctx.panel.show('gate');
       ctx.sim.setNow(at(11, 30));
       const k = ctx.sim.key(STORY.plate, STORY.province);
-      // A visitor turned away at step 6 has nothing to drive out.
-      if (!ctx.sim.state.presence.has(k)) { ctx.panel.show('overview'); return; }
       ctx.traffic.leave(k);
       await s.wait(4200);
       ctx.fly('gate', 2400);
@@ -175,6 +176,7 @@ export function createStory(ctx) {
         // Stopped meanwhile (while the world reset, or a step's hold): no further step, which would set the clock.
         const step = steps[index], s = api(my);
         s.alive();
+        if (step.skip?.()) continue;
         ctx.caption(captionFor(index));
         emit();
         ctx.fly(step.cam, 1600);

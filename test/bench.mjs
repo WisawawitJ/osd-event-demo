@@ -62,6 +62,7 @@ const INSTRUMENT = `(()=>{
 
 const filters = process.argv.slice(2).map(f => f.toLowerCase());
 const chosen = SCENES.filter(s => !filters.length || filters.some(f => s.name.toLowerCase().includes(f)));
+if (!chosen.length) { console.error(`no scene matches ${filters.join(' ')}`); process.exit(1); }
 const {page: p, close} = await open();
 const metric = async () => Object.fromEntries((await p.cdp('Performance.getMetrics')).result.metrics.map(m => [m.name, m.value]));
 const rows = [];
@@ -105,6 +106,6 @@ try {
     });
     console.log(`${scene.name}: done`);
   }
-} finally { close(); }
+} finally { await close(); }
 console.log(`\nWebGL: ${p.renderer} · median of ${ROUNDS} × ${SECONDS} s per scene`);
 console.table(rows);

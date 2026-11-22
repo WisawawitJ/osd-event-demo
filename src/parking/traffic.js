@@ -107,7 +107,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   // last stretch to the barrier, whose turn-in a car crossing to the far lane would meet.
   let outWest = 0, westExitHold = 0, inbound = 0;
   // `outEast`: a car leaving with a left turn onto the near lane, while it turns: its rear swings out over the entry's
-  // curve, so a queued arrival's last stretch and a turned-away car's back-out wait (it touched one of them).
+  // curve, so a near-lane arrival's last stretch and a turned-away car's back-out wait (it touched one of them).
   let outEast = 0;
   // The exit lane east of the barrier is the way into P1 too: a car bound for P1 drives along it against cars leaving
   // (it met one head-on at its aisle's mouth, and crossed the path of one coming from P2; each stopped for the other
@@ -321,8 +321,9 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     // Counters belong to the run that raised them: after a reset they start from zero and must stay there.
     const releaseLane = () => { if (!released) { released = true; if (gen === generation) entryPending--; resolveLane?.(); } };
     const offStreet = () => { if (onStreet) { onStreet = false; if (gen === generation) streetCars.delete(agent); } };
-    // Its last stretch to the barrier starts once no car is crossing to the far lane, and keeps one from starting.
-    const comeIn = async () => { await waitFor(() => !outWest && !outEast, gen); inbound++; coming = true; };
+    // Its last stretch to the barrier starts once no car is turning out across the entry's mouth (to either lane), and
+    // keeps one from starting. Returns whether it had to wait.
+    const comeIn = async () => { const waited = outWest || outEast; await waitFor(() => !outWest && !outEast, gen); inbound++; coming = true; return Boolean(waited); };
     const arrived = () => { if (coming) { coming = false; if (gen === generation) inbound--; } };
     const onto = lane => { agent.lane = lane; onStreet = true; streetCars.add(agent); agent.car.visible = true; resolveShown(); };
     // The car keeps its turn at the barrier until it has backed out onto the street: released before, the next car
@@ -381,8 +382,9 @@ export function createTraffic({lot, sim, schedule, hooks}) {
             await drive(agent, streetToGate(holdX), {}, gen);
           } else {
             await previous(); alive();
-            await comeIn();
-            await drive(agent, streetToGate(fromX), {startMoving: fromX > -90}, gen);
+            const waited = await comeIn();
+            // Rolling on unless it stood waiting (released, it set off at full speed from a standstill).
+            await drive(agent, streetToGate(fromX), {startMoving: fromX > -90 && !waited}, gen);
           }
           arrived();
         }
@@ -429,11 +431,11 @@ export function createTraffic({lot, sim, schedule, hooks}) {
             // the turn; else it stops at the mouth and waits, signalling (every car stopped there, with nothing coming).
             const aisle = aisleOf(stall.aisleX), clear = () => aisle.out === 0 && (stall.zone === 'P1' || exitLaneClear(stall.aisleX));
             let taken = false;
-            // Taken early (on the way, up to 9 m before the mouth, which for the nearest aisle is just past the barrier),
-            // nor may a car be coming out of an aisle further west: it may reach the exit lane at the mouth as this car
-            // turns across it, and each stopped for the other for good. Waiting at the mouth, `clear` alone will do.
-            const westClear = () => stall.zone === 'P1' || [...aisles].every(([x, a]) => x >= stall.aisleX || !a.out);
-            const rollOn = remaining => { if (!taken && remaining < 9 && clear() && westClear()) { aisle.in++; taken = true; } return taken ? AISLE_SPEED : 0; };
+            // Taken early, on the way (up to 9 m before the mouth, which for the nearest aisle is just past the barrier),
+            // it also needs no car coming out of an aisle further west: that car may reach the exit lane at the mouth as
+            // this one turns across it, and each stopped for the other for good. Waiting at the mouth, `clear` will do.
+            const westAislesClear = () => stall.zone === 'P1' || [...aisles].every(([x, a]) => x >= stall.aisleX || !a.out);
+            const rollOn = remaining => { if (!taken && remaining < 9 && clear() && westAislesClear()) { aisle.in++; taken = true; } return taken ? AISLE_SPEED : 0; };
             try {
               await drive(agent, gateToAisle(stall), {speed: 5.5, endSpeed: rollOn}, gen);
               if (!taken) {
@@ -506,6 +508,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
         } finally { leaveAisle(stall.aisleX, 'out', gen); endDrive(); }
         const {going} = await withGate('out', async () => {
           alive();
+          // Signalling its turn from the stop line on, through the plate read (it lit only after the read).
+          agent.signal = west ? 'right' : 'left'; kick();
           await readPlate('out', agent, {allow: true, type: agent.type, exit: true});
           // The read's pauses do not stop at a reset: without this, a car caught in it carried on into the new run and
           // left its hold on far-lane traffic (westExitHold) counted there for good.
@@ -516,9 +520,10 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           // just out); and for no unknown car at the entry waiting for staff with the arm down. Signalling its turn
           // meanwhile. To the far lane it also needs a gap there (about 5 s of it) and no near-lane arrival on its last
           // stretch to the entry.
-          const exitClear = () => eastClear(GATE.exitX - 28, GATE.exitX + 5) && !crossing && !movingNear(agent) && !armHeld
-            && (!west || (westClear(GATE.exitX - 7, GATE.exitX + 45) && !inbound));
-          agent.signal = west ? 'right' : 'left'; kick();
+          // No near-lane arrival on its last stretch either (`inbound`), whichever way the car turns: still out of
+          // movingNear's reach, one came up under a left-turning car's swinging rear.
+          const exitClear = () => eastClear(GATE.exitX - 28, GATE.exitX + 5) && !crossing && !movingNear(agent) && !armHeld && !inbound
+            && (!west || westClear(GATE.exitX - 7, GATE.exitX + 45));
           if (!exitClear()) await lowerIfUp(gen);
           if (west) westExitHold++;
           try { await waitFor(exitClear, gen); } finally { if (west && gen === generation) westExitHold--; }

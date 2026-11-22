@@ -4,7 +4,7 @@
 // WebGL renders on the NVIDIA GPU when present, else in software; never on the Intel iGPU (see browser.mjs for why).
 // JOBS=n runs n browsers side by side (default 6 on NVIDIA, 3 in software, which is CPU work); SPEED=n sets the demo
 // time scale (default 30).
-import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
+import {readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync} from 'node:fs';
 import {open, DEFAULT_GPU} from './browser.mjs';
 import {scenarios} from './scenarios.mjs';
 
@@ -22,6 +22,9 @@ const jobs = Math.max(1, Math.min(Number(process.env.JOBS) || ((process.env.GPU 
 // Rendering noise the demo cannot avoid; anything else in the console fails the check.
 // (SwiftShader has no parallel shader compiling; three.js warns and compiles normally.)
 const NOISE = /GL_INVALID_OPERATION|PCFSoftShadowMap|UniformsUtils: Textures of render targets|KHR_parallel_shader_compile extension not supported/;
+
+// Screenshots of failures from earlier runs go: kept, an old failure looked like this run's.
+try { for (const f of readdirSync(new URL('out/', import.meta.url))) if (f.endsWith('.png')) rmSync(new URL(`out/${f}`, import.meta.url)); } catch {}
 
 const started = Date.now();
 const results = new Array(chosen.length);
@@ -43,8 +46,11 @@ async function worker() {
       try { await scenario.run(page, expect); } catch (error) { problems.push(error.message); }
       problems.push(...page.logs.filter(line => !NOISE.test(line)));
       const shot = problems.length ? await page.shot(scenario.name.replace(/\W+/g, '-')).catch(() => '') : '';
-      const r = results[index] = {name: scenario.name, problems, shot, time: (Date.now() - t0) / 1000};
+      // A check cut short by its browser dying keeps no time (a near-0 s time made it look short to the next run).
+      const r = results[index] = {name: scenario.name, problems, shot, time: page.gone ? 0 : (Date.now() - t0) / 1000};
       console.log(`${r.problems.length ? '✗' : '✓'} ${r.name} (${r.time.toFixed(1)} s)${r.problems.length ? `\n    ${r.problems.join('\n    ')}${r.shot ? `\n    screenshot: ${r.shot}` : ''}` : ''}`);
+      // Its browser died: the checks left go to the other browsers (this one failed each of them at once).
+      if (page.gone) { console.error('a browser died; its remaining checks go to the others'); break; }
     }
   } finally { await close(); }
 }

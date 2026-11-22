@@ -90,14 +90,14 @@ export function createPhone({root, sim, actions}) {
   }
 
   function submit() {
-    const f = ui.form;
+    // The story's colour is for its own request only, sent or not: free-play visitors' cars get the sim's random one.
+    const f = ui.form, color = ui.color;
+    ui.color = undefined;
     const missing = ['name', 'email', 'contact', 'phone', 'plate', 'province'].some(k => !String(f[k]).trim()) || !f.consent;
     if (missing) { ui.error = t('ph.required'); render(); return null; }
     ui.error = '';
     const arrival = dateValue(f.arrival), departure = Math.max(arrival, dateValue(f.departure));
-    const r = sim.submitRequest({visitor: {name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), company: f.company.trim() || '—'}, contact: f.contact.trim(), plate: f.plate.trim(), province: f.province, arrival, departure, notes: f.notes, face: f.faceConsent && f.face, color: ui.color});
-    // The story's colour is for its own request only: free-play visitors' cars get the sim's random one (all were blue).
-    ui.color = undefined;
+    const r = sim.submitRequest({visitor: {name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), company: f.company.trim() || '—'}, contact: f.contact.trim(), plate: f.plate.trim(), province: f.province, arrival, departure, notes: f.notes, face: f.faceConsent && f.face, color});
     ui.requestId = r.id; ui.screen = 'sent';
     render();
     return r;
@@ -150,7 +150,9 @@ export function createPhone({root, sim, actions}) {
   async function typeInto(name, text, {cps = 28, isCancelled = () => false} = {}) {
     ui.typing = name; ui.form[name] = '';
     for (const ch of text) {
-      if (isCancelled()) break;
+      // Cancelled (the story restarted, its form reset): it leaves the field alone (it wrote the whole text into the
+      // new run's empty form).
+      if (isCancelled()) return;
       ui.form[name] += ch; render();
       await sleep(1000 / cps);
     }

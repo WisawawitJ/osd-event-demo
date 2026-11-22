@@ -270,16 +270,16 @@ export function createParkingSim() {
   }
 
   function setGate(value) { if (state.gate !== value) { state.gate = value; emit('gate', value); } }
-  function manualGate(command, reasonKey) {
+  // A manual open (with its reason), audited; the barrier itself is raised by traffic.pulse.
+  function manualGate(reasonKey) {
     audit('staff.name', 'a.manual', {target: '—', reasonKey});
-    emit('manualGate', {command, reasonKey});
   }
 
   // Visitor requests
   function submitRequest(data) {
     const at = now();
     const dup = state.requests.find(q => ['pending', 'approved'].includes(q.status) && normalizePlate(q.plate) === normalizePlate(data.plate) && q.arrival === data.arrival && q.visitor.email === data.visitor.email);
-    const req = dup || {id: uid('r'), ref: `PK-${Math.random().toString(36).slice(2, 6).toUpperCase()}${String(state.requests.length + 41).padStart(3, '0')}`, status: 'pending', createdAt: at, history: [{at, key: 'h.submitted'}], color: data.color ?? Math.floor(Math.random() * 9), ...data};
+    const req = dup || {id: uid('r'), ref: `PK-${Math.random().toString(36).slice(2, 6).toUpperCase()}${String(state.requests.length + 41).padStart(3, '0')}`, status: 'pending', createdAt: at, history: [{at, key: 'h.submitted'}], ...data, color: data.color ?? Math.floor(Math.random() * 9)}; // the colour after the data: an undefined one in it overwrote the random pick (every visitor car white)
     if (!dup) state.requests.unshift(req);
     req.receipt = `RC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     emit('request', req);
@@ -337,9 +337,9 @@ export function createParkingSim() {
     if (unconfirmed) { state.vehicles.splice(state.vehicles.indexOf(v), 1); req.vehicleId = null; req.syncing = false; }
     else if (v) v.enabled = false;
     audit('staff.name', 'a.revoke', {target: req.plate});
-    // As in the ATOM Parking app: the visitor hears of an approval only once ATOM confirms it, so one revoked before that
-    // is not told its access was revoked (it was told it had none to lose).
-    if (!unconfirmed) sendEmail(req, 'revoked');
+    // As in the ATOM Parking app: the visitor hears of an approval only once ATOM confirms it (the ticket email), so one
+    // revoked before that email is not told its access was revoked.
+    if (req.history.some(h => h.key === 'h.email')) sendEmail(req, 'revoked');
     emit('request', req);
   }
   function sendEmail(req, kind) {
@@ -349,7 +349,10 @@ export function createParkingSim() {
   }
 
   // Allowed list
+  // As in the ATOM Parking app, a plate and province already listed are not added again (a second listing parked the
+  // same car twice). Returns null then.
   function addVehicle({plate, province, owner, type = 'staff'}) {
+    if (state.vehicles.some(v => v.province === province && normalizePlate(v.plate) === normalizePlate(plate))) return null;
     const v = {id: uid('v'), plate, province, owner, type, enabled: true, sync: 'pending', color: Math.floor(Math.random() * 9)};
     state.vehicles.push(v);
     audit('staff.name', 'a.plateAdd', {target: plate});
@@ -362,10 +365,12 @@ export function createParkingSim() {
     // Imported again, the same plates are not listed twice.
     const listed = new Set(state.vehicles.map(v => key(v.plate, v.province)));
     const added = samples.filter(([plate, province]) => !listed.has(key(plate, province))).map(([plate, province, owner]) => ({id: uid('v'), plate, province, owner, type: 'staff', enabled: true, sync: 'pending', color: Math.floor(Math.random() * 9)}));
+    if (!added.length) return 0;
     state.vehicles.push(...added);
     audit('staff.name', 'a.import', {target: String(added.length)});
     emit('vehicle');
     current(() => { for (const v of added) v.sync = 'synced'; emit('vehicle'); }, 1600);
+    return added.length;
   }
   function setEnabled(id, enabled) {
     const v = state.vehicles.find(v => v.id === id);
@@ -389,9 +394,8 @@ export function createParkingSim() {
     const entries = today.filter(e => e.kind === 'entry' || e.kind === 'manual');
     const exits = today.filter(e => e.kind === 'exit' || e.kind === 'exitNoEntry');
     const hourly = [];
-    // The whole day (the car park is open round the clock), counted from the day's start, so the small hours after
-    // midnight (before the day wraps at 03:00) still show the evening behind them.
-    // After midnight, until the day wraps at 03:00, the small hours are charted on after 23:00 (they count in the totals).
+    // The whole day (the car park is open round the clock), from the day's start: after midnight, until the day wraps
+    // at 03:00, the small hours are charted on after 23:00, with the evening still behind them.
     const nowHour = Math.floor((at - DAY_START) / 3600e3);
     for (let h = 0; h < Math.min(27, Math.max(24, nowHour + 1)); h++) {
       const from = DAY_START + h * 3600e3, to = from + 3600e3;

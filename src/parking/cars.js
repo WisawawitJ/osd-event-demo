@@ -242,7 +242,8 @@ export function createCar({plate, province, color = 0}) {
   const add = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; m.matrixAutoUpdate = false; car.add(m); return m; };
   add(p.body, p.bodyMaterials[color % CAR_COLORS.length]);
   add(p.details, p.detailMaterial);
-  add(p.decals, plateTexture(plate, province)).receiveShadow = false;
+  const decals = add(p.decals, plateTexture(plate, province));
+  decals.receiveShadow = false; decals.name = 'Demo_car_decals';
   const blob = add(p.blob, p.blobMaterial);
   blob.position.y = .025; blob.updateMatrix(); blob.renderOrder = -1; blob.receiveShadow = false;
   const pool = add(p.pool, p.poolMaterial);

@@ -57,7 +57,7 @@ async function startBrowser(mode, profileRoot) {
   const port = await freePort();
   const profile = mkdtempSync(join(profileRoot, 'chrome-'));
   // At low CPU priority: software rendering is CPU work, and the desktop around it should stay responsive.
-  const chrome = spawn('nice', ['-n', '10', CHROMIUM, '--headless=new', '--no-sandbox', '--disable-extensions', '--hide-scrollbars', '--window-size=1600,1000', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, ...flags, 'about:blank'], {stdio: 'ignore', env: {...process.env, ...env}, detached: true});
+  const chrome = spawn('nice', ['-n', '10', CHROMIUM, '--headless=new', '--no-sandbox', '--disable-extensions', '--disable-crash-reporter', '--hide-scrollbars', '--window-size=1600,1000', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, ...flags, 'about:blank'], {stdio: 'ignore', env: {...process.env, ...env}, detached: true});
   running.add(chrome);
   const exited = new Promise(r => chrome.once('exit', r));
   let ws = null;
@@ -94,7 +94,7 @@ async function startBrowser(mode, profileRoot) {
     await send('Runtime.enable');
     await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false});
-    return {send, logs, close, profile};
+    return {send, logs, close, profile, get gone() { return Boolean(gone); }};
   } catch (error) { close(); throw error; } // a browser that started but does not answer is not left running
 }
 
@@ -117,9 +117,14 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
   const profileRoot = join(process.env.TEST_TMP || tmpdir(), 'osd-demo-test');
   mkdirSync(profileRoot, {recursive: true});
   // Profiles left by runs that were killed (older than 30 minutes: a run going on alongside keeps its own).
-  for (const name of readdirSync(profileRoot)) {
-    const dir = join(profileRoot, name);
-    try { if (name.startsWith('chrome-') && Date.now() - statSync(dir).mtimeMs > 30 * 60000) rmSync(dir, {recursive: true, force: true}); } catch {}
+  // Their browsers too, if a runner killed outright (no exit handler) left them running: each runs in its own process
+  // group, so it outlives its runner, drawing the demo on the GPU.
+  const stale = readdirSync(profileRoot).filter(name => { try { return name.startsWith('chrome-') && Date.now() - statSync(join(profileRoot, name)).mtimeMs > 30 * 60000; } catch { return false; } });
+  if (stale.length) {
+    for (const pid of readdirSync('/proc').filter(n => /^\d+$/.test(n))) {
+      try { const cmd = readFileSync(`/proc/${pid}/cmdline`, 'utf8'); if (stale.some(name => cmd.includes(join(profileRoot, name)))) process.kill(Number(pid), 'SIGKILL'); } catch {}
+    }
+    for (const name of stale) try { rmSync(join(profileRoot, name), {recursive: true, force: true}); } catch {}
   }
   mkdirSync(shots, {recursive: true});
   const server = await startServer();
@@ -136,9 +141,13 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
     renderer = `${gpu}: ${await probe() || 'no WebGL'}`;
   } catch (error) { browser?.close(); server.stop(); throw error; }
   const {send, logs} = browser;
+  const gone = () => browser.gone;
   let shot = 0;
   const page = {
     renderer, logs, url: server.url, sleep,
+    // Its browser died: the runner stops giving this page checks (each failed at once, and one dead browser failed the
+    // rest of the run).
+    get gone() { return gone(); },
     cdp: send, // raw DevTools protocol, e.g. for profiling
 
     // Pages open with the world clock at real speed (`day=0`, from 09:00) unless the path sets `day` itself: checks of
@@ -165,7 +174,7 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
     async until(expression, {timeout = 30000, what = expression} = {}) {
       const end = Date.now() + timeout;
       let error = null;
-      while (Date.now() < end) { try { if (await page.eval(expression)) return; error = null; } catch (e) { error = e; } await sleep(100); }
+      while (Date.now() < end) { try { if (await page.eval(expression)) return; error = null; } catch (e) { if (gone()) throw e; error = e; } await sleep(100); }
       throw new Error(`timed out waiting for ${what}${error ? ` (last error: ${error.message.split('\n')[0]})` : ''}`);
     },
     // Like a real tap: pointer events first (the booth's idle timer listens for them), then the click.
