@@ -16,60 +16,36 @@ npm start            # or: node scripts/serve.mjs 8080
 ```
 
 Open <http://localhost:8080/>. You need Node 18 or newer and no `npm install`. The server listens on localhost only.
-
-Useful URLs:
-
-| URL | What it does |
-| --- | --- |
-| `/` | Guided building showcase, as before, with the Parking destination added to the dock |
-| `/?kiosk=1` | **Unattended** for the booth: the camera follows the day, and the parking story plays in full during the morning arrivals |
-| `/?dest=parking` | Opens straight on the car park, for free play |
-| `/?dest=parking&story=1` | Opens on the car park and plays the parking story with auto-advance |
-| `/?dest=parking&story=1&auto=0` | Same, but the presenter advances each step with **Next** |
-| `/?day=10` | Real minutes one simulated day takes (default 20); `?day=0` runs the clock at real speed (tests use this) |
-| `/?time=17:00` | Where the world clock starts (default 09:00), e.g. to rehearse the evening rush or the night |
-| `/?speed=3` | Runs the demo's timing 3× faster (max 30), for rehearsals and tests |
-| `/?warm=0` | Skips the loading screen's shader warm-up (about 2 s per load); the first flights may then stutter. For tests |
-| `/?fps=1` | Adds a frames-per-second counter, to check the event laptop (any page; combine with the others) |
-| `/?debug=1` | Exposes the scene and the demo's parts on `window` (`__scene`, `__parking`, `__world` …) for the tests and the benchmark |
-| `/#explore` | The original free-exploration page, now with the car park, its cars and street traffic (no parking UI, no model download) |
+The page takes no settings from its address: for the booth, tick **Kiosk mode** (bottom left). `/#explore` is the
+original free-exploration page, with the car park, its cars and street traffic (no parking UI, no model download).
 
 ## Testing
 
 ```sh
-npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (190), about 135 s: run before a commit
-npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
+npm run test:unit        # the simulation in Node: car park, traffic, story, records, text (about 1 s)
+npm run test:quick       # the unit tests, then a few browser checks (about 10 s)
+npm test                 # the unit tests, then every browser check (run before merging)
+npm test -- kiosk night  # only browser checks whose names match
+node scripts/shots.mjs [words]  # screenshots of every UI state, with a contact sheet (shots/<time>/index.html)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
 
-A check joins the quick set with `quick: true` in `test/scenarios.mjs`: keep it to short checks that each guard a
-different area (load, language, night, flights, lights, pond, clock, car park, story).
+**The simulation is an engine** (`src/parking/clock.js`): simulation time moves only when stepped, in ticks of at most
+50 ms; each tick fires the timers due in it in order, then the per-tick systems (cars moving, the world clock). The
+browser steps it every frame by the real time elapsed; pausing stops the stepping. Dice come from a seeded generator.
+So the whole car park (`src/parking/world.js`: records, traffic, the story, the background life and the rules between
+them) runs in Node without a page, the same every run: `test/unit/` steps it as fast as it can. A whole story takes
+about 0.2 s, a busy hour of random traffic (checked every tick for cars driving through each other) under a second.
 
-`test/run.mjs` starts its own server on a free port and drives headless Chromium over the DevTools protocol
-(`/usr/lib/chromium/chromium` itself where it exists, so the desktop's own Chromium flags and extensions stay out;
-`CHROMIUM=` names another binary). Browser profiles go in `$TEST_TMP` (default the system temp folder) under
-`osd-demo-test`, named after the runner's process; each is removed once its browser has exited, and at the next start
-any whose runner is gone (killed outright) is removed, its browser killed if still running. Each check starts with the page's saved settings (language, idle orbit) and console log cleared; after it the browser goes to a blank page (so a page still running cannot log into the next check) and back to its usual window size. A browser whose page stops answering (90 s) gets no more checks. Every browser runs at low CPU priority. A filter
-that matches no check fails. There are no npm dependencies; the tests need Node 22 or newer for its built-in
-WebSocket. **It never uses the Intel iGPU by itself**: on this laptop headless Chromium on the iGPU hung it twice (i915
-GPU hang, then a failed reset), and since the iGPU drives the display the whole desktop froze. By default it renders on
-the NVIDIA GPU (only NVIDIA's EGL library is loaded) with 6 browsers; with 8 the suite, grown to over 100 checks, began failing timing checks under the load.
-It closes any hardware browser found holding the iGPU open, falling back to software. Without the NVIDIA driver it
-renders in software (SwiftShader, 3 browsers, the 3D view at half resolution with `?render=0.5`):
-about 9½ minutes, and some timing-sensitive checks fail at those frame rates. `GPU=nvidia|software|vulkan|egl` forces
-one (`egl` is the iGPU: don't).
-
-Pages load with `?debug=1&speed=30` (set in `test/scenarios.mjs`), which runs the simulated clock, cars, story waits
-and camera flights 30× faster; checks that time real behaviour use a lower speed or none. `JOBS=n` changes the number
-of browsers; `SPEED=n` changes the speed, but many checks' waits assume 30, so other speeds are for exploring only. The `?speed` flag also works by hand for rehearsals, for example `/?dest=parking&story=1&speed=3`. Pages
-also load with `?day=0` (the world clock at real speed from 09:00) unless a check sets `day` itself, as the day-cycle
-checks do. Checks that do not measure smoothness also skip the shader warm-up (`?warm=0`). The slowest checks start
-first, from the times of earlier runs (`test/out/times.json`). Screenshots of failed checks go to a folder of the run's own,
-`test/out/shots/<time>-<pid>/` (removed after a day).
-
-`test/bench.mjs` reports the median of 3 windows of 3 s per scene (`BENCH_ROUNDS`, `BENCH_SECONDS`); single windows
-vary by up to ~25%, so compare medians from back-to-back runs on the same machine.
+**Browser checks** (`test/scenarios.mjs`) cover what needs the page: the camera, flights, the tour and kiosk, the
+meeting room, touch and keys, the console and phone UI. How things look is not checked automatically: run the
+screenshot script and look. `test/run.mjs` starts its own server and drives headless Chromium over the DevTools
+protocol (`/usr/lib/chromium/chromium`, or `CHROMIUM=`). A check's `?name=value` settings (`debug`, `speed`, `time`,
+`day`, `dest`, `story`, `auto`, `kiosk`, `warm`, `render`, `fps`) are handed to the page as `window.__demoOptions`
+before it loads (`src/parking/options.js`). Checks run at `speed=30` with the world clock at real speed (`day=0`)
+unless they set their own. **It never uses the Intel iGPU by itself** (it froze this laptop twice): it renders on the
+NVIDIA GPU with 6 browsers (`JOBS=n`), or in software without the NVIDIA driver; `GPU=nvidia|software|vulkan|egl`
+forces one (`egl` is the iGPU: don't). Screenshots of failed checks go to `test/out/shots/<time>-<pid>/`.
 
 ## Brand
 
@@ -122,7 +98,7 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 
 ## At the booth
 
-- **Kiosk mode** (bottom-left checkbox, or `?kiosk=1`) follows the day. When a visitor touches the screen it stops and
+- **Kiosk mode** (bottom-left checkbox) follows the day. When a visitor touches the screen it stops and
   they can explore. After a quiet minute it follows the day again. **Start tour** still plays the fixed tour. While it
   runs the Explore link is hidden and the logo does nothing, so the screen never leaves the showcase.
 - On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance** and
@@ -233,7 +209,7 @@ lane, not at the exit barrier) (a check watches every pair of cars in a busy car
   instead of swapping shaders.
 - The live plate-camera pop-up is one extra render into a scissored corner of the same canvas, only while it shows.
 - The view redraws only when something on screen changes: moving cars redraw it only while the car park is shown.
-- Car movement runs in real time at any frame rate. Add `?fps=1` to see the frame rate, or run `npm run bench`.
+- Car movement runs in real time at any frame rate. Set `fps` (a test setting) to see the frame rate, or run `npm run bench`.
 
 ## What is real and what is imagined
 
@@ -253,7 +229,10 @@ src/pages/*.html         page markup (from the reference, plus the parking slots
 src/viewer/*.js          the building viewer, split out of the reference file (parking wiring in main.js and showcase.js);
                          daylight.js (sky and sun by time of day), building-day.js (the building's daily schedule)
 src/parking/             the parking demo
-  index.js               the car park's scene and the parking demo's wiring into the showcase
+  index.js               the page's side of the car park: 3D lot, console, phone, pop-ups, story bar
+  world.js               the car park without a page: traffic, actions, story, background life and their rules
+  life.js                background life: cars following the hour, visitors, who may come or leave
+  options.js             settings for tests (never from the address bar)
   sim.js                 in-memory simulation: allowed list, requests, presence, events, alerts, audit, outbox
   layout.js              car-park geometry in world metres
   lot3d.js, cars.js      3D lot, gate, cameras and procedural cars
@@ -263,11 +242,13 @@ src/parking/             the parking demo
   overlays.js            plate-camera feed, alert, captions, toasts
   story.js               the guided story
   i18n.js                Thai and English strings, Bangkok-time formatting
-  clock.js, dom.js       the ?speed time scale and the world clock; small UI helpers (icons, CSV, calendar file)
+  clock.js, dom.js       the simulation engine and the world clock; small UI helpers (icons, CSV, calendar file)
 src/styles/              app.css (from the reference), parking.css, night.css (dark page at night)
 model/                   building model and data, extracted from the reference
 vendor/three/            three.js r186 as shipped in the reference
 scripts/serve.mjs        dependency-free static server
-test/                    browser.mjs (headless Chromium driver), run.mjs + scenarios.mjs (checks), bench.mjs
+scripts/shots.mjs        screenshots of every UI state, with a contact sheet
+test/unit/               Node tests on the simulation engine (setup, a car park world, the tests)
+test/                    browser.mjs (headless Chromium driver), run.mjs + scenarios.mjs (browser checks), bench.mjs
 reference/               the original standalone HTML (not committed)
 ```
