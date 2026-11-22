@@ -177,7 +177,8 @@ Each **Send a car** press shows a toast. Cars that have to wait queue visibly on
 Cars also come and go by themselves, following the hour (see above). The car park is set back from the street: a
 short two-way entrance road links the barrier to the street at a T-junction, so a car waiting at the barrier stands
 wholly off the street, and through-traffic drives down the middle of each lane. Lane arrows follow one rule for
-traffic that keeps left: a pair side by side on every two-way stretch (the entrance road, the driveway, each aisle's mouth). Through-traffic drives both lanes of the
+traffic that keeps left: a pair side by side on every two-way stretch (the entrance road, the driveway, each aisle's mouth).
+Lines between opposite ways (the street's centre, the driveway's and the entrance road's) are yellow, as on Thai roads. Through-traffic drives both lanes of the
 street whenever it is in view; it keeps to one speed per lane and gives way to cars turning in or pulling out.
 About a third of the cars coming in arrive along the far lane: the near lane has right of way, so they wait at the
 turn, signalling right, for a gap in it and a clear gate mouth, then turn in across it. About a third of the cars

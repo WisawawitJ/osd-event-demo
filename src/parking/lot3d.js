@@ -31,6 +31,8 @@ export function createLot({scene, stalls, schedule}) {
   // as one surface; only the public street is darker.
   const modelPaving = scene.getObjectByName('Parking_paving')?.material;
   const asphalt = mat({color: modelPaving?.color.clone() ?? '#a0a69f', roughness: modelPaving?.roughness ?? .95}), street = mat({color: '#6f7774'}), kerb = mat({color: '#cfd3cc'}), paint = mat({color: '#f7f4df', roughness: .7, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8});
+  // Lines between opposite ways are yellow, as on Thai roads (white: lane edges, stop lines, bays and arrows).
+  const yellowPaint = mat({color: '#e8b62c', roughness: .7, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8});
   const LOT = {west: -60, east: SITE.west - .7, north: -16, south: DRIVE.north};
   put(mergeGeometries([
     rect(LOT.west, LOT.east, LOT.north, LOT.south, Y.road),
@@ -59,7 +61,7 @@ export function createLot({scene, stalls, schedule}) {
 
   // Road paint matches the building model's own markings: warm white #f7f4df, lit like the ground, thin strokes.
   // Line marking: bay separators, street centre dashes, and the gate mouth (lane divider, stop lines).
-  const lines = [];
+  const lines = [], yellow = [];
   const line = (x0, z0, x1, z1, w = .1, list = lines, y = Y.road + .012) => {
     const len = Math.hypot(x1 - x0, z1 - z0);
     list.push(new THREE.PlaneGeometry(w, len).rotateX(-Math.PI / 2).rotateY(Math.atan2(x1 - x0, z1 - z0)).translate((x0 + x1) / 2, y, (z0 + z1) / 2));
@@ -70,15 +72,15 @@ export function createLot({scene, stalls, schedule}) {
     line(front, s.z + 1.25, back, s.z + 1.25);
     line(back, s.z - 1.25, back, s.z + 1.25);
   }
-  for (let x = -96; x < 96; x += 6) line(x, STREET.centre, x + 3, STREET.centre, .12, lines, Y.road - .003);
+  for (let x = -96; x < 96; x += 6) line(x, STREET.centre, x + 3, STREET.centre, .12, yellow, Y.road - .003);
   // Gate mouth: entry keeps to the west half, exit to the east half.
   const divide = (GATE.entryX + GATE.exitX) / 2;
-  for (let z = DRIVE.north + 1.6; z < STREET.north - .4; z += 1.6) line(divide, z, divide, Math.min(z + .9, STREET.north - .4), .1);
+  for (let z = DRIVE.north + 1.6; z < STREET.north - .4; z += 1.6) line(divide, z, divide, Math.min(z + .9, STREET.north - .4), .1, yellow);
   // Driveway centre line between the inbound (west) and outbound (east) lanes, broken where the gate and
   // the building's aisle cross it.
   for (let x = DRIVE.west; x < DRIVE.east - 1; x += 2.4) {
     if ((x > GATE.west - 1.5 && x < GATE.east + 1) || x > RAMP.west - .5) continue;
-    line(x, DRIVE.z, Math.min(x + 1.4, DRIVE.east), DRIVE.z, .1);
+    line(x, DRIVE.z, Math.min(x + 1.4, DRIVE.east), DRIVE.z, .1, yellow);
   }
   line(GATE.west + .1, GATE.entryStopZ - 2.45, divide - .15, GATE.entryStopZ - 2.45, .25);   // entry stop line, outside the boom
   line(divide + .15, GATE.exitStopZ + 2.45, GATE.east - .1, GATE.exitStopZ + 2.45, .25);     // exit stop line, inside the boom
@@ -102,7 +104,8 @@ export function createLot({scene, stalls, schedule}) {
   const roadZ = STREET.north - 2.3;
   arrows.push(strokeArrow(GATE.entryX, roadZ, NORTH), strokeArrow(GATE.exitX, roadZ, SOUTH));
   put(mergeGeometries([...lines, ...arrows]), paint);
-  for (const g of [...lines, ...arrows]) g.dispose();
+  put(mergeGeometries(yellow), yellowPaint);
+  for (const g of [...lines, ...yellow, ...arrows]) g.dispose();
   // Visitor bays in row A are tinted and labelled.
   const visitorFill = decal({color: '#3d8fb0', transparent: true, opacity: .22, depthWrite: false}, 1);
   put(mergeGeometries(stalls.filter(s => s.reserved === 'guest').map(s => rect(s.x - 2.4, s.x + 2.4, s.z - 1.15, s.z + 1.15, Y.road + .011))), visitorFill);
