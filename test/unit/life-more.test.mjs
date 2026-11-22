@@ -1,5 +1,5 @@
 // The car park's life across the day and its records: jumps in time, the 03:00 wrap, reports, the Gate tab's buttons.
-import {test, afterEach} from 'node:test';
+import {test, afterEach} from 'vitest';
 import assert from 'node:assert/strict';
 import {world} from 'osd/parking/clock.js';
 import {STORY} from 'osd/parking/sim.js';

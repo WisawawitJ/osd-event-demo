@@ -1,5 +1,5 @@
 // The parking story, played on the headless world: every step, both branches, and what a presenter can do mid-way.
-import {test, afterEach} from 'node:test';
+import {test, afterEach} from 'vitest';
 import assert from 'node:assert/strict';
 import {STORY} from 'osd/parking/sim.js';
 import {world, demoNow} from 'osd/parking/clock.js';

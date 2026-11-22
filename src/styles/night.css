@@ -27,7 +27,7 @@ html[data-night=true] .destination-dock button, html[data-night=true] .layer-con
 html[data-night=true] .destination-dock button[aria-pressed=true] { color: #fff; }
 html[data-night=true] .layer-controls button[aria-pressed=true] { background: #22314a; color: #7fd0f3; }
 html[data-night=true] button:not(:disabled):hover, html[data-night=true] a:hover { background: #22314a; }
-html[data-night=true] .primary-button, html[data-night=true] #day-play { background: #e4ebf2; color: #0e151c; }
+html[data-night=true] .primary-button { background: #e4ebf2; color: #0e151c; }
 html[data-night=true] .primary-button:hover { background: #ffffff !important; }
 html[data-night=true] #tour-night[aria-pressed=true] { background: #e4ebf2; color: #0e151c; }
 html[data-night=true] .tour-brand, html[data-night=true] .explore-link, html[data-night=true] .back-link { color: var(--ink) !important; }
@@ -56,8 +56,6 @@ html[data-night=true] .chart .chart-grid { stroke: #24323f; }
 html[data-night=true] .chart text { fill: #8c9db0; }
 html[data-night=true] .chart path[fill="#eaf1fb"] { fill: #1b2740; }
 html[data-night=true] .plate { border-color: #3a4a5a; }
-html[data-night=true] .kiosk-toggle { color: var(--muted); }
-html[data-night=true] .kiosk-on .kiosk-toggle { background: #1d2a45; color: #7fd0f3; }
 
 /* Staff console */
 html[data-night=true] .pk-tabs { background: #1b2632; }

@@ -40,7 +40,6 @@ export function createOverlays({layer, sim, actions}) {
   alertPop.addEventListener('click', e => {
     const b = e.target.closest('[data-pop]');
     if (!b || !state.alertId) return;
-    actions.interact?.(b);
     actions.resolveAlert(state.alertId, b.dataset.pop, reasonOf(sim.state.alerts.find(x => x.id === state.alertId)));
   });
   alertPop.addEventListener('change', e => { if (e.target.matches('[data-pop-reason]') && state.alertId) sim.setAlertReason(state.alertId, e.target.value); });

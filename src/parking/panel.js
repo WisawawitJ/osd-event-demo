@@ -166,7 +166,6 @@ export function createPanel({root, sim, actions}) {
     if (e.target.closest('summary')) { e.preventDefault(); ui.addOpen = !ui.addOpen; render(); return; }
     const el = e.target.closest('button,[data-request]');
     if (!el || el.disabled) return;
-    actions.interact?.(el);
     const d = el.dataset;
     if (d.tab) { ui.tab = d.tab; ui.selected = null; ui.rejecting = false; render(); root.scrollTop = 0; return; }
     if (d.reqFilter) { ui.reqFilter = d.reqFilter; render(); return; }
@@ -212,7 +211,6 @@ export function createPanel({root, sim, actions}) {
   });
   root.addEventListener('submit', e => {
     e.preventDefault();
-    actions.interact?.();
     if (!ui.add.plate.trim()) return;
     const added = sim.addVehicle({plate: ui.add.plate.trim(), province: ui.add.province, owner: ui.add.owner.trim() || '—'});
     actions.toast?.(t(added ? 'veh.added' : 'veh.exists'));

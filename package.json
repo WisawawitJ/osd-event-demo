@@ -4,8 +4,13 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/serve.mjs 8080",
-    "test": "node --import ./test/unit/setup.mjs --test --test-concurrency=1 test/unit/",
+    "test": "vp test run",
     "shots": "node scripts/shots.mjs",
-    "bench": "node test/bench.mjs"
+    "bench": "node test/bench.mjs",
+    "lint": "vp lint",
+    "fmt": "vp fmt"
+  },
+  "devDependencies": {
+    "vite-plus": "1.5.1"
   }
 }

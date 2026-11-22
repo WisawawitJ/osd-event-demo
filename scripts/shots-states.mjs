@@ -11,7 +11,7 @@ export const sizeName = ([w, h]) => `${w}x${h}`;
 export const GROUPS = {
   stops: 'Showcase stops',
   explore: 'Explore page',
-  modes: 'Tour, kiosk and timeline',
+  modes: 'Timeline and building story',
   console: 'Parking console',
   phone: 'Visitor phone',
   gate: 'Gate alerts and cameras',
@@ -212,23 +212,11 @@ export function buildSessions() {
   for (const lang of LANGS) {
     // The booth: everything.
     for (const tod of ['day', 'night']) { stops(BOOTH, lang, tod, {extras: tod === 'day'}); explore(BOOTH, lang, tod, {extras: tod === 'day'}); }
-    // The tour goes overview, car park (the whole story on auto-advance), meeting room, pond, energy.
+    // The building's story: the meeting step (the room cooling) and the pond running low.
+    const storyStep = n => `document.querySelector('#story-caption .pk-caption-step')?.textContent.includes('${n}/8') && ${STILL}`;
     session(BOOTH, lang, 'day', url('speed=30&time=10:00'), IDLE, [
-      step('modes', 'tour-parking-story', 'Tour running: the car park story', async p => {
-        await p.click('#tour-play');
-        await p.reach('__parking.story.running && __parking.story.index>=1', 'the tour\'s parking story');
-        await p.step(300, {hold: false});
-      }),
-      step('modes', 'tour-meeting', 'Tour running: at the meeting room', async p => {
-        await p.reach(`document.body.dataset.tourDestination==='meeting' && ${STILL}`, 'the tour at the meeting room', 1200000);
-        await p.step(600, {hold: false});
-      }),
-    ]);
-    session(BOOTH, lang, 'day', url('speed=30&kiosk=1&time=12:00'), `${UP} && document.body.classList.contains('kiosk-on')`, [
-      step('modes', 'kiosk-on', 'Kiosk on: following the day', async p => { await p.reach(`document.querySelector('#day-play')?.getAttribute('aria-pressed')==='true' && ${STILL}`, 'the kiosk following the day'); await p.step(800, {hold: false}); }),
-    ]);
-    session(BOOTH, lang, 'day', url('speed=30&kiosk=1&time=07:35'), UP, [
-      step('modes', 'kiosk-morning-story', 'Kiosk on: the morning parking story plays itself', async p => { await p.reach('__parking.story.running && __parking.story.index>=1', 'the kiosk\'s story'); await p.step(300, {hold: false}); }),
+      step('modes', 'building-story-meeting', 'Building story: a meeting starts', async p => { await p.click('#story-play'); await p.reach(storyStep(2), 'the meeting step'); await p.step(6000, {hold: false}); }),
+      step('modes', 'building-story-pond', 'Building story: the pond runs low', async p => { await p.reach(storyStep(4), 'the pond step'); await p.step(1500, {hold: false}); }),
     ]);
     session(BOOTH, lang, 'day', url('speed=30&dest=pond&time=15:00'), `${IDLE} && document.body.dataset.tourDestination==='pond'`, [
       step('stops', 'stop-pond-low-water', 'Fish pond at 15:00: low-water alert', async p => { await p.reach(`!!document.querySelector('[data-incident="pond-low"]')`, 'the low-water alert'); await p.step(900); }),

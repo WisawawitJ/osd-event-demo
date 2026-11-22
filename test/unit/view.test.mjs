@@ -1,5 +1,5 @@
 // The camera's rules (view-math.js): height steps, panning far out, the hard limits, zoom planes, keys.
-import {test} from 'node:test';
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {heightStep, easedPanStep, settlePivot, screenPlaneZoom, viewKey, maxZoomOut, PAN_LIMIT, PAN_TOP, CAMERA_FLOOR, MAX_POLAR} from 'osd/viewer/view-math.js';
 

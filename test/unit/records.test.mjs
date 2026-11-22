@@ -1,5 +1,5 @@
 // The car park's records (requests, emails, the allowed list, alerts) as the ATOM Parking app keeps them.
-import {test} from 'node:test';
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {advance, seed} from 'osd/parking/clock.js';
 import {createParkingSim} from 'osd/parking/sim.js';

@@ -233,7 +233,7 @@ export function createParkingSim() {
     const stall = state.stalls.find(s => s.id === stallId);
     if (stall) stall.occupant = k;
     state.presence.set(k, {plate, province, type, stallId, since: at, color});
-    const event = {id: uid('e'), at, kind: manual ? 'manual' : 'entry', plate, province, type, camera: 'LPR-IN', ...(manual || {})};
+    const event = {id: uid('e'), at, kind: manual ? 'manual' : 'entry', plate, province, type, camera: 'LPR-IN', ...manual};
     state.events.unshift(event);
     emit('entry', event);
     return event;

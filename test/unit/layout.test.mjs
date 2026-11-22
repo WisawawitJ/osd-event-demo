@@ -1,5 +1,5 @@
 // The car park's layout as built in 3D (lot3d.js, built in Node with no renderer): nothing solid stands in the lanes.
-import {test} from 'node:test';
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {createLot} from 'osd/parking/lot3d.js';

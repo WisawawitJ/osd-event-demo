@@ -1,6 +1,6 @@
 // How fast the barrier moves cars: ten leaving at once, ten arriving at once (simulation time). The full day on screen
 // (life.test.mjs) needs about one car every 7 s through it in the rushes.
-import {test} from 'node:test';
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {carPark} from './world.mjs';
 

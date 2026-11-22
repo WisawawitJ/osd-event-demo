@@ -121,7 +121,7 @@ export const download = (name, rows) => saveFile(name, '﻿' + rows.map(r => r.m
 // The approval email's calendar file, as in the real app: a Thai/English all-day reminder for the arrival date only.
 export function visitInvite(r) {
   const day = ms => new Date(ms + 7 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
-  const text = s => String(s).replace(/[\;,]/g, m => '\\' + m).replace(/\n/g, '\\n');
+  const text = s => String(s).replace(/[;,]/g, m => '\\' + m).replace(/\n/g, '\\n');
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//OSD event demo//Parking (simulated)//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
     `UID:${r.ref}@parking.osd.example`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
     `DTSTART;VALUE=DATE:${day(r.arrival)}`, `DTEND;VALUE=DATE:${day(r.arrival + 86400e3)}`,

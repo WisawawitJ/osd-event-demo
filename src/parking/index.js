@@ -19,8 +19,6 @@ export const PARKING_POSES = {
 };
 
 export function createParking({scene, schedule, camera = null, renderer, afterRender, capture, fly}) {
-  let interactHandler = () => {};
-  const onInteract = () => interactHandler();
   const $ = s => document.querySelector(s);
   const layer = $('#parking-layer'), panelRoot = $('#parking-panel'), phoneRoot = $('#pk-phone'), bar = $('#parking-bar');
   const sim = createParkingSim();
@@ -76,7 +74,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   // The console, the pop-ups and the phone call `actions`: the world's, plus the page's own (filled in below).
   const actions = {};
   const panel = createPanel({root: panelRoot, sim, actions});
-  const phone = createPhone({root: phoneRoot, sim, actions: {interact: el => actions.interact(el), openChanged: () => renderBar()}});
+  const phone = createPhone({root: phoneRoot, sim, actions: {openChanged: () => renderBar()}});
   const overlays = createOverlays({layer: $('#pk-overlays'), sim, actions});
   const say = (ic, key, vars, tone, queued) => overlays.toast(`${icon(ic)}<span>${esc(t(key, vars))}${queued ? ` · ${esc(t('gate.sim.queued'))}` : ''}</span>`, tone);
 
@@ -124,9 +122,6 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   }});
   const {traffic, story} = parking;
   Object.assign(actions, parking.actions, {
-    // A tap on what the story cues (Approve, Deny, the photo button) is the presenter going along with it, not taking
-    // over: it ended the building tour or Follow the day the story was part of, and the story with it.
-    interact: el => { if (story.running && el?.closest?.('[data-cue="true"]')) return; onInteract(); },
     feedChanged: () => schedule(),
     toast: text => overlays.toast(esc(text)),
     // A camera with no car read yet shows what it sees now; one that has read a car keeps that capture.
@@ -155,23 +150,21 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     const what = b.dataset.bar;
     // Playing or moving the story on needs time to pass: it resumes a paused demo.
     if (['play', 'restart', 'resume', 'next'].includes(what)) world.setPaused(false);
-    if (what === 'play' || what === 'restart') { onInteract(); story.play({auto: story.auto}); }
+    if (what === 'play' || what === 'restart') story.play({auto: story.auto});
     if (what === 'pause') story.pause();
     if (what === 'resume') story.resume();
     if (what === 'next') story.next();
     if (what === 'free') leaveStory();
-    // The phone shown or hidden is part of the story's own bar (as in kiosk mode): it ended a tour's story.
-    if (what === 'phone') { if (!story.running) onInteract(); phone.setOpen(!phone.isOpen); }
+    if (what === 'phone') phone.setOpen(!phone.isOpen);
     renderBar();
   });
   bar.addEventListener('change', e => { if (e.target.dataset.bar === 'auto') story.setAuto(e.target.checked); });
 
-  // Leaving the story. Like the building tour, a playing story also ends as soon as the visitor takes over:
+  // Leaving the story. A playing story also ends as soon as the visitor takes over:
   // dragging or zooming the 3D view, or picking a console tab (on auto-advance; in Next mode the presenter may
   // look around between steps). Esc always ends it. Cued buttons, the phone and the story bar are part of it.
   function leaveStory() {
     if (!story.running) return;
-    onInteract(); // also ends a building tour the story was part of, instead of moving on to the next stop
     story.stop();
     panel.show('gate');
     overlays.toast(esc(t('story.freeMode')));
@@ -192,9 +185,9 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   // an on-screen keyboard (no key place), by character.
   viewport.addEventListener('keydown', event => {
     if (event.target.tagName !== 'CANVAS') return;
-    if (/^Arrow/.test(event.key)) return takeOver(event);
+    if (event.key.startsWith('Arrow')) return takeOver(event);
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (/^Page/.test(event.key) || ['KeyR', 'Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(event.code) || ['r', 'R', '+', '=', '-'].includes(event.key)) takeOver(event);
+    if (event.key.startsWith('Page') || ['KeyR', 'Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(event.code) || ['r', 'R', '+', '=', '-'].includes(event.key)) takeOver(event);
   }, {capture: true});
   panelRoot.addEventListener('click', event => { if (event.target.closest('[data-tab]')) takeOver(event); }, {capture: true});
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && active && story.running) leaveStory(); });
@@ -219,12 +212,11 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
       phone.setOpen(false);
     },
     get active() { return active; },
-    // Runs the story once (the showcase loop calls this) and resolves when it ends or stops.
+    // Runs the story once (the `story` option) and resolves when it ends or stops.
     playStory(options) { return parking.playStory(options); },
     stopStory() { story.stop(); },
     setNight(night) { lot.setNight(night); traffic.setNight(night); },
     toggleLang() { setLang(getLang() === 'en' ? 'th' : 'en'); },
-    setInteractHandler(fn) { interactHandler = fn; },
     dispose() { afterRender.delete(drawLiveFeed); parking.dispose(); lot.dispose(); disposeCars(); },
   };
 }

@@ -4,11 +4,6 @@
 /* Shared chrome added to the showcase */
 .lang-toggle { font-weight: 600; letter-spacing: .02em; }
 .lang-toggle svg { width: 18px !important; height: 18px !important; }
-.kiosk-toggle { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); cursor: pointer; padding: 6px 10px; border-radius: 8px; }
-.kiosk-toggle input { accent-color: var(--pk-blue); width: 16px; height: 16px; }
-.kiosk-on .kiosk-toggle { background: var(--pk-blue-soft); color: #023e8a; }
-/* The kiosk stays on the showcase: no way off to the explore page (it has no kiosk to come back). */
-.kiosk-on .explore-link { display: none; }
 
 /* Explore page: way back to the showcase beside the download link */
 .header-links { display: flex; align-items: center; gap: 6px; }
@@ -38,7 +33,7 @@
 /* The car park runs on the same clock: its controls stay (time, pause, day length, Follow the day, slider), without
    the building's moment buttons, to leave the 3D view room above the story bar. */
 .parking-active #dashboard-content, .parking-active .building-incidents, .parking-active .day-events { display: none !important; }
-.parking-active #viewport { height: calc(100dvh - 420px); min-height: 460px; }
+.parking-active #viewport { height: calc(100dvh - 448px); min-height: 460px; } /* the page fits the screen, its footer included */
 /* Switching to and from this layout is one view transition (showcase.js, switchLayout): the 3D view, the dock and the
    panel move and resize to their new place, each cross-fading inside its own frame (kept from the top left, not
    stretched); everything else cross-fades. */
@@ -434,3 +429,13 @@ html[data-night=true] .ph-caption { background: #ffffffe6; }
 /* Toasts let taps through to the view under them (a later rule made them catch taps: one ended the story, and in free
    play swallowed a drag on the view). */
 #parking-layer .pk-toasts, #parking-layer .pk-toasts > * { pointer-events: none; }
+/* The building's story: its line and controls in a card on the 3D view (not on the car park, which has its own story). */
+.parking-active #story-play { display: none; }
+.building-caption { z-index: 4; }
+.story-controls { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.story-controls button { display: flex; align-items: center; gap: 6px; font-size: 12.5px; border-radius: 8px; padding: 6px 11px; color: #023e8a; background: var(--pk-blue-soft); }
+.story-controls .pk-dots { margin-left: 8px; }
+#story-play { display: flex; align-items: center; gap: 6px; }
+#story-play span { font-size: inherit; color: inherit; } /* not the timeline header's small grey text */
+#story-play[aria-pressed=true] { background: var(--pk-blue-soft) !important; color: #023e8a; }
+html[data-night=true] #story-play[aria-pressed=true] { background: #1d2a45 !important; color: #7fd0f3; }

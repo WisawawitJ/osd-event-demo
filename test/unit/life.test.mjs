@@ -1,6 +1,6 @@
 // The car park's background life over a whole world day, on screen (every car through the barrier, none made up in
 // the bays): the number of cars follows the hour, and no two cars ever touch.
-import {test} from 'node:test';
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {world} from 'osd/parking/clock.js';
 import {occupancyAt} from 'osd/parking/life.js';

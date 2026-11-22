@@ -1,10 +1,10 @@
 // More traffic rules on the engine's clock: turning and signalling, the queue, P1, resets, a full car park.
-import {test, afterEach} from 'node:test';
+import {test, afterEach} from 'vitest';
 import assert from 'node:assert/strict';
 import {carPark} from './world.mjs';
 import {GATE, STREET, ENTRY_TURN} from 'osd/parking/layout.js';
 
-const QUEUE_HEAD = GATE.entryX - ENTRY_TURN - 2.23 - .8 - 2.2, QUEUE_GAP = 6.5;
+const QUEUE_HEAD = GATE.entryX - ENTRY_TURN - 2.23 - .8 - 2.2;
 const live = [];
 afterEach(() => { for (const cp of live.splice(0)) cp.dispose(); });
 const quiet = (time = '06:00') => { const cp = carPark({time, quiet: true}); live.push(cp); return cp; };

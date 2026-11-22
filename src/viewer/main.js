@@ -841,7 +841,7 @@ try {
         // shaders for the other half of the day are compiled here too: the first dusk (or dawn) then does not freeze
         // the view for a second and a half. They keep their current state, and swap only for the last compile.
         const nightLights=[];
-        scene.traverse(object=>{if(object.isSpotLight&&/^Simulation_spot_/.test(object.name))nightLights.push(split(object,{wanted:object.visible,forced:object.visible}));});
+        scene.traverse(object=>{if(object.isSpotLight&&object.name.startsWith('Simulation_spot_'))nightLights.push(split(object,{wanted:object.visible,forced:object.visible}));});
         const target=new THREE.WebGLRenderTarget(16,16);
         const drawPixel=()=>forced(()=>{renderer.shadowMap.needsUpdate=true;renderer.setScissorTest(true);renderer.setScissor(0,0,1,1);try{renderer.render(scene,camera);}finally{renderer.setScissorTest(false);}});
         const drawOffscreen=()=>forced(()=>{const previous=renderer.getRenderTarget();renderer.shadowMap.needsUpdate=true;renderer.setRenderTarget(target);renderer.render(scene,camera);renderer.setRenderTarget(previous);});
@@ -894,19 +894,19 @@ try {
        let orbitEnabled=true;try{orbitEnabled=localStorage.getItem('osd-demo-orbit')!=='off';}catch{}
        orbitButton.setAttribute('aria-pressed',String(orbitEnabled));
        orbitButton.addEventListener('click',()=>{orbitEnabled=!orbitEnabled;orbitButton.setAttribute('aria-pressed',String(orbitEnabled));try{localStorage.setItem('osd-demo-orbit',orbitEnabled?'on':'off');}catch{}if(!orbitEnabled)stopOrbit();},{signal:abort.signal});
-       // Idle: 20 s with no input on the 3D view in free use, or 2.5 s into a building stop of the tour/loop. Never while
+       // Idle: 20 s with no input on the 3D view. Never while
        // the camera is flying or the parking story is directing it. Only the 3D view's own input counts (the canvas and
        // its view controls): scrolling or tapping the panel, the page or the phone mock-up leaves the camera turning.
        let lastInput=performance.now(),orbitFrame=0;
-       const ORBIT_DEG_PER_S=3.5,IDLE_FREE_MS=20000,IDLE_TOUR_MS=2500;
+       const ORBIT_DEG_PER_S=3.5,IDLE_FREE_MS=20000;
        function stopOrbit(){if(orbitFrame)cancelAnimationFrame(orbitFrame);orbitFrame=0;}
        const onView=target=>Boolean(target.closest?.('#viewport'))&&!target.closest('#view-orbit, #parking-layer');
        // A drag counts all along (one longer than 20 s had the orbit start under the finger).
        for(const type of ['pointerdown','pointermove','wheel','keydown'])document.addEventListener(type,event=>{if(!onView(event.target)||(type==='pointermove'&&!event.buttons))return;lastInput=performance.now();stopOrbit();},{capture:true,signal:abort.signal});
-       const orbitAllowed=()=>{const st=showcase.getState();if(!orbitEnabled||'manual' in options||disposed||document.hidden||isPaused()||flight.running||st.traveling||parking?.story.running)return false;return performance.now()-lastInput>(st.touring?IDLE_TOUR_MS:IDLE_FREE_MS);};
+       const orbitAllowed=()=>{const st=showcase.getState();if(!orbitEnabled||'manual' in options||disposed||document.hidden||isPaused()||flight.running||st.traveling||parking?.story.running)return false;return performance.now()-lastInput>IDLE_FREE_MS;};
        let flightWasRunning=false;
        const orbitWatch=setInterval(()=>{
-        // Idle counts from the moment a flight lands: a tour stop's, and the visitor's own (a dock tap, outside the
+        // Idle counts from the moment a flight lands: the visitor's own (a dock tap, outside the
         // view, is use too: it orbited the moment it landed).
         if(flight.running){flightWasRunning=true;return;}
         if(flightWasRunning){flightWasRunning=false;lastInput=performance.now();}

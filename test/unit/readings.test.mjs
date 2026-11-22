@@ -1,5 +1,5 @@
 // The building's readings set by hand against its daily schedule (readings.js), on the world clock.
-import {test} from 'node:test';
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {world} from 'osd/parking/clock.js';

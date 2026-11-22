@@ -1,5 +1,5 @@
 // The parking demo's text: every string in both languages, every key the code asks for there, no stray tags.
-import {test} from 'node:test';
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {readFileSync, readdirSync} from 'node:fs';
 import {STRINGS} from 'osd/parking/i18n.js';

@@ -4,7 +4,7 @@ import {sunAt} from 'osd/viewer/daylight.js';
 // solar panels do at each time of day. A deterministic schedule that repeats every day: no real sensors, device
 // calls or random values. Titles and details follow the TH/EN switch (getters), so a re-render picks up the language.
 const event=(minute,destination,layer,title,detail)=>({minute,destination,layer,get title(){return L(...title);},get detail(){return L(...detail);}});
-// Moments worth a look, in time order: the timeline's buttons and the "Follow the day" camera (and its footer line).
+// Moments worth a look, in time order: the timeline's buttons.
 export const dayEvents = [
  event(450,'parking','none',['รถเข้างานช่วงเช้า','Morning arrivals'],['รถพนักงานทยอยเข้าลานจอด','Staff cars stream into the car park']),
  event(540,'meeting','occupancy',['เริ่มประชุม ชั้น 4','Meeting starts, floor 4'],['มีคน 6 คน · เปิดไฟและแอร์','6 people · lights and AC on']),

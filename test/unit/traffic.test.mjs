@@ -1,5 +1,5 @@
 // Traffic rules, run on the engine's clock in Node: no rendering, the same result every run.
-import {test} from 'node:test';
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {carPark} from './world.mjs';
 import {GATE, STREET} from 'osd/parking/layout.js';

@@ -15,15 +15,17 @@ camera images and ATOM, Keycloak and LINE responses are all made up. The page sa
 npm start            # or: node scripts/serve.mjs 8080
 ```
 
-Open <http://localhost:8080/>. You need Node 18 or newer to serve it (22.15 or newer for `npm test`, shots and bench) and no `npm install`. The server listens on localhost only.
-The page takes no settings from its address: for the booth, tick **Kiosk mode** (bottom left). `/#explore` is the
+Open <http://localhost:8080/>. You need Node 18 or newer to serve it, and no `npm install`. The tools need `npm install` (Vite+, dev only) and Node 22.18 or newer: `npm test`, `npm run lint`, `npm run fmt`, shots and bench. The server listens on localhost only.
+The page takes no settings from its address: for the booth, just open it. `/#explore` is the
 original free-exploration page, with the car park, staff cars coming and going and street traffic (no parking UI, no
 model download).
 
 ## Testing
 
 ```sh
-npm test                 # every test, in Node: about 6 s, no browser
+npm test                 # every test, in Node (Vitest, through Vite+): about 6 s, no browser, one file at a time
+npm run lint             # Oxlint (vite.config.js has its settings)
+npm run fmt              # Oxfmt
 npm run shots [words]    # screenshots of every UI state: shots/<commit>/index.html (<commit>+wip with changes)
 npm run shots -- --base main [words]   # and what changed since main: shots/compare/<main>..<commit>/index.html
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
@@ -35,7 +37,7 @@ npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, d
   every frame by the real time elapsed; pausing stops the stepping. Dice come from a seeded generator, so a run can be
   repeated exactly.
 - `src/parking/world.js`, the car park without a page: records, traffic, the story, the background life and the
-  rules between them. `src/viewer/director.js`: the tour, Follow the day and the kiosk. `src/viewer/readings.js`:
+  rules between them. `src/viewer/director.js`: back to the start after a quiet minute. `src/viewer/building-story.js`: the building's story. `src/viewer/readings.js`:
   readings set by hand against the building's schedule. `src/viewer/view-math.js`: the camera's limits and steps.
 - `test/unit/` steps them as fast as it can: a whole parking story takes about 0.2 s, a busy hour of random traffic
   (checked every tick for cars driving through each other) under a second, a whole day of the car park on screen
@@ -53,7 +55,7 @@ end at once; two runs of one version differ by a few pixels of GPU noise at most
 the DevTools protocol (`test/browser.mjs`: `/usr/lib/chromium/chromium`, or `CHROMIUM=`), one browser, on the NVIDIA
 GPU or in software, **never the Intel iGPU** (it froze this laptop twice; `GPU=nvidia|software|vulkan|egl` forces one).
 The page itself takes no settings from its address; the screenshot script hands it test settings (`time`, `dest`,
-`story`, `auto`, `kiosk`, `speed`, `debug`, `manual`, `seed` …) as `window.__demoOptions` before it loads (`src/parking/options.js`).
+`story`, `auto`, `speed`, `debug`, `manual`, `seed` …) as `window.__demoOptions` before it loads (`src/parking/options.js`).
 
 ## Brand
 
@@ -68,9 +70,8 @@ overline (the floor) and the stop's name, uppercase in English as OSD titles are
 
 Everything runs on one world clock (`src/parking/clock.js`) on the event date, 24 Nov 2026: a whole day takes about
 20 real minutes (the night, 21:00–05:00, a little faster) and then starts again, so visitors see the building through
-morning, noon, dusk and night. On the timeline, **Pause** freezes everything (clock, cars and barrier, the story, the tour,
-scenarios and the idle orbit; the camera can still be moved) until **Resume**, Follow the day, Start tour or the story's
-Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
+morning, noon, dusk and night. On the timeline, **Pause** freezes everything (clock, cars and barrier, the story,
+scenarios and the idle orbit; the camera can still be moved) until **Resume**, a story's Play or Next, or a quiet minute; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 
 - **Koi** swim slow loops in the pond, each sized to keep the fish in the water, waving their tails. The motion is in
   the vertex shader (no per-fish CPU work); the pond redraws at 15 fps only while it is in view, and not when paused.
@@ -103,17 +104,23 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   view, so no car pops in or out where you can see it (a jump in time changes them all).
 - **Timeline** (under the 3D view): the live time. Drag the slider, or press a moment, to move the world on to that
   time (always forward: what happened stays in the logs). **Night** in the header moves it on to 20:00, **Day** to 07:30.
-- **Follow the day** (timeline button) moves the camera to what the day is doing: the car park in the rushes, the meeting
-  room, the roof at noon, the pond, the overview at night. The parking story plays once a day during the morning arrivals;
-  while it plays the clock runs at real speed and the story sets its own times (09:02 to 11:30).
+- While the parking story plays, the clock runs at real speed and the story sets its own times (09:02 to 11:30).
 - At 03:00 the day starts again on the 24th: logged times move back a day with it (they read as yesterday's), passes for
   the 24th stay valid, and logs older than two days are dropped.
 
 ## At the booth
 
-- **Kiosk mode** (bottom-left checkbox) follows the day. When a visitor touches the screen it stops and
-  they can explore. After a quiet minute it follows the day again. **Start tour** still plays the fixed tour. While it
-  runs the Explore link is hidden and the logo does nothing, so the screen never leaves the showcase.
+- Two ways to use it. **Free play**: the day always runs; visitors pick a stop on the dock, move the 3D view and try
+  each stop's own buttons (a meeting, the pond's water, the energy flow, the Gate tab's test cars). **The stories**:
+  **Building story** (timeline header) plays by itself in about 80 s: the overview, a meeting starting and ending, the
+  pond running low and refilled, a cloud over the solar panels and the sun back, and the overview again, each step's
+  line in a card on the 3D view with Pause and Next (outside 08:00–15:00 it moves the day on to 10:00 first, for the
+  sun). Picking a stop, a stop's own button, a jump in time or Night ends it. The parking story is on the Parking stop
+  (below).
+- **Left alone for a minute** (no touch, key or wheel), the screen goes back to the start: what was playing stops (a
+  story playing by itself is left to finish first: the building's unless paused, the car park's on auto-advance), a paused day runs again, and the camera
+  flies back to the overview, where the idle orbit takes over. The `#explore` page, left alone for a minute, goes back
+  to the showcase.
 - On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance** and
   **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
@@ -134,7 +141,7 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   is a field of mown grass with light and dark patches (a grass texture sampled twice at different sizes and angles, blended with patches worked out per pixel, so it never repeats).
 - **View controls** at the bottom right of the 3D view: zoom in, zoom out, camera up and down (▲ ▼, or Page Up / Page
   Down: the camera rises or drops, still looking at the same point, and stops at the view's limits; panning keeps the
-  height), **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input (a flight to a stop the visitor picked counts as input) the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
+  height), **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input (a flight to a stop the visitor picked counts as input) the camera slowly circles. The setting is remembered in the browser.
 
 ### The parking story (10 steps, about 2½ minutes on auto)
 

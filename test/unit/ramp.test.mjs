@@ -1,5 +1,5 @@
 // The clock (clock.js): its fades (ramp), a function of the time whatever the frames, and its stepping.
-import {test} from 'node:test';
+import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {ramp, advance, realNow, demoNow} from 'osd/parking/clock.js';
 

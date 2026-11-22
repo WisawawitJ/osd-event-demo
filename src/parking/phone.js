@@ -108,7 +108,6 @@ export function createPhone({root, sim, actions}) {
   root?.addEventListener('click', e => {
     const b = e.target.closest('[data-ph]');
     if (!b) return;
-    actions.interact?.(b);
     const what = b.dataset.ph;
     // A tap on the story's cued photo button is the presenter going along: the story reads its own plate next.
     if (what === 'photo' && ui.cue !== 'photo') readPhoto();
@@ -123,9 +122,7 @@ export function createPhone({root, sim, actions}) {
   root?.addEventListener('input', e => {
     const n = e.target.name;
     if (!n) return;
-    // Saved first: a keystroke can end the tour and its story, and the phone redraws from the form when it does.
     ui.form[n] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-    actions.interact?.();
     if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') render();
   });
 
