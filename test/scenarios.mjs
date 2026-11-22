@@ -2137,7 +2137,8 @@ export const scenarios = [
     const top = sel => `Math.round(document.querySelector('${sel}').getBoundingClientRect().top)`;
     expect(Math.abs(await p.eval(top('.pk-feed')) - await p.eval(top('.scene-title'))) <= 1, 'level with the stop\'s title card when the corner is empty');
     await p.eval(`document.querySelector('#flight-status').textContent='Heading to the car park'`);
-    await p.sleep(300);
+    // Placed by a resize observer: on a busy machine it took longer than a fixed 0.3 s.
+    await p.until(`document.querySelector('.pk-feed').getBoundingClientRect().top>=document.querySelector('#flight-status').getBoundingClientRect().bottom`, {timeout: 3000}).catch(() => {});
     const r = JSON.parse(await p.eval(`JSON.stringify({feed:document.querySelector('.pk-feed').getBoundingClientRect().top,text:document.querySelector('#flight-status').getBoundingClientRect().bottom})`));
     expect(r.feed >= r.text, `below the corner's text when there is some (card ${Math.round(r.feed)}, text ends ${Math.round(r.text)})`);
     await p.eval(`document.querySelector('#flight-status').textContent=''`);

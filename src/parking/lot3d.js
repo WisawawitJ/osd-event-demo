@@ -60,7 +60,7 @@ export function createLot({scene, stalls, schedule}) {
   ]), kerb);
 
   // Road paint matches the building model's own markings: warm white #f7f4df, lit like the ground, thin strokes.
-  // Line marking: bay separators, street centre dashes, and the gate mouth (lane divider, stop lines).
+  // Line marking: bay separators, the street's centre dashes, and the stop line under the gate.
   const lines = [], yellow = [];
   const line = (x0, z0, x1, z1, w = .1, list = lines, y = Y.road + .012) => {
     const len = Math.hypot(x1 - x0, z1 - z0);
@@ -73,17 +73,10 @@ export function createLot({scene, stalls, schedule}) {
     line(back, s.z - 1.25, back, s.z + 1.25);
   }
   for (let x = -96; x < 96; x += 6) line(x, STREET.centre, x + 3, STREET.centre, .12, yellow, Y.road - .003);
-  // Gate mouth: entry keeps to the west half, exit to the east half.
-  const divide = (GATE.entryX + GATE.exitX) / 2;
-  for (let z = DRIVE.north + 1.6; z < STREET.north - .4; z += 1.6) line(divide, z, divide, Math.min(z + .9, STREET.north - .4), .1, yellow);
-  // Driveway centre line between the inbound (west) and outbound (east) lanes, broken where the gate and
-  // the building's aisle cross it.
-  for (let x = DRIVE.west; x < DRIVE.east - 1; x += 2.4) {
-    if ((x > GATE.west - 1.5 && x < GATE.east + 1) || x > RAMP.west - .5) continue;
-    line(x, DRIVE.z, Math.min(x + 1.4, DRIVE.east), DRIVE.z, .1, yellow);
-  }
-  line(GATE.west + .1, GATE.entryStopZ - 2.45, divide - .15, GATE.entryStopZ - 2.45, .25);   // entry stop line, outside the boom
-  line(divide + .15, GATE.exitStopZ + 2.45, GATE.east - .1, GATE.exitStopZ + 2.45, .25);     // exit stop line, inside the boom
+  // Only the main road has a centre line: the driveway and the entrance road go without, their arrows showing each way.
+  // One stop line straight under the barrier's arm, across both lanes: a car going in stops just short of it on the
+  // street side, one going out just short of it on the car park side.
+  line(GATE.west + .1, GATE.z, GATE.east - .1, GATE.z, .25);
   // Arrows in the model's style: a 1.6 m shaft and two 0.6 m head strokes at 45°, 9 cm wide, slightly raised.
   const strokeArrow = (x, z, heading) => {
     const box = (len, cx, cz, angle) => new THREE.BoxGeometry(.09, .012, len).rotateY(angle).translate(cx, 0, cz);
