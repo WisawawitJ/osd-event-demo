@@ -53,10 +53,10 @@ const S = {
   'ov.exits': ['ออกวันนี้', 'Exits today'],
   'ov.pending': ['คำขอรออนุมัติ', 'Pending requests'],
   'ov.unknown': ['รถไม่รู้จักวันนี้', 'Unknown cars today'],
-  'ov.hourly': ['รถเข้าแต่ละชั่วโมง · วันนี้', 'Entries per hour · today'],
+  'ov.hourly': ['รถเข้าออกแต่ละชั่วโมง · วันนี้', 'Entries and exits per hour · today'],
   'ov.attention': ['ต้องดูแล', 'Needs attention'],
   'ov.zones': ['โซนที่จอด', 'Zones'],
-  'zone.P1': ['P1 ข้างอาคาร · พนักงานและ VIP', 'P1 by the building · staff and VIP'],
+  'zone.P1': ['P1 ข้างอาคาร · VIP เท่านั้น', 'P1 by the building · VIP only'],
   'zone.P2': ['P2 ลานกลางแจ้ง · ทั่วไปและผู้มาติดต่อ', 'P2 open-air · general and visitors'],
   'ov.recent': ['เหตุการณ์ล่าสุดที่ไม้กั้น', 'Latest at the barrier'],
   'ov.stale': ['ข้อมูลอัปเดตต่อเนื่อง', 'Live'],
@@ -135,7 +135,7 @@ const S = {
   'gate.reason': ['เหตุผล', 'Reason'],
   'gate.reason.misread': ['อ่านทะเบียนผิด', 'Plate misread'],
   'gate.reason.delivery': ['รถส่งของ / ผู้รับเหมา', 'Delivery / contractor'],
-  'gate.reason.guest': ['แขกที่ยืนยันตัวตนแล้ว', 'Guest verified by phone'],
+  'gate.reason.guest': ['แขกที่ยืนยันตัวตนทางโทรศัพท์แล้ว', 'Guest verified by phone'],
   'gate.reason.other': ['อื่น ๆ', 'Other'],
   'gate.manual.alertFirst': ['มีรถไม่รู้จักรออยู่ · ตอบการแจ้งเตือนด้านบนก่อน', 'An unknown car is waiting · answer the alert above first'],
   'gate.full': ['ที่จอดเต็ม · {plate} ถูกแจ้งให้กลับรถ', 'Car park full · {plate} was turned away'],
@@ -212,7 +212,6 @@ const S = {
   'rep.audit.note': ['บันทึกแบบเพิ่มอย่างเดียว · แก้ไขหรือลบไม่ได้', 'Append-only · cannot be edited or deleted'],
   'rep.csv.events': ['ดาวน์โหลดเหตุการณ์ CSV', 'Download events CSV'],
   'rep.csv.audit': ['ดาวน์โหลดบันทึก CSV', 'Download audit CSV'],
-  'rep.capacity': ['ตั้งความจุลานจอด', 'Set car-park capacity'],
 
   // audit actions
   'a.login': ['เข้าสู่ระบบด้วย Keycloak (จำลอง)', 'Signed in with Keycloak (simulated)'],
@@ -221,12 +220,10 @@ const S = {
   'a.revoke': ['ยกเลิกสิทธิ์', 'Revoked access'],
   'a.manual': ['เปิดไม้กั้นด้วยตนเอง', 'Opened the barrier manually'],
   'a.deny': ['ไม่ให้รถไม่รู้จักเข้า', 'Denied an unknown car'],
-  'a.close': ['สั่งปิดไม้กั้น', 'Closed the barrier'],
   'a.plateAdd': ['เพิ่มทะเบียนรถ', 'Added a plate'],
   'a.plateDisable': ['ปิดสิทธิ์ทะเบียน', 'Disabled a plate'],
   'a.plateEnable': ['เปิดสิทธิ์ทะเบียน', 'Enabled a plate'],
   'a.import': ['นำเข้ารถพนักงานจาก CSV', 'Imported staff cars from CSV'],
-  'a.capacity': ['เปลี่ยนความจุ', 'Changed capacity'],
   'a.retry': ['ส่งทะเบียนไป ATOM ใหม่', 'Retried an ATOM sync'],
 
   // phone / visitor
@@ -255,6 +252,9 @@ const S = {
   'ph.mail.approved': ['ยืนยันสิทธิ์จอดรถ OSD', 'Your OSD parking is confirmed'],
   'ph.mail.rejected': ['คำขอจอดรถยังไม่ได้รับอนุมัติ', 'Your parking request was not approved'],
   'ph.mail.revoked': ['สิทธิ์จอดรถถูกยกเลิก', 'Your parking access was revoked'],
+  'ph.namePlaceholder': ['ชื่อ นามสกุล', 'First and last name'],
+  // The revocation email's body (it showed the staff's confirm question).
+  'ph.mail.revokedBody': ['สิทธิ์จอดรถสำหรับการเข้าพบนี้ถูกยกเลิกแล้ว ไม้กั้นจะไม่เปิดให้ทะเบียนนี้อีก หากยังต้องการเข้าพบ โปรดส่งคำขอใหม่', 'Parking access for this visit has been ended: the barrier will no longer open for this plate. If you still plan to visit, please send a new request.'],
   'ph.ticket': ['บัตรจอดรถ', 'Parking ticket'],
   'ph.ticket.how': ['ขับเข้าทางประตูหลัก กล้องจะอ่านทะเบียนและเปิดไม้กั้นให้อัตโนมัติ · จอดโซน P2 แถว A', 'Drive to the main gate: the camera reads your plate and opens the barrier · park in zone P2, row A'],
   'ph.ticket.qr': ['แสดง QR นี้ที่ประตูอาคาร', 'Show this QR at the building doors'],
@@ -277,6 +277,7 @@ const S = {
 
   'story.hint.approve': ['ลองกด “อนุมัติ” ในคอนโซลเจ้าหน้าที่ หรือกดถัดไป', 'Try “Approve” in the staff console, or press Next'],
   'story.hint.alert': ['เลือก “เปิดให้เข้า” หรือ “ไม่ให้เข้า” ได้เลย', 'Choose “Open” or “Deny”'],
+  'story.hint.noPass': ['คำขอนี้ถูกปฏิเสธ ทะเบียนนี้จึงไม่มีสิทธิ์จอด ไม้กั้นไม่เปิด และรถถอยออกไป', 'The request was rejected, so this plate has no pass: the barrier stays shut and the car backs out'],
   's1.t': ['ผู้มาติดต่อขอสิทธิ์จอดล่วงหน้า', 'A visitor asks for parking ahead of time'],
   's1.b': ['คุณชูใจจะมาประชุมที่ OSD เปิดลิงก์บนมือถือ ไม่ต้องเข้าสู่ระบบ กรอกชื่อ อีเมลของตนเองและของผู้ติดต่อใน OSD', 'Chujai is coming to a meeting at OSD. She opens the link on her phone, with no sign-in, and enters her name, her email and her OSD contact’s'],
   's2.t': ['ถ่ายรูปรถ ระบบกรอกทะเบียนให้', 'Snap the car and the plate fills itself'],

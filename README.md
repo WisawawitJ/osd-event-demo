@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (160), about 115 s: run before a commit
+npm test                 # all behaviour checks (161), about 115 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -46,7 +46,11 @@ A check joins the quick set with `quick: true` in `test/scenarios.mjs`: keep it 
 different area (load, language, night, flights, lights, pond, clock, car park, story).
 
 `test/run.mjs` starts its own server on a free port and drives headless Chromium over the DevTools protocol
-(`CHROMIUM=` names another binary). There are no npm dependencies; the tests need Node 22 or newer for its built-in
+(`/usr/lib/chromium/chromium` itself where it exists, so the desktop's own Chromium flags and extensions stay out;
+`CHROMIUM=` names another binary). Browser profiles go in `$TEST_TMP` (default the system temp folder) under
+`osd-demo-test`; each is removed once its browser has exited, and ones older than 30 minutes left by a killed run are
+cleared at the next start. Each check starts with the page's saved settings (language, idle orbit) cleared. A filter
+that matches no check fails. There are no npm dependencies; the tests need Node 22 or newer for its built-in
 WebSocket. **It never uses the Intel iGPU by itself**: on this laptop headless Chromium on the iGPU hung it twice (i915
 GPU hang, then a failed reset), and since the iGPU drives the display the whole desktop froze. By default it renders on
 the NVIDIA GPU (only NVIDIA's EGL library is loaded) with 6 browsers; with 8 the suite, grown to over 100 checks, began failing timing checks under the load.
@@ -55,9 +59,9 @@ renders in software (SwiftShader, 3 browsers at low CPU priority, the 3D view at
 about 9½ minutes, and some timing-sensitive checks fail at those frame rates. `GPU=nvidia|software|vulkan|egl` forces
 one (`egl` is the iGPU: don't).
 
-Pages load with `?debug=1&speed=30`, which runs the simulated clock, cars, story waits and camera flights 30× faster;
-checks that time real behaviour use a lower speed or none. `SPEED=n` and `JOBS=n` change the speed and the number of
-browsers. The `?speed` flag also works by hand for rehearsals, for example `/?dest=parking&story=1&speed=3`. Pages
+Pages load with `?debug=1&speed=30` (set in `test/scenarios.mjs`), which runs the simulated clock, cars, story waits
+and camera flights 30× faster; checks that time real behaviour use a lower speed or none. `JOBS=n` changes the number
+of browsers; `SPEED=n` changes the speed, but many checks' waits assume 30, so other speeds are for exploring only. The `?speed` flag also works by hand for rehearsals, for example `/?dest=parking&story=1&speed=3`. Pages
 also load with `?day=0` (the world clock at real speed from 09:00) unless a check sets `day` itself, as the day-cycle
 checks do. Checks that do not measure smoothness also skip the shader warm-up (`?warm=0`). The slowest checks start
 first, from the times of earlier runs (`test/out/times.json`). Screenshots of failed checks go to `test/out/`.
@@ -152,7 +156,7 @@ In the staff console:
 - **Gate → Open the barrier manually**: needs a reason, and is audited.
 - **Requests**: approve, reject with a reason, or revoke.
 - **Vehicles**: add a staff car, import CSV, disable or enable a plate, retry a failed ATOM sync.
-- **Reports**: download the event and audit CSVs, or set the capacity.
+- **Reports**: download the event and audit CSVs. (The capacity is the car park's 50 bays; it is not a setting.)
 
 The visitor's phone form can be filled in by hand. The car photo reads a sample plate. On the emailed ticket,
 **Add to calendar** downloads a simulated `.ics` invite for the visit.
@@ -213,7 +217,7 @@ only when a car is coming out or along the exit lane) (a check watches every pai
 
 ## What is real and what is imagined
 
-- The building, its 6-bay car park (P1) and the barrier position come from the OSD building model.
+- The building, its 6-bay car park (P1, for VIPs only) and the barrier position come from the OSD building model.
 - The open-air lot P2 (44 bays), the street, the driveway, the booth, the plate cameras and the free-space sign
   are invented for the demo, to show a 50-space car park.
 - The flows follow the parking app's current features (README of `atom-parking`) and the supplied target

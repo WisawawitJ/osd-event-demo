@@ -16,7 +16,8 @@ const IDLE = `${UP} && ${STILL}`;
 const VISITOR = 'ชูใจ ใฝ่รู้', STORY_PLATE = '7กข 4821';
 const STORY_REQUEST = `__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)})`;
 // Sends a parked staff car out; returns its key.
-const LEAVE_STAFF = `(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');void __parking.traffic.leave(k);return k})()`;
+// (With none parked it threw nothing and returned undefined, and checks waiting for that key to leave passed at once.)
+const LEAVE_STAFF = `(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');if(!k)throw new Error('no staff car parked');void __parking.traffic.leave(k);return k})()`;
 const viewport = (p, width = 1600, height = 1000) => p.cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
 
 export const scenarios = [
@@ -29,6 +30,19 @@ export const scenarios = [
     expect(gap < 16, `the stops fill the dock (${gap} px after the last)`);
   }},
 
+  {name: 'a story whose request is rejected still finishes: the visitor is turned away at the barrier', async run(p, expect) {
+    // Rejected at step 4, the visitor's car waited at the barrier for an alert nobody answered, and the story stalled.
+    // The presenter's Reject stands in for the story's own approval here.
+    await p.goto(parking('&story=1'));
+    await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
+    await p.eval(`(()=>{const sim=__parking.sim;sim.approve=id=>sim.reject(id,'ไม่มีนัดหมาย')})()`);
+    await p.until('!__parking.story.running', {timeout: 90000, what: 'story end'});
+    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const s=__parking.sim.state,k=s.requests.length&&__parking.sim.key(${JSON.stringify(STORY_PLATE)},${STORY_REQUEST}?.province);const ev=s.events.filter(e=>e.plate===${JSON.stringify(STORY_PLATE)});
+      return {status:${STORY_REQUEST}?.status,entered:ev.some(e=>e.kind==='entry'),denied:ev.some(e=>e.kind==='denied'),parked:s.presence.has(k),open:s.alerts.filter(a=>a.status==='open').length,index:__parking.story.index}})())`));
+    expect(r.status === 'rejected', `the visitor's request rejected (got ${r.status})`);
+    expect(!r.entered && !r.parked && r.denied, `the visitor's car turned away at the barrier, never parked (entered ${r.entered}, parked ${r.parked}, denied ${r.denied})`);
+    expect(r.index === -1 && r.open === 0, `the story ran to its end with no alert left open (step ${r.index}, ${r.open} open)`);
+  }},
   {quick: true, name: 'story plays end to end on auto-advance', async run(p, expect) {
     await p.goto(parking('&story=1'));
     await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
@@ -71,7 +85,8 @@ export const scenarios = [
       window.__plate=v.plate;void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-40});return __parking.sim.key(v.plate,v.province)})()`;
     // Acts the moment the arm starts up for this car (at ?speed=30 it is up within a few frames: polling missed it).
     const car = `__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate)`;
-    const atGate = act => `(()=>{const sim=__parking.sim,set=sim.setGate;sim.setGate=g=>{set(g);const c=${car};if(g==='opening'&&c&&Math.hypot(c.position.x+23,c.position.z-21.9)<2.5){sim.setGate=set;${act}}};})()`;
+    // (Before the car is picked, __plate is not set yet: a background car opening the barrier then threw in the app.)
+    const atGate = act => `(()=>{const sim=__parking.sim,set=sim.setGate;sim.setGate=g=>{set(g);const c=typeof __plate==='string'?${car}:null;if(g==='opening'&&c&&Math.hypot(c.position.x+23,c.position.z-21.9)<2.5){sim.setGate=set;${act}}};})()`;
     await p.eval(atGate(`__world.jumpTo(12*60);window.__acted=true;`));
     const key = await p.eval(pick);
     await p.until('window.__acted', {timeout: 30000, what: 'the arm rising for the car'});
@@ -189,8 +204,8 @@ export const scenarios = [
     const left = await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic;
       for(const k of t.parkedKeys()){const q=sim.state.presence.get(k);t.vanish(k,()=>sim.recordExit({plate:q.plate,province:q.province}));}
       const s=sim.freeStall('staff');sim.recordEntry({plate:'3ฆง 6047',province:'ชลบุรี',type:'unknown',stallId:s.id,color:6,manual:{by:'staff.guard',reason:'gate.reason.delivery'}});
-      const k=sim.key('3ฆง 6047','ชลบุรี');t.appear(k);document.querySelector('[data-sim="exit"]').click();return !t.parkedKeys().includes(k);})()`);
-    expect(left, 'Exit sent the only parked car, the unknown one, on its way out');
+      const k=sim.key('3ฆง 6047','ชลบุรี');t.appear(k);const listed=t.parkedKeys().includes(k);document.querySelector('[data-sim="exit"]').click();return listed&&!t.parkedKeys().includes(k);})()`);
+    expect(left, 'Exit sent the only parked car, the unknown one (parked first), on its way out');
   }},
   {name: 'the timeline\'s current minute is now, not a day ahead', async run(p, expect) {
     // At 15:00:20 the 15:00 moment counted as a day ahead: the jump ran the logs through a whole day.
@@ -240,8 +255,8 @@ export const scenarios = [
       for(const k of t.parkedKeys()){const q=sim.state.presence.get(k);t.vanish(k,()=>sim.recordExit({plate:q.plate,province:q.province}));}
       const v=sim.state.vehicles.find(v=>v.type==='guest'&&!sim.state.presence.has(sim.key(v.plate,v.province)));const s=sim.freeStall('guest');
       sim.recordEntry({plate:v.plate,province:v.province,type:'guest',stallId:s.id,color:v.color});const k=sim.key(v.plate,v.province);t.appear(k);
-      document.querySelector('[data-sim="exit"]').click();return !t.parkedKeys().includes(k);})()`);
-    expect(left, 'Car leaving sent the only parked car, a visitor\'s, on its way out');
+      const listed=t.parkedKeys().includes(k);document.querySelector('[data-sim="exit"]').click();return listed&&!t.parkedKeys().includes(k);})()`);
+    expect(left, 'Car leaving sent the only parked car, a visitor\'s (parked first), on its way out');
   }},
   {name: 'opened late in the day, the car park is that hour\'s at once', async run(p, expect) {
     // Every start after 09:00 began from the seeded morning: at 23:00, 27 cars stood in the bays and drove out
@@ -257,8 +272,10 @@ export const scenarios = [
     await p.until(ready, {timeout: 40000});
     await p.click('[data-tab="gate"]');
     // No staff car free to come: the button has nobody to send (a VIP would have been sent instead).
+    // Counted before and after the press: background traffic may already be bringing a VIP in.
     const sent = await p.eval(`(()=>{const sim=__parking.sim;for(const v of sim.state.vehicles)if(v.type==='staff')v.enabled=false;
-      document.querySelector('[data-sim="registered"]').click();return sim.state.vehicles.filter(v=>v.type==='vip'&&__parking.traffic.isArriving(sim.key(v.plate,v.province))).length;})()`);
+      const vips=()=>sim.state.vehicles.filter(v=>v.type==='vip'&&__parking.traffic.isArriving(sim.key(v.plate,v.province))).length,before=vips();
+      document.querySelector('[data-sim="registered"]').click();return vips()-before;})()`);
     expect(sent === 0, `no VIP sent for Staff car (${sent})`);
   }},
   {name: 'Vehicles lists every vehicle', async run(p, expect) {
@@ -600,10 +617,16 @@ export const scenarios = [
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
     const due = 1600 / SPEED + 400; // the follow-ups come ~1.6 s of demo time after the approval
-    const kinds = await p.eval(`(async()=>{const s=__parking.sim,q=s.state.requests.find(q=>q.status==='pending');s.approve(q.id);s.revoke(q.id);
+    const kinds = await p.eval(`(async()=>{const s=__parking.sim,q=s.state.requests.find(q=>q.status==='pending');window.__unconfirmed=q.id;s.approve(q.id);s.revoke(q.id);
       await new Promise(r=>setTimeout(r,${due}));return s.state.emails.filter(m=>m.requestId===q.id).map(m=>m.kind).join()})()`);
-    expect(kinds === 'revoked', `a revoked request gets only the revoke email (${kinds})`);
-    const late = await p.eval(`(()=>{const q=__parking.sim.state.requests.find(q=>q.status==='revoked');return q.history.map(h=>h.key).join()+' | listed: '+__parking.sim.state.vehicles.some(v=>v.requestId===q.id)})()`);
+    // Revoked before ATOM confirmed it: the visitor was never told of the approval, so gets no email at all (as in the
+    // ATOM Parking app); revoked once confirmed, the revocation email goes out.
+    expect(kinds === '', `a request revoked before ATOM confirmed it sends no email (${kinds})`);
+    const confirmed = await p.eval(`(async()=>{const s=__parking.sim,day=s.now();
+      const q=s.submitRequest({visitor:{name:'ทดสอบ ระบบ',phone:'080-000-0000',email:'test@example.com',company:'—'},contact:'host.demo@osd.example',plate:'1ทด 1111',province:'กรุงเทพมหานคร',arrival:day,departure:day});s.approve(q.id);
+      await new Promise(r=>setTimeout(r,${due}));s.revoke(q.id);return s.state.emails.filter(m=>m.requestId===q.id).map(m=>m.kind).reverse().join()})()`);
+    expect(confirmed === 'approved,revoked', `a request revoked after ATOM confirmed it gets the revocation email after its ticket (${confirmed})`);
+    const late = await p.eval(`(()=>{const q=__parking.sim.state.requests.find(q=>q.id===__unconfirmed);return q.history.map(h=>h.key).join()+' | listed: '+__parking.sim.state.vehicles.some(v=>v.requestId===q.id)})()`);
     expect(!late.includes('h.atom') && late.endsWith('listed: false'), `no ATOM confirmation after the revoke, plate withdrawn (${late})`);
     await p.eval(`(()=>{const s=__parking.sim;s.reset();const q=s.state.requests.find(q=>q.status==='pending');s.approve(q.id);s.reset()})()`);
     await p.sleep(due);
@@ -631,7 +654,9 @@ export const scenarios = [
     const seen = {};
     for (const stop of ['overview', 'meeting', 'parking', 'pond']) { // ends at the pond for the colour check
       await p.click(`[data-destination="${stop}"]`);
-      await p.sleep(3500 / SPEED + 300);
+      // Landed (a fixed wait read the bar early under load), then the layout's 0.35 s change.
+      await p.until(`document.body.dataset.tourDestination === '${stop}' && !document.querySelector('[data-destination][aria-busy=true]')`, {timeout: 20000, what: `landing at ${stop}`});
+      await p.sleep(450);
       seen[stop] = await shown();
     }
     expect(seen.meeting && seen.pond && !seen.overview && !seen.parking, `bar visible per stop ${JSON.stringify(seen)}`);
@@ -2037,9 +2062,11 @@ export const scenarios = [
     const key = await p.eval(LEAVE_STAFF);
     await p.until(`!__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 20000, what: 'exit recorded'});
     const t0 = Date.now();
-    await p.until(`__parking.sim.state.gate === 'closed'`, {timeout: 10000, what: 'barrier closed'});
-    const s = (Date.now() - t0) * 10 / 1000;
-    expect(s < 6, `arm down within 6 s of demo time after the exit (took ${s.toFixed(1)} s)`);
+    // Another car going through meanwhile rightly keeps the arm up (background traffic: it failed now and then).
+    await p.eval(`(()=>{window.__other=false;const sim=__parking.sim,from=sim.now(),f=()=>{if(__parking.traffic.inspect().under>1||sim.state.events.some(e=>e.at>from&&['entry','manual','exit'].includes(e.kind)))__other=true;if(sim.state.gate!=='closed')requestAnimationFrame(f);};f();})()`);
+    await p.until(`__parking.sim.state.gate === 'closed'`, {timeout: 30000, what: 'barrier closed'});
+    const s = (Date.now() - t0) * 10 / 1000, other = await p.eval('__other'), limit = other ? 20 : 6;
+    expect(s < limit, `arm down within ${limit} s of demo time after the exit (took ${s.toFixed(1)} s${other ? ', another car went through meanwhile' : ''})`);
   }},
   {name: 'leaving the story: a drag, Esc or Exit story ends it; Next mode lets you look around', async run(p, expect) {
     const start = async auto => {

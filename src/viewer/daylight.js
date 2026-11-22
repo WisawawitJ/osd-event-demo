@@ -31,7 +31,7 @@ export function sunAt(minute) {
 }
 
 // Applies the sky for `minute` to the scene's lights. `dayBackground` is the page's daytime background colour.
-export function applySky({minute, scene, renderer, hemisphere, key, fill, dayBackground}) {
+export function applySky({minute, scene, hemisphere, key, fill, dayBackground}) {
   const {light, height} = sunAt(minute);
   const low = light * (1 - smooth(height / .45)); // golden hour: daylight with the sun still low
   // Highest at noon, where the old fixed light was; the heading turns once a day, so 23:59 and 00:00 are neighbours.
@@ -43,7 +43,6 @@ export function applySky({minute, scene, renderer, hemisphere, key, fill, dayBac
   hemisphere.color.set(DAY.sky).lerp(other.set(0xffd2b0), low * .6).lerp(other.set(NIGHT.sky), 1 - light);
   fill.intensity = THREE.MathUtils.lerp(NIGHT.fill, .6, light);
   scene.environmentIntensity = THREE.MathUtils.lerp(NIGHT.environment, .65, light);
-  renderer.toneMappingExposure = 1;
   color.set(dayBackground).lerp(other.set('#efcfb4'), low * .8).lerp(other.set(NIGHT.background), 1 - light);
   scene.background.copy(color);
   scene.fog?.color.copy(color); // the world fades into the sky's colour (main.js)

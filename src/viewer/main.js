@@ -43,7 +43,8 @@ const dayBackground=isShowcase?'#e6ecee':'#dce5e5'; // the 3D view's daytime bac
 // The world (measured across the ground from the site's middle) is clear to WORLD_CLEAR metres out and gone in the fog by
 // WORLD_GONE; panning is free while the view's pivot stays within PAN_FREE and slows to a stop at PAN_LIMIT.
 // The pivot's height stays between the ground and PAN_TOP (the roof is about 20 m up).
-const WORLD_CLEAR=65,WORLD_GONE=95,PAN_FREE=55,PAN_LIMIT=90,PAN_TOP=25;
+// The camera keeps CAMERA_FLOOR metres up, above the grass (0.26 m).
+const WORLD_CLEAR=65,WORLD_GONE=95,PAN_FREE=55,PAN_LIMIT=90,PAN_TOP=25,CAMERA_FLOOR=.8;
 // ?debug=1 (tests, the benchmark: test/) exposes the scene and the demo's parts on window.
 const params=new URLSearchParams(location.search),debug=params.has('debug');
 // The page's night look (night.css) switches in one go and cross-fades as a whole (a view transition). Fading each
@@ -174,30 +175,38 @@ try {
   }, {capture: true, passive: false, signal: abort.signal});
   // Panning slows the further the view's pivot goes from the site's middle: free within PAN_FREE, then slower and
   // slower to a stop at PAN_LIMIT, so a touchpad scroll cannot carry the view off into the fog (it went on without
-  // end). Only the outward part of a step is slowed: coming back is never. Up and down, the pivot stays between the
-  // ground and PAN_TOP (it went under the ground, or off into the sky). Every pan, by mouse, keys, touch or touchpad,
-  // goes through _pan.
+  // end). Only the outward part of a step is slowed: coming back is never. Every pan, by mouse, keys, touch or
+  // touchpad, goes through _pan; the hard limits below catch every other way the view moves.
   const basePan = controls._pan.bind(controls), panBefore = new THREE.Vector3(), panStep = new THREE.Vector3();
   controls._pan = (deltaX, deltaY) => {
     panBefore.copy(controls._panOffset); basePan(deltaX, deltaY); panStep.subVectors(controls._panOffset, panBefore);
-    const t = controls.target, y = THREE.MathUtils.clamp(t.y + panStep.y, Math.min(t.y, 0), Math.max(t.y, PAN_TOP));
     // Measured on where the step lands, so a pan round the site (no outward part) cannot creep out either.
-    let x = t.x + panStep.x, z = t.z + panStep.z;
-    const r = Math.hypot(t.x, t.z), landed = Math.hypot(x, z);
-    if (landed > r && landed > PAN_FREE) {
-      const ease = (1 - THREE.MathUtils.clamp((r - PAN_FREE) / (PAN_LIMIT - PAN_FREE), 0, 1)) ** 2;
-      const scale = Math.max(r, Math.min(r + (landed - r) * ease, PAN_LIMIT)) / landed;
-      x *= scale; z *= scale;
-    }
-    controls._panOffset.copy(panBefore).add(panStep.set(x - t.x, y - t.y, z - t.z));
+    const t = controls.target, x = t.x + panStep.x, z = t.z + panStep.z, r = Math.hypot(t.x, t.z), landed = Math.hypot(x, z);
+    if (landed <= r || landed <= PAN_FREE) return;
+    const ease = (1 - THREE.MathUtils.clamp((r - PAN_FREE) / (PAN_LIMIT - PAN_FREE), 0, 1)) ** 2;
+    const scale = Math.max(r, Math.min(r + (landed - r) * ease, PAN_LIMIT)) / landed;
+    controls._panOffset.copy(panBefore).add(panStep.set(x * scale - t.x, panStep.y, z * scale - t.z));
   };
-  // Orbiting stops just above the horizon: the camera never dips under the ground around its pivot.
+  // Hard limits, after every move of the view (pans, zoom toward the cursor, the close zoom below, keys, the idle
+  // orbit): the pivot stays within PAN_LIMIT of the site's middle and between the ground and PAN_TOP, the camera moving
+  // with it, and the camera stays above the grass. (Zooming toward the sky took the pivot 129 m under the ground, and
+  // the camera after it.) Orbiting stops just above the horizon.
   controls.maxPolarAngle = Math.PI * .49;
+  const boundShift = new THREE.Vector3();
+  controls.addEventListener('change', () => {
+    const t = controls.target, r = Math.hypot(t.x, t.z), out = r > PAN_LIMIT ? PAN_LIMIT / r - 1 : 0;
+    boundShift.set(t.x * out, THREE.MathUtils.clamp(t.y, 0, PAN_TOP) - t.y, t.z * out);
+    if (boundShift.lengthSq()) { t.add(boundShift); camera.position.add(boundShift); }
+    if (camera.position.y < CAMERA_FLOOR) { camera.position.y = CAMERA_FLOOR; camera.lookAt(t); }
+  });
   canvas.addEventListener('wheel', event => {
     if (!model || event.deltaY >= 0 || !controls.enabled || !controls.enableZoom) return;
     if (camera.position.distanceTo(controls.target) > closeRange()) return;
-    // At the ground there is nowhere further to go; let the normal zoom have the event.
-    if (!pushForward(Math.min(2.4, .5 + Math.abs(event.deltaY) / 200), event.clientX, event.clientY)) return;
+    // At the ground there is nowhere further to go; let the normal zoom have the event. A pinch (a wheel with ctrlKey)
+    // comes as dozens of small steps: each moves by its size, without a mouse notch's 0.5 m floor (one pinch went
+    // through walls).
+    const step = event.ctrlKey ? Math.abs(event.deltaY) / 40 : .5 + Math.abs(event.deltaY) / 200;
+    if (!pushForward(Math.min(2.4, step), event.clientX, event.clientY)) return;
     event.preventDefault(); event.stopImmediatePropagation();
     controls.dispatchEvent({type: 'start'}); controls.dispatchEvent({type: 'end'});
   }, {capture: true, passive: false, signal: abort.signal});
@@ -553,7 +562,7 @@ try {
       let skyStep=null;
       const followClock=()=>{
         const minute=world.minute(),step=Math.round(minute/2);
-        if(step!==skyStep){skyStep=step;applySky({minute,scene,renderer,hemisphere,key,fill,dayBackground});renderer.shadowMap.needsUpdate=true;schedule();}
+        if(step!==skyStep){skyStep=step;applySky({minute,scene,hemisphere,key,fill,dayBackground});renderer.shadowMap.needsUpdate=true;schedule();}
         if(simulation.getState().night!==isDark(minute))simulation.setNight(isDark(minute));
         setPageNight(isDark(minute));
       };
@@ -614,12 +623,12 @@ try {
          return stopPoses;
        }
        showcase=createShowcase({model,simulation,schedule,parking,
-        // The floors' change ends with the flight (left mid-cut, the building stayed half cut away where it stopped).
         // The floors' change ends with the flight (left mid-cut, the building stayed half cut away where it stopped), on the
         // scene of the stop on show: the new one once its approach has begun, else the one the flight left.
-        cancelFlight:()=>{const flying=flight.running;navigation++;flight.stop();if(flying)settle(lastDestination);marker.visible=false;schedule();},
+        // A cancelled flight is no longer docking (a later parking-story camera move settled the floors on its behalf).
+        cancelFlight:()=>{const flying=flight.running;navigation++;docking=false;flight.stop();if(flying)settle(lastDestination);marker.visible=false;schedule();},
         onUserOrbit:callback=>{controls.addEventListener('start',callback);
-         // Capture: runs before the canvas's own key handler, so R (Reset view) starts its flight after this has cancelled the old one, as the button does.
+         // Capture: runs before the canvas's own key handler, so R (Reset view) starts after this has cancelled the old flight, as the button does.
          canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','r','R','+','=','-'].includes(e.key))callback();},{capture:true,signal:abort.signal});},
         async navigate(id,{instant=false,onPhase=()=>{},onApproach=()=>{}}={}){
           flight.stop();const ticket=++navigation,start=readPose();marker.visible=false;markerMaterial.opacity=.6;

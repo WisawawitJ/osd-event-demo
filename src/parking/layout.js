@@ -28,8 +28,9 @@ const P2_ROWS = [
 
 export function buildStalls() {
   const stalls = [];
+  // P1, the row beside the building, is for VIPs only (its four staff bays only ever held VIPs: staff park in P2).
   for (let i = 0; i < 6; i++) {
-    stalls.push({id: `P1-0${i + 1}`, zone: 'P1', row: 'P1', x: -19.66, z: -8.04 + 2.5 * i, nose: -1, aisleX: P1_AISLE_X, y: Y.site, reserved: i < 2 ? 'vip' : 'staff'});
+    stalls.push({id: `P1-0${i + 1}`, zone: 'P1', row: 'P1', x: -19.66, z: -8.04 + 2.5 * i, nose: -1, aisleX: P1_AISLE_X, y: Y.site, reserved: 'vip'});
   }
   for (const r of P2_ROWS) {
     for (let i = 0; i < 11; i++) {

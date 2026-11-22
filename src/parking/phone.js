@@ -32,7 +32,7 @@ export function createPhone({root, sim, actions}) {
   function formScreen() {
     const f = ui.form;
     return `<div class="ph-hero"><strong>${t('ph.formTitle')}</strong><span>${t('ph.formIntro')}</span></div>
-    ${field('name', t('ph.name'), {placeholder: 'ชื่อ นามสกุล'})}
+    ${field('name', t('ph.name'), {placeholder: t('ph.namePlaceholder')})}
     ${field('email', t('req.email'), {type: 'email', placeholder: 'name@example.com'})}
     ${field('contact', t('req.contact'), {type: 'email', placeholder: 'name@osd.example'})}
     ${field('company', t('req.company'), {required: false})}
@@ -70,7 +70,7 @@ export function createPhone({root, sim, actions}) {
     if (mail.kind === 'approved') {
       return `${head}<div class="ph-ticket"><div class="ph-ticket-top"><span>${t('ph.ticket')}</span><b>OSD</b></div><div class="ph-ticket-plate">${esc(r.plate)}<small>${esc(r.province)}</small></div><div class="ph-ticket-rows"><div><span>${t('req.dates')}</span><b>${fmtDate(r.arrival)}${r.departure !== r.arrival ? ` – ${fmtDate(r.departure)}` : ''}</b></div><div><span>${t('req.visitor')}</span><b>${esc(r.visitor.name)}</b></div><div><span>${t('parking.floor')}</span><b>P2 · A</b></div></div><p class="ph-ticket-how">${t('ph.ticket.how')}</p><div class="ph-ticket-qr">${fakeQr(r.qr || r.ref)}<span>${t('ph.ticket.qr')}</span></div><button type="button" class="ph-cal" data-ph="calendar">${icon('calendar')}${t('ph.ticket.cal')}</button><p class="ph-cc-note">${t('ph.ccNote', {contact: esc(r.contact)})}</p></div>`;
     }
-    return `${head}<p class="ph-mail-body">${mail.kind === 'rejected' ? esc(r.reason || '') : t('req.revoke.confirm')}</p><button type="button" class="ph-link" data-ph="new">${t('ph.newRequest')}</button>`;
+    return `${head}<p class="ph-mail-body">${mail.kind === 'rejected' ? esc(r.reason || '') : t('ph.mail.revokedBody')}</p><button type="button" class="ph-link" data-ph="new">${t('ph.newRequest')}</button>`;
   }
 
   function render() {
@@ -95,7 +95,9 @@ export function createPhone({root, sim, actions}) {
     if (missing) { ui.error = t('ph.required'); render(); return null; }
     ui.error = '';
     const arrival = dateValue(f.arrival), departure = Math.max(arrival, dateValue(f.departure));
-    const r = sim.submitRequest({visitor: {name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), company: f.company.trim() || '—'}, contact: f.contact.trim(), plate: f.plate.trim(), province: f.province, arrival, departure, notes: f.notes, face: f.faceConsent && f.face, color: ui.color ?? 4});
+    const r = sim.submitRequest({visitor: {name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), company: f.company.trim() || '—'}, contact: f.contact.trim(), plate: f.plate.trim(), province: f.province, arrival, departure, notes: f.notes, face: f.faceConsent && f.face, color: ui.color});
+    // The story's colour is for its own request only: free-play visitors' cars get the sim's random one (all were blue).
+    ui.color = undefined;
     ui.requestId = r.id; ui.screen = 'sent';
     render();
     return r;

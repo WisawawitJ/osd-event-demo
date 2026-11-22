@@ -1,7 +1,7 @@
 // Headless Chromium driven over the DevTools protocol, with no npm dependencies.
 // It starts its own static server on a free port; WebGL renders on the NVIDIA GPU when present, else in software.
 import {spawn} from 'node:child_process';
-import {existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
@@ -28,8 +28,10 @@ const GPU_MODES = {
 
 // Browsers and servers still running when the runner exits or is interrupted are killed: a left-over headless page
 // keeps drawing the demo at full speed and slowed (and hung) later runs on the same GPU.
+// A browser runs in its own process group, killed whole: its helper processes (GPU, renderers) go with it.
 const running = new Set();
-process.on('exit', () => { for (const chrome of running) chrome.kill('SIGKILL'); });
+const killGroup = child => { try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); } };
+process.on('exit', () => { for (const child of running) killGroup(child); });
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => process.exit(130));
 
 function freePort() {
@@ -46,15 +48,25 @@ async function startServer() {
   throw new Error('test server did not start');
 }
 
+// The browser itself, not Arch's `chromium` launcher: that one adds the desktop's own flags from
+// ~/.config/chromium-flags.conf (extensions loaded into every test browser, a device scale factor, Wayland).
+const CHROMIUM = process.env.CHROMIUM || (existsSync('/usr/lib/chromium/chromium') ? '/usr/lib/chromium/chromium' : 'chromium');
+
 async function startBrowser(mode, profileRoot) {
   const {flags, env = {}} = Array.isArray(mode) ? {flags: mode} : mode;
   const port = await freePort();
   const profile = mkdtempSync(join(profileRoot, 'chrome-'));
   // At low CPU priority: software rendering is CPU work, and the desktop around it should stay responsive.
-  const chrome = spawn('nice', ['-n', '10', process.env.CHROMIUM || 'chromium', '--headless=new', '--no-sandbox', '--hide-scrollbars', '--window-size=1600,1000', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, ...flags, 'about:blank'], {stdio: 'ignore', env: {...process.env, ...env}});
+  const chrome = spawn('nice', ['-n', '10', CHROMIUM, '--headless=new', '--no-sandbox', '--disable-extensions', '--hide-scrollbars', '--window-size=1600,1000', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, ...flags, 'about:blank'], {stdio: 'ignore', env: {...process.env, ...env}, detached: true});
   running.add(chrome);
+  const exited = new Promise(r => chrome.once('exit', r));
   let ws = null;
-  const close = () => { ws?.close(); chrome.kill('SIGKILL'); running.delete(chrome); try { rmSync(profile, {recursive: true, force: true}); } catch {} };
+  // The profile goes once the browser has exited: deleted at once, it was written back by processes still shutting
+  // down, and hundreds were left in /tmp (which is memory).
+  const close = () => {
+    ws?.close(); killGroup(chrome); running.delete(chrome);
+    return Promise.race([exited, sleep(3000)]).then(() => sleep(200)).then(() => { try { rmSync(profile, {recursive: true, force: true, maxRetries: 3}); } catch {} });
+  };
   try {
     let target;
     for (let i = 0; i < 80 && !target; i++) { try { target = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find(t => t.type === 'page'); } catch {} if (!target) await sleep(100); }
@@ -62,26 +74,27 @@ async function startBrowser(mode, profileRoot) {
     ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((ok, fail) => { ws.addEventListener('open', ok); ws.addEventListener('error', fail); });
     let id = 0;
-    const pending = new Map(), logs = [], listeners = new Map();
+    const pending = new Map(), logs = [];
     ws.addEventListener('message', e => {
       const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-      else if (listeners.has(m.method)) for (const fn of listeners.get(m.method)) fn(m.params);
+      if (m.id && pending.has(m.id)) { pending.get(m.id).ok(m); pending.delete(m.id); }
       else if (m.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(m.params.type)) logs.push(`[${m.params.type}] ${m.params.args.map(a => a.value ?? a.description).join(' ')}`);
       else if (m.method === 'Runtime.exceptionThrown') logs.push(`[exception] ${m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text}`);
     });
     // A call that gets no answer (a hung page or GPU process) fails the check instead of hanging the whole run.
+    // A browser that died fails every call at once (each waited out the 90 s).
+    let gone = null;
+    ws.addEventListener('close', () => { gone = new Error('the browser closed'); for (const {fail} of pending.values()) fail(gone); pending.clear(); });
     const send = (method, params = {}) => new Promise((ok, fail) => {
+      if (gone) return fail(gone);
       const i = ++id, timer = setTimeout(() => { pending.delete(i); fail(new Error(`DevTools ${method} got no answer in 90 s`)); }, 90000);
-      pending.set(i, m => { clearTimeout(timer); ok(m); });
+      pending.set(i, {ok: m => { clearTimeout(timer); ok(m); }, fail: error => { clearTimeout(timer); fail(error); }});
       ws.send(JSON.stringify({id: i, method, params}));
     });
     await send('Runtime.enable');
     await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false});
-    // DevTools events (e.g. Page.screencastFrame); returns the function that stops listening.
-    const on = (method, fn) => { if (!listeners.has(method)) listeners.set(method, new Set()); listeners.get(method).add(fn); return () => listeners.get(method).delete(fn); };
-    return {send, on, logs, close, profile};
+    return {send, logs, close, profile};
   } catch (error) { close(); throw error; } // a browser that started but does not answer is not left running
 }
 
@@ -103,6 +116,11 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
   if (!GPU_MODES[gpu]) throw new Error(`GPU=${gpu}: use nvidia or software (default here: ${DEFAULT_GPU}), or vulkan / egl to opt in to other hardware (egl is the Intel iGPU: don't)`);
   const profileRoot = join(process.env.TEST_TMP || tmpdir(), 'osd-demo-test');
   mkdirSync(profileRoot, {recursive: true});
+  // Profiles left by runs that were killed (older than 30 minutes: a run going on alongside keeps its own).
+  for (const name of readdirSync(profileRoot)) {
+    const dir = join(profileRoot, name);
+    try { if (name.startsWith('chrome-') && Date.now() - statSync(dir).mtimeMs > 30 * 60000) rmSync(dir, {recursive: true, force: true}); } catch {}
+  }
   mkdirSync(shots, {recursive: true});
   const server = await startServer();
   let browser = null, renderer = '';
@@ -117,12 +135,11 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
     }
     renderer = `${gpu}: ${await probe() || 'no WebGL'}`;
   } catch (error) { browser?.close(); server.stop(); throw error; }
-  const {send, on, logs} = browser;
+  const {send, logs} = browser;
   let shot = 0;
   const page = {
     renderer, logs, url: server.url, sleep,
     cdp: send, // raw DevTools protocol, e.g. for profiling
-    on, // DevTools events, e.g. a screencast's frames
 
     // Pages open with the world clock at real speed (`day=0`, from 09:00) unless the path sets `day` itself: checks of
     // one scene then see the morning they expect, and only the day-cycle checks run the time-lapse. In software
@@ -137,6 +154,9 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
     },
     async eval(expression) {
       const r = await send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true});
+      // A protocol error (the page navigating away mid-call) is not an answer: read as undefined, it passed checks
+      // that expect a falsy value.
+      if (r.error) throw new Error(`DevTools: ${r.error.message}`);
       if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text);
       return r.result?.result?.value;
     },
@@ -157,5 +177,5 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
       return file;
     },
   };
-  return {page, close() { browser.close(); server.stop(); }};
+  return {page, close() { server.stop(); return browser.close(); }};
 }

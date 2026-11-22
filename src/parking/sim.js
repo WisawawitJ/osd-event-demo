@@ -145,7 +145,7 @@ export function createParkingSim() {
       presence.set(stall.occupant, {plate: v.plate, province: v.province, type: v.type, stallId: stall.id, since: at, color: v.color, vehicleId: v.id});
       events.push({id: uid('e'), at, kind: 'entry', plate: v.plate, province: v.province, type: v.type, camera: 'LPR-IN', confidence: .93 + r() * .06});
     }
-    // Three early leavers (a courier run and two who came back later is not modelled).
+    // Three early leavers: a courier run and two others (coming back later is not modelled).
     for (const at of [t(8, 5), t(8, 38), t(8, 57)]) {
       const [k, p] = [...presence.entries()].find(([, p]) => p.type === 'staff' && p.since < at - 20 * 60e3) || [];
       if (!k) continue;
@@ -165,7 +165,7 @@ export function createParkingSim() {
     audit.push({at: bkk(2026, 11, 21, 10, 2), actor: 'staff.name', key: 'a.approve', target: 'ฎณ 7302'});
     audit.sort((a, b) => b.at - a.at);
 
-    return {stalls, vehicles, requests, events, audit, presence, alerts: [], emails: [], capacity: 50, gate: 'closed', yesterday: {entries: 41, exits: 40, peak: 37, peakAt: '10:40', received: 5, approved: 4, rejected: 1, unknown: 3, manual: 2, syncFailed: 1, byType: {staff: 34, vip: 3, guest: 3, unknown: 1}}};
+    return {stalls, vehicles, requests, events, audit, presence, alerts: [], emails: [], capacity: stalls.length, gate: 'closed', yesterday: {entries: 41, exits: 40, peak: 37, peakAt: '10:40', received: 5, approved: 4, rejected: 1, unknown: 3, manual: 2, syncFailed: 1, byType: {staff: 34, vip: 3, guest: 3, unknown: 1}}};
   }
 
   // The seeded morning is the car park at 09:00. Started at another time of day, whatever lies in its future is left
@@ -225,6 +225,9 @@ export function createParkingSim() {
   // `at` is for the car park catching up on time it did not show (a jump, or while off screen); calls go oldest first.
   function recordEntry({plate, province, type, stallId, color, manual = null, confidence = .97, at = now()}) {
     const k = key(plate, province);
+    // A plate already in (a second listing of it let in) gives up the bay it held: it kept it taken for good.
+    const held = state.presence.get(k), before = held && state.stalls.find(s => s.id === held.stallId && s.occupant === k);
+    if (before && before.id !== stallId) before.occupant = null;
     const stall = state.stalls.find(s => s.id === stallId);
     if (stall) stall.occupant = k;
     const vehicle = findVehicle(plate, province)[0];
@@ -268,8 +271,7 @@ export function createParkingSim() {
 
   function setGate(value) { if (state.gate !== value) { state.gate = value; emit('gate', value); } }
   function manualGate(command, reasonKey) {
-    if (command === 'open') audit('staff.name', 'a.manual', {target: '—', reasonKey});
-    else audit('staff.name', 'a.close');
+    audit('staff.name', 'a.manual', {target: '—', reasonKey});
     emit('manualGate', {command, reasonKey});
   }
 
@@ -331,10 +333,13 @@ export function createParkingSim() {
     req.history.push({at: now(), key: 'h.revoked', by: 'staff.name'});
     const v = state.vehicles.find(v => v.id === req.vehicleId);
     // Not yet confirmed by ATOM: the pending add is withdrawn; otherwise the plate stays listed, disabled.
-    if (v && v.sync === 'pending') { state.vehicles.splice(state.vehicles.indexOf(v), 1); req.vehicleId = null; req.syncing = false; }
+    const unconfirmed = Boolean(v && v.sync === 'pending');
+    if (unconfirmed) { state.vehicles.splice(state.vehicles.indexOf(v), 1); req.vehicleId = null; req.syncing = false; }
     else if (v) v.enabled = false;
     audit('staff.name', 'a.revoke', {target: req.plate});
-    sendEmail(req, 'revoked');
+    // As in the ATOM Parking app: the visitor hears of an approval only once ATOM confirms it, so one revoked before that
+    // is not told its access was revoked (it was told it had none to lose).
+    if (!unconfirmed) sendEmail(req, 'revoked');
     emit('request', req);
   }
   function sendEmail(req, kind) {
@@ -354,9 +359,11 @@ export function createParkingSim() {
   }
   function importCsv() {
     const samples = [['6กฉ 2207', 'กรุงเทพมหานคร', 'อารี ทองคำ'], ['ขธ 5519', 'นนทบุรี', 'สุนทร ศรีสุข'], ['8กร 7340', 'กรุงเทพมหานคร', 'พิมพ์ใจ บุญมา']];
-    const added = samples.map(([plate, province, owner]) => ({id: uid('v'), plate, province, owner, type: 'staff', enabled: true, sync: 'pending', color: Math.floor(Math.random() * 9)}));
+    // Imported again, the same plates are not listed twice.
+    const listed = new Set(state.vehicles.map(v => key(v.plate, v.province)));
+    const added = samples.filter(([plate, province]) => !listed.has(key(plate, province))).map(([plate, province, owner]) => ({id: uid('v'), plate, province, owner, type: 'staff', enabled: true, sync: 'pending', color: Math.floor(Math.random() * 9)}));
     state.vehicles.push(...added);
-    audit('staff.name', 'a.import', {target: '3'});
+    audit('staff.name', 'a.import', {target: String(added.length)});
     emit('vehicle');
     current(() => { for (const v of added) v.sync = 'synced'; emit('vehicle'); }, 1600);
   }
@@ -374,11 +381,6 @@ export function createParkingSim() {
     audit('staff.name', 'a.retry', {target: v.plate});
     emit('vehicle', v);
     current(() => { v.sync = 'synced'; emit('vehicle', v); }, 1300);
-  }
-  function setCapacity(n) {
-    state.capacity = Math.max(state.presence.size, Math.min(200, Math.round(n)));
-    audit('staff.name', 'a.capacity', {target: String(state.capacity)});
-    emit('capacity');
   }
 
   function stats() {
@@ -399,8 +401,8 @@ export function createParkingSim() {
     for (const e of entries) byType[e.type] = (byType[e.type] || 0) + 1;
     // Cars parked since before the day began (overnight: the 03:00 wrap moved their entries into yesterday) count from
     // its start: today's in and out, taken back from the cars there now.
-    const cameIn = today.filter(e => e.kind === 'entry' || e.kind === 'manual').length, wentOut = today.filter(e => e.kind === 'exit').length;
-    let level = Math.max(0, state.presence.size - cameIn + wentOut), peak = level, peakAt = level ? DAY_START : null;
+    const wentOut = today.filter(e => e.kind === 'exit').length;
+    let level = Math.max(0, state.presence.size - entries.length + wentOut), peak = level, peakAt = level ? DAY_START : null;
     for (const e of [...today].sort((a, b) => a.at - b.at)) {
       if (e.kind === 'entry' || e.kind === 'manual') level++; else if (e.kind === 'exit') level = Math.max(0, level - 1);
       if (level > peak) { peak = level; peakAt = e.at; }
@@ -432,7 +434,7 @@ export function createParkingSim() {
   return {
     get state() { return state; }, now, setNow, reset, subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     decide, freeStall, recordEntry, recordExit, raiseAlert, resolveAlert, setGate, manualGate,
-    submitRequest, approve, reject, revoke, flagsFor, addVehicle, importCsv, setEnabled, retrySync, setCapacity,
+    submitRequest, approve, reject, revoke, flagsFor, addVehicle, importCsv, setEnabled, retrySync,
     stats, attention, findVehicle, key,
   };
 }

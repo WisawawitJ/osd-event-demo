@@ -143,7 +143,7 @@ export function createPanel({root, sim, actions}) {
     <div class="dashboard-section"><h3>${t('rep.byType')}</h3>${['staff', 'vip', 'guest', 'unknown'].map(typeBar).join('')}</div>
     <div class="pk-actions wrap"><button class="pk-btn" data-act="csv-events">${icon('download')}${t('rep.csv.events')}</button><button class="pk-btn" data-act="csv-audit">${icon('download')}${t('rep.csv.audit')}</button></div>
     <div class="dashboard-section"><h3>${t('rep.audit')}</h3><p class="pk-hint">${t('rep.audit.note')}</p>${sim.state.audit.slice(0, 16).map(a => `<div class="pk-audit${ui.flash === a ? ' flash' : ''}"><time>${fmtShortDate(a.at)} ${fmtTime(a.at)}</time><div><strong>${t(a.key)}</strong><small>${t(a.actor)}${a.target ? ` · ${esc(a.target)}` : ''}${a.reasonKey ? ` · ${t(a.reasonKey)}` : ''}</small></div></div>`).join('')}</div>
-    <div class="dashboard-section"><h3>${t('rep.capacity')}</h3><div class="pk-manual"><input type="number" min="${sim.state.presence.size}" max="200" data-focus="capacity" value="${sim.state.capacity}"><button class="pk-btn" data-act="capacity">${t('save')}</button></div></div>`;
+    `;
   }
 
   function render() {
@@ -189,7 +189,6 @@ export function createPanel({root, sim, actions}) {
       case 'revoke': if (confirm(t('req.revoke.confirm'))) sim.revoke(ui.selected); break;
       case 'manual-open': actions.manualOpen(ui.manualReason); break;
       case 'import': sim.importCsv(); actions.toast?.(t('veh.import.done')); break;
-      case 'capacity': { const v = Number(root.querySelector('[data-focus="capacity"]')?.value); if (Number.isFinite(v)) sim.setCapacity(v); break; }
       case 'csv-events': download(`osd-parking-events-${getLang()}.csv`, [['time', 'kind', 'plate', 'province', 'type', 'camera', 'by', 'reason'], ...sim.state.events.map(e => [fmtDateTime(e.at), t(KIND_KEY[e.kind]), e.plate, e.province, typeLabel(e.type), e.camera, e.by ? t(e.by) : '', e.reason ? t(e.reason) : ''])]); break;
       case 'csv-audit': download(`osd-parking-audit-${getLang()}.csv`, [['time', 'actor', 'action', 'target', 'reason'], ...sim.state.audit.map(a => [fmtDateTime(a.at), t(a.actor), t(a.key), a.target || '', a.reasonKey ? t(a.reasonKey) : ''])]); break;
     }
@@ -224,6 +223,7 @@ export function createPanel({root, sim, actions}) {
     setCue(name) { ui.cue = name; render(); },
     flash(id) { ui.flash = id; schedule(); setTimeout(() => { if (ui.flash === id) { ui.flash = null; schedule(); } }, 2400); },
     setSnapshot(which, url) { ui.snapshots[which] = url; if (ui.tab === 'gate') schedule(); },
-    reset() { Object.assign(ui, {tab: 'overview', reqFilter: 'pending', reqSearch: '', selected: null, rejecting: false, vehFilter: 'all', vehSearch: '', cue: null, flash: null, snapshots: {in: '', out: ''}}); ui.newIds.clear(); render(); },
+    // Alert reasons go too: ids start again after a reset, and a new alert showed an old one's reason.
+    reset() { Object.assign(ui, {tab: 'overview', reqFilter: 'pending', reqSearch: '', selected: null, rejecting: false, vehFilter: 'all', vehSearch: '', cue: null, flash: null, snapshots: {in: '', out: ''}, alertReason: {}}); ui.newIds.clear(); render(); },
   };
 }

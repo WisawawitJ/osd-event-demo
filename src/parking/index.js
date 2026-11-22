@@ -21,7 +21,9 @@ const STORY_START = bkk(2026, 11, 24, 9, 0);
 const UNKNOWN_PLATES = [['4ศย 5150', 'ปทุมธานี'], ['ผต 8812', 'กรุงเทพมหานคร'], ['3ฆง 6047', 'ชลบุรี'], ['ฌธ 2290', 'นครปฐม']];
 const pickOne = list => list[Math.floor(Math.random() * list.length)];
 const lotOnScreen = lot => lot.root.visible && document.visibilityState === 'visible';
-const vehiclesInside = sim => new Set([...sim.state.presence.values()].map(p => p.vehicleId));
+// In the car park, by plate (presence is kept by plate, with one vehicle's id: a second listing of the same plate, after
+// importing the sample list twice say, looked idle, drove in again, and left its first bay taken for good).
+const parkedPlate = (sim, v) => sim.state.presence.has(sim.key(v.plate, v.province));
 
 // How many cars the car park holds at each time of day (minute, cars): nearly empty at night, the morning rush from
 // 07:00, a dip at lunch, the evening rush out from 16:30. The seeded morning (09:00) has 27.
@@ -42,9 +44,9 @@ function streetGap(minute) {
 }
 // Cars not in the car park that may drive in: staff, and in the morning the VIPs (the explore page: staff only).
 function idleCars(sim, traffic, {staffOnly = false} = {}) {
-  const inside = vehiclesInside(sim), m = world.minute();
+  const m = world.minute();
   const vip = !staffOnly && m >= 420 && m < 660;
-  return sim.state.vehicles.filter(v => (v.type === 'staff' || (vip && v.type === 'vip')) && v.enabled && v.sync === 'synced' && !inside.has(v.id) && !traffic.isArriving(sim.key(v.plate, v.province)));
+  return sim.state.vehicles.filter(v => (v.type === 'staff' || (vip && v.type === 'vip')) && v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isArriving(sim.key(v.plate, v.province)));
 }
 // About a third of the cars coming in arrive along the far lane and turn right across the near one (the story's own
 // cars keep the near lane, where its camera shots expect them).
@@ -59,8 +61,8 @@ function leavingCandidates(sim, traffic, {staffOnly = false, guests = false} = {
 }
 
 // Background life of the car park, shared by the showcase and the explore page: cars come and go so that the car
-// park follows OCCUPANCY at the world clock's hour. On screen they drive through the barrier, as fast as its one lane
-// allows (two arriving and two leaving at a time); the rest of a gap the barrier cannot close (a rush in time-lapse,
+// park follows OCCUPANCY at the world clock's hour. On screen they drive through the barrier, as fast as its lanes
+// allow (two arriving and two leaving at a time); the rest of a gap the barrier cannot close (a rush in time-lapse,
 // a jump in time, or time spent off screen) is made up in the bays directly, logged at times spread over that gap.
 // Between rushes a car comes or goes now and then. `paused()` (the story playing) stops all of it.
 function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paused = () => false, watched = () => true, arrive, leave, unknown = null}) {
@@ -115,10 +117,10 @@ function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paus
   const TODAY = bkk(2026, 11, 24);
   const stayOf = plate => (45 + [...plate].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 997, 7) % 136) * 60000;
   function visitorsDue() {
-    const now = world.now(), inside = vehiclesInside(sim);
+    const now = world.now();
     const came = new Set(sim.state.events.filter(e => e.at >= TODAY && (e.kind === 'entry' || e.kind === 'manual') && e.type === 'guest').map(e => sim.key(e.plate, e.province)));
     return sim.state.vehicles.filter(v => v.type === 'guest' && v.plate !== STORY.plate && v.enabled && v.sync === 'synced' && (!v.validFrom || v.validFrom <= now) && (!v.validTo || v.validTo >= now)
-      && !inside.has(v.id) && !came.has(sim.key(v.plate, v.province)) && !traffic.isArriving(sim.key(v.plate, v.province)));
+      && !parkedPlate(sim, v) && !came.has(sim.key(v.plate, v.province)) && !traffic.isArriving(sim.key(v.plate, v.province)));
   }
   // `from`…`now`: the world time since the last look; on average a visitor arrives every 35 minutes of it.
   function visits(from, now) {
@@ -276,9 +278,8 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
         say('gate.sim.coming', plate); blocked();
         return;
       }
-      const inside = vehiclesInside(sim);
       const pool = kind === 'visitor'
-        ? sim.state.vehicles.filter(v => v.type === 'guest' && v.enabled && v.sync === 'synced' && !inside.has(v.id) && !traffic.isArriving(sim.key(v.plate, v.province)) && v.validFrom <= sim.now() && v.validTo >= sim.now())
+        ? sim.state.vehicles.filter(v => v.type === 'guest' && v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isArriving(sim.key(v.plate, v.province)) && v.validFrom <= sim.now() && v.validTo >= sim.now())
         : idleCars(sim, traffic, {staffOnly: !quiet}); // the Staff car button sends a staff car, never a VIP
       // The newest approved visitor drives up first, so a request made on the phone can be followed to the gate.
       const v = kind === 'visitor' ? pool[pool.length - 1] : pickOne(pool);
@@ -298,10 +299,11 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
       panel.markNew(payload.id);
       overlays.toast(`${icon('inbox')}<span><b>${esc(t('att.pending'))}</b> ${esc(payload.visitor.name)} · ${esc(payload.plate)}</span>`, 'info');
     }
-    if (kind === 'alert') { overlays.showAlert(payload.id); if (!story.running) panel.show('gate'); }
+    // A presenter's own unknown car brings up the Gate tab; a background one does not (every few minutes it closed the
+    // request or reason being worked on).
+    if (kind === 'alert') { overlays.showAlert(payload.id); if (!story.running && !payload.ambient) panel.show('gate'); }
     if (kind === 'entry' || kind === 'exit') panel.flash(payload.id);
     if (kind === 'email') overlays.toast(`${icon('check')}<span>${esc(t('req.emailSent'))}</span>`, 'ok');
-    if (kind === 'capacity') traffic.refreshBays();
     panel.render();
   });
 

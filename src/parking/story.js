@@ -46,7 +46,7 @@ export function createStory(ctx) {
       ctx.cue(null); ctx.hint(null);
       alive();
     }
-    return {alive, wait, until, userAction};
+    return {alive, wait, until, userAction, cancelled: () => my !== token};
   }
 
   const captionFor = i => ({step: t('story.step', {n: i + 1, total: steps.length}), title: t(`${steps[i].key}.t`), body: t(`${steps[i].key}.b`)});
@@ -56,7 +56,8 @@ export function createStory(ctx) {
       ctx.phone.setOpen(true);
       ctx.sim.setNow(at(9, 2));
       await s.wait(500);
-      const v = STORY.visitor, opts = {cps: 26, isCancelled: () => !running};
+      // Typing stops with this run (Restart starts a new one without stopping: it typed on into the new run's form).
+      const v = STORY.visitor, opts = {cps: 26, isCancelled: s.cancelled};
       await ctx.phone.typeInto('name', v.name, opts); s.alive();
       await ctx.phone.typeInto('email', v.email, opts); s.alive();
       await ctx.phone.typeInto('contact', STORY.contact, opts); s.alive();
@@ -97,7 +98,23 @@ export function createStory(ctx) {
       ctx.phone.setOpen(false);
       ctx.sim.setNow(at(9, 41));
       ctx.panel.show('gate');
+      const approved = ctx.sim.state.requests.find(q => q.id === requestId)?.status === 'approved';
+      let alertId = null;
+      const off = approved ? () => {} : ctx.sim.subscribe((kind, a) => { if (kind === 'alert' && a.plate === STORY.plate) alertId = a.id; });
       const arrival = ctx.traffic.arrive({plate: STORY.plate, province: STORY.province, color: STORY.color, fromX: -52});
+      if (!approved) {
+        // Rejected at step 4 (the presenter pressed Reject): the plate has no pass, so the barrier stays shut, the guard
+        // turns the car away and it backs out, leaving the entry free. (It waited at the barrier for an alert nobody
+        // answered, and the story stalled here.)
+        try { await s.until(() => alertId, 40000); } finally { off(); }
+        ctx.hint(t('story.hint.noPass'));
+        await s.wait(1800);
+        if (ctx.sim.state.alerts.find(a => a.id === alertId)?.status === 'open') ctx.actions.resolveAlert(alertId, 'deny');
+        await arrival; s.alive();
+        ctx.hint(null);
+        ctx.panel.show('overview');
+        return;
+      }
       await s.until(() => ctx.sim.state.gate === 'open', 40000);
       await s.wait(1200);
       ctx.fly('rowA', 2600);
@@ -135,6 +152,8 @@ export function createStory(ctx) {
       ctx.panel.show('gate');
       ctx.sim.setNow(at(11, 30));
       const k = ctx.sim.key(STORY.plate, STORY.province);
+      // A visitor turned away at step 6 has nothing to drive out.
+      if (!ctx.sim.state.presence.has(k)) { ctx.panel.show('overview'); return; }
       ctx.traffic.leave(k);
       await s.wait(4200);
       ctx.fly('gate', 2400);
@@ -144,13 +163,15 @@ export function createStory(ctx) {
     }, hold: 3000},
   ];
 
-  async function run(from = 0) {
+  async function run() {
     const my = ++token;
+    // A run restarted while it waited for Next lets that wait go (its Next pulsed on, and it never settled).
+    if (nextWaiter) { const waiting = nextWaiter; nextWaiter = null; waiting(); }
     running = true; paused = false;
     emit();
     try {
-      if (from === 0) await ctx.resetWorld();
-      for (index = from; index < steps.length; index++) {
+      await ctx.resetWorld();
+      for (index = 0; index < steps.length; index++) {
         // Stopped meanwhile (while the world reset, or a step's hold): no further step, which would set the clock.
         const step = steps[index], s = api(my);
         s.alive();
@@ -182,7 +203,7 @@ export function createStory(ctx) {
     get index() { return index; },
     get total() { return steps.length; },
     get waitingForNext() { return Boolean(nextWaiter); },
-    play({auto: a = true} = {}) { auto = a; return run(0); },
+    play({auto: a = true} = {}) { auto = a; return run(); },
     setAuto(a) { auto = a; if (a && nextWaiter) nextWaiter(); emit(); },
     pause() { paused = true; emit(); },
     resume() { paused = false; emit(); },

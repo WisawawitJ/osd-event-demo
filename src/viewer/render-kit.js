@@ -93,9 +93,9 @@ export function createRenderKit(renderer, scene) {
   }
  }
  const ground=createGround();ground.rotation.x=-Math.PI/2;ground.position.y=.26;ground.receiveShadow=true;ground.name='PresentationGround';scene.add(ground);
- // The ground: a field of grass, not a flat pale plane. A tiling texture (grass speckle and soft tufts, 8 m across)
- // gives it close-up detail; light and dark patches tens of metres wide, from smooth noise, break up
- // the tiling and make it look mown and worn. Its edge, 100 m out, is lost in the fog (main.js).
+ // The ground: a field of grass, not a flat pale plane. A grass texture (speckle and faint tufts) gives it close-up
+ // detail, sampled twice at different sizes and angles so it does not repeat; light and dark patches from smooth noise
+ // make it look mown and worn. Its edge, 100 m out, is lost in the fog (main.js).
  function createGround(){
   const size=512,canvas=document.createElement('canvas');canvas.width=canvas.height=size;const c=canvas.getContext('2d');
   let seed=7;const rand=()=>(seed=(seed*16807)%2147483647)/2147483647;
@@ -112,8 +112,9 @@ export function createRenderKit(renderer, scene) {
   c.globalAlpha=1;
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(25,25);texture.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),8);
   // Patches: smooth value noise across the ground, three octaves, as a brightness from 0.76 to 1.12, worked out per pixel
-  // from the ground position the fog passes on (main.js). (As vertex colours, with shadows, fog and the texture on
-  // too, the whole ground drew as background on the test GPU, without an error.)
+  // from the ground position the fog passes on (main.js), so they need no vertex data of their own. (On the test GPU,
+  // with the start-up warm-up skipped, ?warm=0, the ground draws as background until its shader is next rebuilt;
+  // with the warm-up, as the booth runs, it draws: see the check 'the ground is grass'.)
   const material=new THREE.MeshStandardMaterial({map:texture,roughness:1});
   material.onBeforeCompile=shader=>{
    shader.fragmentShader=shader.fragmentShader.replace('void main() {',`float groundHash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}

@@ -161,7 +161,9 @@ export function createLot({scene, stalls, schedule}) {
   const lampMat = new THREE.MeshStandardMaterial({color: '#f6f1df', emissive: '#ffe7a6', emissiveIntensity: 0});
   materials.push(lampMat);
   const poles = [], heads = [], lit = []; // lit: [x, ground y, z] under each lamp
-  for (const [x, z] of [[-31.2, -4], [-31.2, 8], [-47.4, -4], [-47.4, 8]]) {
+  // On bay lines (bays are 2.5 m wide from z -13.25): at z -4 two stood 0.75 m into bays A05 and C05, where a car
+  // parking there drove through them.
+  for (const [x, z] of [[-31.2, -4.5], [-31.2, 8], [-47.4, -4.5], [-47.4, 8]]) {
     poles.push(new THREE.CylinderGeometry(.07, .09, LAMP_HEIGHT + .1, 8).translate(x, Y.road + (LAMP_HEIGHT + .1) / 2, z));
     heads.push(new THREE.BoxGeometry(.9, .14, .34).translate(x + .35, Y.road + LAMP_HEIGHT + .07, z));
     lit.push([x + .35, Y.road, z]);

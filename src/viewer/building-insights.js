@@ -49,8 +49,8 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
    for(const [key,h] of held){if(!(dark&&(key==='solar'||key==='load'))&&('until' in h?now<h.until:telemetry[key]===h.base))delete telemetry[key];else held.delete(key);}
    write(telemetry);
   }
-  // The panels redraw when something they show as a state changes, otherwise every 2 s (each redraw rebuilds their
-  // buttons, so redrawing on every tick could swallow a tap). A room change redraws them through the simulation.
+  // The panels redraw when something they show as a state changes, otherwise every 2 s: no need to on every tick
+  // (they are updated in place, see morph). A room change redraws them through the simulation.
   const shown=JSON.stringify([state.occupied,state.pondAlert,state.water]);
   if(followRooms(snapshot.minute,{all})){lastRender=performance.now();lastShown=shown;}
   else if(all||shown!==lastShown||performance.now()-lastRender>2000){lastRender=performance.now();lastShown=shown;render();}
@@ -81,6 +81,9 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
  }
  // The slider previews a time while dragged and moves the world there when let go.
  listen(range,'input',()=>{dragging=true;paint();});
+ // A drag let go where it began sends no change: the slider stayed on its preview and its clock froze. After the
+ // release (a change, if any, comes first), a drag still open is dropped and the slider follows the clock again.
+ for(const type of ['pointerup','pointercancel','blur'])listen(range,type,()=>setTimeout(()=>{if(dragging&&!disposed){dragging=false;paint();}},0));
  // The value is read first: stopping Follow repaints the slider with the live time.
  listen(range,'change',()=>{const minute=Number(range.value);dragging=false;stopActivity();jumpTo(minute);});
  listen($('#day-play'),'click',()=>onFollow(!following()));
