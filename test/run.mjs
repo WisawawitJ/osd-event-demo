@@ -2,7 +2,7 @@
 // `npm run test:quick` (or `quick` among the words) runs only the quick set: one or two short checks per area, about
 // 10 s, for while you work; the full run is the check before a commit.
 // WebGL renders on the NVIDIA GPU when present, else in software; never on the Intel iGPU (see browser.mjs for why).
-// JOBS=n runs n browsers side by side (default 6 on NVIDIA, 3 in software, which is CPU work); SPEED=n sets the demo
+// JOBS=n runs n browsers side by side (default 1); SPEED=n sets the demo
 // time scale (default 30).
 import {readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, statSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -19,7 +19,9 @@ const TIMES = new URL('out/times.json', import.meta.url);
 let times = {};
 try { times = JSON.parse(readFileSync(TIMES, 'utf8')); } catch {}
 chosen.sort((a, b) => (times[b.name] ?? 6) - (times[a.name] ?? 6));
-const jobs = Math.max(1, Math.min(Number(process.env.JOBS) || ((process.env.GPU || DEFAULT_GPU) === 'software' ? 3 : 6), chosen.length));
+// One browser unless JOBS=n says otherwise: the browser checks are few now (the simulation is tested in Node), and one
+// browser keeps the laptop free.
+const jobs = Math.max(1, Math.min(Number(process.env.JOBS) || 1, chosen.length));
 // Rendering noise the demo cannot avoid; anything else in the console fails the check.
 // (SwiftShader has no parallel shader compiling; three.js warns and compiles normally.)
 const NOISE = /GL_INVALID_OPERATION|PCFSoftShadowMap|UniformsUtils: Textures of render targets|KHR_parallel_shader_compile extension not supported/;

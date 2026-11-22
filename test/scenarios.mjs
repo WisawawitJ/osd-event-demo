@@ -720,7 +720,8 @@ export const scenarios = [
     await p.goto(`?kiosk=1&${FAST}&time=07:35`);
     await p.until('window.__parking && __parking.story.running && __parking.story.index >= 1 && !!document.querySelector(\'[data-bar="restart"]\')', {timeout: 60000, what: 'the morning story past its first step'});
     await p.click('[data-bar="restart"]');
-    await p.sleep(400);
+    // At once: at speed 30 a restarted story is through step 1 in about 0.2 s.
+    await p.sleep(60);
     const r = JSON.parse(await p.eval(`JSON.stringify({running:__parking.story.running,index:__parking.story.index,following:document.querySelector('#day-play').getAttribute('aria-pressed')})`));
     expect(r.running && r.index <= 0 && r.following === 'false', `the story started again, the visitor's (running ${r.running}, step ${r.index + 1}, following ${r.following})`);
   }},

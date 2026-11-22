@@ -3,7 +3,7 @@ import {createTourEffects} from 'osd/viewer/tour-effects.js';
 import {t as pt, onLang, getLang, L} from 'osd/parking/i18n.js';
 import {SPEED, world, later, cancelLater, realNow, isPaused} from 'osd/parking/clock.js';
 import {options} from 'osd/parking/options.js';
-import {dayEvents} from 'osd/viewer/building-day.js';
+import {createDirector,PICK_SPOT} from 'osd/viewer/director.js';
 import {morph} from 'osd/parking/dom.js';
 const icons={building:'M3 21V5h12v16M15 11h6v10M7 9h4M7 13h4M7 17h4',light:'M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0l-1 2H9Z',air:'M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h5',water:'M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z',solar:'m5 9-2 10h18L19 9ZM8 9l-1 10m9-10 1 10M4 14h16M12 19v3M12 2v3M5 3l2 2m12-2-2 2',door:'M5 21V3h14v18M9 21V5l8 2v14M13 13h.01',arrow:'M4 12h16m-5-5 5 5-5 5',play:'m8 5 11 7-11 7Z',pause:'M8 5v14M16 5v14',check:'m5 12 4 4L19 6'};
 const icon=name=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[name]||icons.building}"/></svg>`;
@@ -66,7 +66,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
  let tourGeneration=0,insights=null,flightStopped=false,resetAfterFlight=false;
  // landed: the camera reached the current stop's view (a flight cut short leaves it false until a stop or Reset view lands).
  let traveling=false,pendingDestination=null,landed=false;
- let destination='overview',state=initial(),tourTimer=0,scenarioFrame=0,scenarioStart=0,touring=false,disposed=false,sequence=0,lastTick=0;
+ let destination='overview',state=initial(),scenarioFrame=0,scenarioStart=0,disposed=false,sequence=0,lastTick=0;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
  const listen=(el,event,fn,options)=>el.addEventListener(event,fn,{...options,signal});
  const actual=()=>simulation.getState().rooms[meetingId];
@@ -102,12 +102,10 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
  }
  function stopScenario(){cancelAnimationFrame(scenarioFrame);scenarioFrame=0;state.scenario=null;}
  // The footer message is kept as [th,en] (or a function) so a language switch can redraw it.
- const PICK_SPOT=['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around'];
+ // (The first message, PICK_SPOT, comes from the director.)
  let progress=PICK_SPOT;
  function setProgress(message){progress=message;$('#tour-progress').textContent=typeof message==='function'?message():L(...message);}
- const playLabel=()=>touring?L('หยุดพาชม','Stop tour'):L('เริ่มพาชม','Start tour');
- // `keepStory`: the visitor's touch is on the story's own bar (Exit, Restart): its click, not this, decides the story.
- function stopTour(message=['หยุดพาชมแล้ว · เลือกจุดต่อไปได้เอง','Tour stopped · pick the next spot yourself'],{keepStory=false}={}){if(touring&&!keepStory)parking?.stopStory();tourGeneration++;cancelLater(tourTimer);tourTimer=null;touring=false;play.innerHTML=icon('play')+`<span>${playLabel()}</span>`;setProgress(message);}
+ const playLabel=()=>director?.touring?L('หยุดพาชม','Stop tour'):L('เริ่มพาชม','Start tour');
  // The car park's layout (a wider panel, a taller view, no timeline) changes as one short animation, a view transition:
  // the 3D view, the dock and the panel move to their new size and place while the rest cross-fades. Switched in one
  // frame, the whole page jumped and the 3D picture zoomed by about 8% just as the camera set off. A switch asked for
@@ -128,7 +126,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
   setTimeout(()=>{if(!done)transition.skipTransition();},250);
  }
  async function select(id,{guided=false,instant=false}={}){
-  if(!destinations[id]||disposed)return false;if(!guided){stopFollowing();stopTour(PICK_SPOT);}stopScenario();const ticket=++sequence,d=destinations[id];
+  if(!destinations[id]||disposed)return false;if(!guided)director.picked();stopScenario();const ticket=++sequence,d=destinations[id];
   // The car park changes the page layout: switch it as the flight sets off, so the view is its final size while the
   // camera moves instead of jumping at the end.
   setParkingLayout(id==='parking');
@@ -181,54 +179,19 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
    if(elapsed<limit)scenarioFrame=requestAnimationFrame(tick);else{scenarioFrame=0;state.scenario=null;render();}
   }scenarioFrame=requestAnimationFrame(tick);
  }
- // Resolves once the clock runs: at once, or on Resume after a Pause tapped on the way to the car park (its story,
- // started over the Pause, set the clock going again).
- const running=()=>!world.paused?Promise.resolve():new Promise(done=>{const off=world.subscribe(kind=>{if(kind==='rate'&&!world.paused){off();done();}});signal.addEventListener('abort',off,{once:true});});
- async function startTour(){
-  stopFollowing();
-  if(touring){stopTour();cancelFlight();stopScenario();render();return;}
-  world.setPaused(false); // the tour needs time to pass
-  const generation=++tourGeneration;touring=true;play.innerHTML=icon('pause')+`<span>${playLabel()}</span>`;
-  let step=0;async function next(){if(!touring||disposed||generation!==tourGeneration)return;const id=order[step];const at=step+1;setProgress(()=>L(`กำลังพาชม ${at} / ${order.length} · ${destinations[id].panel}`,`Touring ${at} / ${order.length} · ${destinations[id].panel}`));const arrived=await select(id,{guided:true});if(!arrived||!touring||generation!==tourGeneration)return;
-   const advance=()=>{if(generation!==tourGeneration)return;if(step<order.length)void next();else{stopTour(['พาชมครบแล้ว · เลือกสำรวจต่อได้ทุกจุด','Tour complete · explore any spot you like']);stopScenario();render();if(kiosk)tourTimer=later(()=>{if(kiosk&&!touring)startFollowing();},2500);}};
-   // The car park stop plays the whole parking story, then the tour carries on.
-   if(id==='parking'&&parking){await running();if(!touring||generation!==tourGeneration)return;await parking.playStory({auto:true});if(!touring||generation!==tourGeneration)return;step++;tourTimer=later(advance,1200);return;}
-   if(id!=='overview'){await running();if(!touring||generation!==tourGeneration)return;scenario(id);}step++;tourTimer=later(advance,id==='meeting'?14000:11000);}void next();
- }
- // "Follow the day": the camera goes to what the day is doing (its moments, dayEvents) and stays at the stop that fits
- // the hour until the next one. The kiosk does this when left alone. The car park's morning moment plays the guided
- // story, once a day: it holds the clock at real speed and sets its own times (09:02 … 11:30).
- let following=false,followed=null,day=0,storyDay=-1,followTicket=0;
- const PLAN=[[0,'overview'],...dayEvents.map(e=>[e.minute,e.destination])];
- function startFollowing(){if(disposed)return;stopTour(['กำลังตามวันในอาคาร','Following the day in the building']);world.setPaused(false);following=true;followed=null;insights?.paint();follow();}
- // A scenario running while following is Follow's (any touch stops Follow first): it stops too, however Follow stops.
- function stopFollowing(message=null,{keepStory=false}={}){if(!following)return;following=false;followTicket++;followed=null;if(parking?.story.running&&!keepStory)parking.stopStory();stopScenario();if(message)setProgress(message);insights?.paint();}
- function follow(){
-  // Hidden (another tab): the moment waits for the page to show again.
-  if(!following||disposed||traveling||document.hidden||parking?.story.running)return;
-  const minute=world.minute(),at=PLAN.findLast(([start])=>minute>=start),key=`${day}:${at[0]}`;
-  if(followed===key)return;followed=key;
-  const id=at[1],event=dayEvents.find(e=>e.minute===at[0]);
-  setProgress(()=>`${L('ตามวันในอาคาร','Following the day')} · ${event?event.title:L('กลางคืน อาคารพักผ่อน','Night, the building rests')}`);
-  // Each go has its ticket: a story waiting for Resume belongs to it, not to a later go to the same moment.
-  const ticket=++followTicket;
-  void select(id,{guided:true}).then(arrived=>{
-   // A flight cut short (the page hidden on the way) leaves the moment to be gone to again, not marked as seen.
-   // (`landed`: a flight cancelled on its final approach still counts as the stop for select, not as being there.)
-   if(!arrived||!landed){if(followed===key&&ticket===followTicket)followed=null;return;}
-   if(!following||followed!==key)return;
-   if(id==='parking'&&parking&&event&&event.minute<720&&storyDay!==day)void running().then(()=>{if(following&&followed===key&&ticket===followTicket&&storyDay!==day){storyDay=day;void parking.playStory({auto:true});}});
-   else if(event&&id==='meeting'&&event.layer==='occupancy')void running().then(()=>{if(following&&followed===key&&ticket===followTicket)scenario(id);});
-  });
- }
- const offFollow=world.subscribe(kind=>{if(kind==='wrap')day++;if(kind==='tick'||kind==='jump'||kind==='set')follow();});
- signal.addEventListener('abort',offFollow,{once:true});
- listen(content,'click',event=>{const control=event.target.closest('[data-control]'),action=event.target.closest('[data-action]');if(control||(action&&action.dataset.action!=='tour')){stopFollowing();stopTour(['กำลังทดลองด้วยตัวเอง','Trying it yourself']);}if(control){stopScenario();const s=actual(),key=control.dataset.control;simulation.selectRoom(meetingId);if(key==='door')simulation.setRoom(meetingId,{doors:Object.fromEntries(Object.entries(s.doors).map(([id,value])=>[id,!value]))});else simulation.setRoom(meetingId,{[key]:!s[key]});render();}if(action){if(action.dataset.action==='tour')void startTour();else scenario(action.dataset.action);}});
+ // What plays by itself (the tour, Follow the day, the kiosk) is the director's (director.js): it decides, this page
+ // flies and draws.
+ const director=createDirector({select,flight:()=>({traveling,landed}),cancelFlight,parking,stopName:id=>destinations[id].panel,hidden:()=>document.hidden,ui:{
+  progress:setProgress,touring:on=>{play.innerHTML=icon(on?'pause':'play')+`<span>${playLabel()}</span>`;},
+  kiosk:on=>{$('#kiosk-toggle').checked=on;document.body.classList.toggle('kiosk-on',on);},
+  scenario,stopScenario,render,followChanged:()=>insights?.paint()}});
+ signal.addEventListener('abort',()=>director.dispose(),{once:true});
+ listen(content,'click',event=>{const control=event.target.closest('[data-control]'),action=event.target.closest('[data-action]');if(control||(action&&action.dataset.action!=='tour')){director.stopFollowing();director.stopTour(['กำลังทดลองด้วยตัวเอง','Trying it yourself']);}if(control){stopScenario();const s=actual(),key=control.dataset.control;simulation.selectRoom(meetingId);if(key==='door')simulation.setRoom(meetingId,{doors:Object.fromEntries(Object.entries(s.doors).map(([id,value])=>[id,!value]))});else simulation.setRoom(meetingId,{[key]:!s[key]});render();}if(action){if(action.dataset.action==='tour')void director.startTour();else scenario(action.dataset.action);}});
  document.querySelectorAll('[data-destination]').forEach(b=>{b.disabled=false;listen(b,'click',()=>void select(b.dataset.destination));});
  for(const id of ['#tour-play','#tour-reset','#tour-night'])$(id).disabled=false;
- listen(play,'click',()=>void startTour());listen($('#tour-reset'),'click',()=>{stopFollowing();stopTour();stopScenario();state=initial();simulation.reset();insights?.jumpTo(9*60);void select('overview');});
+ listen(play,'click',()=>void director.startTour());listen($('#tour-reset'),'click',()=>{director.stopFollowing();director.stopTour();stopScenario();state=initial();simulation.reset();insights?.jumpTo(9*60);void select('overview');});
  // Night and day are the world clock's: the button moves it on to 20:00, or to 07:30.
- listen($('#tour-night'),'click',()=>{stopFollowing();if(parking?.story.running)parking.stopStory();insights?.jumpTo(simulation.getState().night?7*60+30:20*60);});
+ listen($('#tour-night'),'click',()=>{director.stopFollowing();if(parking?.story.running)parking.stopStory();insights?.jumpTo(simulation.getState().night?7*60+30:20*60);});
  const unsubscribe=simulation.subscribe(()=>render());
  // The car park's plate camera card sits in the view's top-right corner, under what the corner shows (the room colours
  // bar, the flight's status) or, when it shows nothing, level with the stop's title card (it waited below an empty gap),
@@ -244,26 +207,20 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
  const cornerSize=new ResizeObserver(placeCornerCard);cornerSize.observe(corner);cornerSize.observe(stage);cornerSize.observe(titleCard);signal.addEventListener('abort',()=>cornerSize.disconnect(),{once:true});
  const bodyClass=new MutationObserver(placeCornerCard);bodyClass.observe(document.body,{attributes:true,attributeFilter:['class']});signal.addEventListener('abort',()=>bodyClass.disconnect(),{once:true});
  simulation.setInteractionFilter(room=>!traveling&&destination==='meeting'&&room.id===meetingId);
- listen(document,'visibilitychange',()=>{if(document.hidden){stopTour(['พักการพาชมเมื่อออกจากหน้านี้','Tour paused while you were away']);stopScenario();cancelFlight();render();}});
- onUserOrbit(()=>{stopFollowing();stopTour(['กำลังสำรวจด้วยตัวเอง','Exploring on your own']);cancelFlight();});
+ listen(document,'visibilitychange',()=>{if(document.hidden)director.hiddenPage();});
+ onUserOrbit(()=>director.exploring());
  insights=createBuildingInsights({model,simulation,schedule,read:()=>state,write:value=>{Object.assign(state,structuredClone(value));},render,navigate:id=>select(id,{guided:true}),
   // A parking story played on its own (?story=1, the bar's Play) stops too: it holds the clock, and set a jump back.
-  stopActivity:()=>{stopFollowing();stopTour(['กำลังสำรวจด้วยตัวเอง','Exploring on your own']);if(parking?.story.running)parking.stopStory();stopScenario();cancelFlight();},
-  following:()=>following,onFollow:on=>{if(on){startFollowing();return;}stopFollowing(['หยุดตามวันแล้ว · เลือกจุดต่อไปได้เอง','Stopped following · pick the next spot yourself']);cancelFlight();}}); // a flight Follow started stops with it (its scenario stops in stopFollowing)
- // Showcase loop for an unattended screen: it follows the day; any touch hands control to the visitor,
- // and it comes back after a quiet minute.
- const kioskToggle=$('#kiosk-toggle');let kiosk=false,idleTimer=0;const IDLE_MS=60000/SPEED;
- // Left alone, the kiosk follows the day (a paused screen stays paused). A parking story playing on auto-advance is left to finish; one waiting for
- // Next or paused is abandoned like any idle screen.
- function armIdle(){clearTimeout(idleTimer);if(kiosk)idleTimer=setTimeout(()=>{const s=parking?.story,playing=s?.running&&s.auto&&!s.paused;if(kiosk&&!touring&&!following&&!playing&&!isPaused()){s?.stop();startFollowing();}else armIdle();},IDLE_MS);}
- function setKiosk(on){kiosk=on;kioskToggle.checked=on;document.body.classList.toggle('kiosk-on',on);if(on){if(!touring&&!following)startFollowing();}else{clearTimeout(idleTimer);const guided=touring||following;if(touring)stopTour();stopFollowing();if(guided)cancelFlight();}} // switched off mid-flight: the guided flight stops too
- listen(kioskToggle,'change',()=>setKiosk(kioskToggle.checked));
- // The tour, Follow the day and Pause buttons (and the parking story's Pause, Next and Auto) handle the loop themselves:
- // stopped here first, the tour's and Follow's clicks started it again, and the Pause buttons ended the story they meant
- // to pause. The story's Exit is the visitor taking over, like any other touch.
- for(const type of ['pointerdown','keydown','wheel'])listen(document,type,event=>{if(!kiosk||event.target.closest?.('.kiosk-toggle'))return;if((touring||following)&&!event.target.closest?.('#tour-play,#day-play,#day-pause,#parking-bar [data-bar=pause],#parking-bar [data-bar=resume],#parking-bar [data-bar=next],#parking-bar .pk-switch')){const bar=Boolean(event.target.closest?.('#parking-bar'));stopFollowing(null,{keepStory:bar});stopTour(['หยุดโหมดจัดแสดงชั่วคราว · ทดลองได้เลย','Paused the showcase loop · explore freely'],{keepStory:bar});if(!bar)cancelFlight();}armIdle();},{capture:true});
+  stopActivity:()=>director.stopActivity(),
+  following:()=>director.following,onFollow:on=>director.setFollowing(on)}); // a flight Follow started stops with it
+ // Kiosk mode: the director follows the day when left alone. Every touch is reported to it; the tour, Follow the day
+ // and Pause buttons (and the parking story's Pause, Next and Auto) handle the loop themselves (stopped here first,
+ // their clicks started it again, or ended the story they meant to pause); the story's bar decides the story itself.
+ const kioskToggle=$('#kiosk-toggle');
+ listen(kioskToggle,'change',()=>director.setKiosk(kioskToggle.checked));
+ for(const type of ['pointerdown','keydown','wheel'])listen(document,type,event=>{if(event.target.closest?.('.kiosk-toggle'))return;director.touch({own:Boolean(event.target.closest?.('#tour-play,#day-play,#day-pause,#parking-bar [data-bar=pause],#parking-bar [data-bar=resume],#parking-bar [data-bar=next],#parking-bar .pk-switch')),bar:Boolean(event.target.closest?.('#parking-bar'))});},{capture:true});
  // Parking UI activity counts as hands-on use, like the building controls.
- parking?.setInteractHandler(()=>{if(kiosk)return;stopFollowing();if(touring)stopTour(['กำลังทดลองด้วยตัวเอง','Trying it yourself']);});
+ parking?.setInteractHandler(()=>director.tryingIt());
  // Runs on every TH/EN switch: static markup, then everything the showcase draws itself.
  function applyLanguage(){const en=getLang()==='en';$('#lang-toggle span').textContent=en?'TH':'EN';translatePage();$('#kiosk-label').textContent=pt('story.kiosk');const dock=$('[data-destination="parking"] span');if(dock)dock.textContent=pt('parking.dock');
   const d=destinations[destination];$('#scene-heading').textContent=d.panel;$('#scene-floor').textContent=d.floor;
@@ -271,11 +228,11 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
  listen($('#lang-toggle'),'click',()=>parking?.toggleLang());
  const offLang=onLang(applyLanguage);signal.addEventListener('abort',offLang,{once:true});applyLanguage();
  void select('overview',{instant:true});
- if(options.kiosk==='1')setTimeout(()=>setKiosk(true),600);
+ if(options.kiosk==='1')setTimeout(()=>director.setKiosk(true),600);
  else{const dest=options.dest;if(dest&&destinations[dest])setTimeout(async()=>{const arrived=await select(dest);if(arrived&&dest==='parking'&&options.story==='1')void parking?.playStory({auto:options.auto!=='0'});},300);}
  // Back to the current stop's own camera pose (the view controls and the R key use this).
  // During a flight it stops the flight, then flies to the stop on show (the flight's own stop once its approach has
  // begun): it only stopped the camera mid-air, as the flight had not yet ended when it looked.
  function resetView(){if(disposed)return;if(traveling){resetAfterFlight=true;cancelFlight();return;}cancelFlight();landed=false;flightStopped=false;render();void navigate(destination).then(arrived=>{if(arrived&&!disposed&&!traveling){landed=true;render();}});}
- return {resetView,dispose(){disposed=true;sequence++;clearTimeout(idleTimer);insights?.dispose();stopTour();stopScenario();unsubscribe();simulation.setInteractionFilter(()=>true);abort.abort();effects.dispose();},getState(){return{insights:insights?.getState(),destination,traveling,pendingDestination,touring,...state};}};
+ return {resetView,dispose(){disposed=true;sequence++;insights?.dispose();stopScenario();unsubscribe();simulation.setInteractionFilter(()=>true);abort.abort();effects.dispose();},getState(){return{insights:insights?.getState(),destination,traveling,pendingDestination,touring:director.touring,...state};}};
 }

@@ -44,7 +44,7 @@ protocol (`/usr/lib/chromium/chromium`, or `CHROMIUM=`). A check's `?name=value`
 `day`, `dest`, `story`, `auto`, `kiosk`, `warm`, `render`, `fps`) are handed to the page as `window.__demoOptions`
 before it loads (`src/parking/options.js`). Checks run at `speed=30` with the world clock at real speed (`day=0`)
 unless they set their own. **It never uses the Intel iGPU by itself** (it froze this laptop twice): it renders on the
-NVIDIA GPU with 6 browsers (`JOBS=n`), or in software without the NVIDIA driver; `GPU=nvidia|software|vulkan|egl`
+NVIDIA GPU with one browser (`JOBS=n` for more), or in software without the NVIDIA driver; `GPU=nvidia|software|vulkan|egl`
 forces one (`egl` is the iGPU: don't). Screenshots of failed checks go to `test/out/shots/<time>-<pid>/`.
 
 ## Brand

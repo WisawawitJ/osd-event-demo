@@ -145,6 +145,7 @@ export function createParkingWorld({lot, sim = createParkingSim(), camera = null
     sim, traffic, story, actions, lot,
     // Runs the story once and resolves when it ends or stops (resumes a paused demo: the story needs time to pass).
     playStory({auto = true} = {}) { world.setPaused(false); story.setAuto(auto); return story.play({auto}); },
+    stopStory() { story.stop(); },
     dispose() { story.stop(); stopLife(); cancelLater(passTimer); cancelLater(autoDeny); traffic.dispose(); },
   };
 }
