@@ -1,11 +1,10 @@
 // Parking access demo inside the OSD building showcase. Everything is simulated locally.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
-import {t, onLang, getLang, setLang, bkk} from './i18n.js';
+import {t, onLang, getLang, setLang} from './i18n.js';
 import {icon, esc} from './dom.js';
-import {createParkingSim, STORY} from './sim.js';
-import {later, cancelLater, sleep, world, demoNow, minuteOf, rng} from './clock.js';
+import {createParkingSim} from './sim.js';
+import {later, world} from './clock.js';
 import {createLot} from './lot3d.js';
-import {createTraffic} from './traffic.js';
 import {createPanel} from './panel.js';
 import {createPhone} from './phone.js';
 import {createOverlays} from './overlays.js';
@@ -18,7 +17,6 @@ export const PARKING_POSES = {
   gate: {eye: [-4, 12, 45], target: [-24, 1, 21], fov: 40},
   rowA: {eye: [-14, 13, 24], target: [-30.5, .5, 7], fov: 44},
 };
-import {STORY_START, storyCar, UNKNOWN_PLATES, pickOne, lotOnScreen, parkedPlate, streetGap, idleCars, fromFarLane, leavingCandidates, startLotLife} from './life.js';
 
 export function createParking({scene, schedule, camera = null, renderer, afterRender, capture, fly}) {
   let interactHandler = () => {};
@@ -221,22 +219,15 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   };
 }
 
-// The car park without any UI, for the free-exploration page (#explore): the lot, parked cars,
-// through-traffic, and staff cars coming and going through the barrier.
+// The car park without any UI, for the free-exploration page (#explore): the lot, parked cars, through-traffic, and
+// staff cars coming and going through the barrier (the parking world, staff only).
 export function createParkingScene({scene, schedule, camera = null}) {
   const sim = createParkingSim();
   const lot = createLot({scene, stalls: sim.state.stalls, schedule});
-  const traffic = createTraffic({lot, sim, schedule, hooks: {}});
-  const timers = {};
-  const loop = (name, fn, gap) => { const run = () => { fn(); timers[name] = later(run, gap()); }; timers[name] = later(run, gap() * rng()); };
-  loop('street', () => { if (lotOnScreen(lot)) traffic.passBy(); }, () => streetGap(world.minute()));
-  traffic.syncParked();
-  const stopLife = startLotLife({sim, traffic, lot, camera, staffOnly: true,
-    arrive() { const v = pickOne(idleCars(sim, traffic, {staffOnly: true})); if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70, west: fromFarLane(traffic.queued > 1)}); },
-    leave() { const keys = leavingCandidates(sim, traffic, {staffOnly: true}); if (keys.length) traffic.leave(pickOne(keys), {west: fromFarLane(traffic.leaving > 1)}); }});
+  const w = createParkingWorld({lot, sim, camera, staffOnly: true, ui: {schedule}});
   return {
-    lot, sim, traffic,
-    setNight(night) { lot.setNight(night); traffic.setNight(night); },
-    dispose() { stopLife(); for (const handle of Object.values(timers)) cancelLater(handle); lot.dispose(); disposeCars(); },
+    lot, sim, traffic: w.traffic,
+    setNight(night) { lot.setNight(night); w.traffic.setNight(night); },
+    dispose() { w.dispose(); lot.dispose(); disposeCars(); },
   };
 }

@@ -22,7 +22,8 @@ const NO_OVERLAYS = {setCue: noop, caption: noop, reset: noop, refresh: noop, sh
 // - storyChanged(): the story started, stopped or moved on;
 // - schedule(): something to redraw.
 // `onScreen()`: whether the car park is in view (the background life and through-traffic only drive cars then).
-export function createParkingWorld({lot, sim = createParkingSim(), camera = null, ui = {}, onScreen = () => lotOnScreen(lot), watched = () => true, phone}) {
+// `staffOnly`: the explore page's car park: staff cars come and go, no VIPs, visitors or unknown cars.
+export function createParkingWorld({lot, sim = createParkingSim(), camera = null, ui = {}, onScreen = () => lotOnScreen(lot), watched = () => true, phone, staffOnly = false}) {
   const panel = ui.panel ?? NO_PANEL, overlays = ui.overlays ?? NO_OVERLAYS, schedule = ui.schedule ?? noop;
   const toast = (icon, key, vars, tone) => ui.toast?.(icon, key, vars, tone);
   let quietAmbient = false;
@@ -55,7 +56,7 @@ export function createParkingWorld({lot, sim = createParkingSim(), camera = null
       const blocked = () => { if (!quiet && sim.state.alerts.some(a => a.status === 'open')) toast('alert', 'gate.sim.waitingAlert'); };
       if (kind === 'exit') {
         // Pressed by hand, any parked car may be the one (a visitor too); the background's own departures are not.
-        const keys = leavingCandidates(sim, traffic, {guests: !quiet});
+        const keys = leavingCandidates(sim, traffic, {guests: !quiet, staffOnly});
         if (!keys.length) return;
         const k = pickOne(keys);
         traffic.leave(k, {west: fromFarLane(traffic.leaving > 1)});
@@ -73,7 +74,7 @@ export function createParkingWorld({lot, sim = createParkingSim(), camera = null
       }
       const pool = kind === 'visitor'
         ? sim.state.vehicles.filter(v => v.type === 'guest' && v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isAround(sim.key(v.plate, v.province)) && v.validFrom <= sim.now() && v.validTo >= sim.now())
-        : idleCars(sim, traffic, {staffOnly: !quiet}); // the Staff car button sends a staff car, never a VIP
+        : idleCars(sim, traffic, {staffOnly: staffOnly || !quiet}); // the Staff car button sends a staff car, never a VIP
       // The newest approved visitor drives up first, so a request made on the phone can be followed to the gate.
       const v = kind === 'visitor' ? pool[pool.length - 1] : pickOne(pool);
       if (!v) { if (!quiet) toast('user', kind === 'visitor' ? 'gate.sim.noVisitor' : 'gate.sim.noStaff'); return; }
@@ -125,9 +126,9 @@ export function createParkingWorld({lot, sim = createParkingSim(), camera = null
   // Background life: cars follow the hour. Unknown cars only while the car park is the stop on show (`watched`),
   // where their alert can be answered. The parked cars are placed first: a late start's catch-up takes cars away.
   traffic.syncParked();
-  const stopLife = startLotLife({sim, traffic, lot, camera, paused: () => quietAmbient, watched, onScreen,
+  const stopLife = startLotLife({sim, traffic, lot, camera, staffOnly, paused: () => quietAmbient, watched, onScreen,
     arrive: () => actions.simulate('registered', {quiet: true}), leave: () => actions.simulate('exit', {quiet: true}),
-    unknown: () => { if (watched()) actions.simulate('unknown', {quiet: true}); }});
+    unknown: staffOnly ? null : () => { if (watched()) actions.simulate('unknown', {quiet: true}); }});
   // Through-traffic whenever the street is in view (overview and car park), not only at the parking stop.
   let passTimer = null;
   const schedulePass = () => { passTimer = later(() => { if (onScreen()) traffic.passBy(); schedulePass(); }, streetGap(world.minute())); };
