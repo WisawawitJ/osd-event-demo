@@ -91,7 +91,9 @@ async function startBrowser(mode, profileRoot) {
     ws.addEventListener('message', e => { if (JSON.parse(e.data).method === 'Inspector.targetCrashed') die('the page crashed'); });
     const send = (method, params = {}) => new Promise((ok, fail) => {
       if (gone) return fail(gone);
-      const i = ++id, timer = setTimeout(() => { pending.delete(i); fail(new Error(`DevTools ${method} got no answer in 90 s`)); }, 90000);
+      // No answer in 90 s: the page is hung (a script in an endless loop), and as good as gone. Each later call waited
+      // the 90 s too, for every check left to this browser; gone, they go to the others.
+      const i = ++id, timer = setTimeout(() => { pending.delete(i); const error = new Error(`DevTools ${method} got no answer in 90 s`); fail(error); die(error.message); }, 90000);
       pending.set(i, {ok: m => { clearTimeout(timer); ok(m); }, fail: error => { clearTimeout(timer); fail(error); }});
       ws.send(JSON.stringify({id: i, method, params}));
     });

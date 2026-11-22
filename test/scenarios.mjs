@@ -18,6 +18,11 @@ const STORY_REQUEST = `__parking.sim.state.requests.find(q=>q.visitor.name===${J
 // Sends a parked staff car out; returns its key.
 // (With none parked it threw nothing and returned undefined, and checks waiting for that key to leave passed at once.)
 const LEAVE_STAFF = `(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');if(!k)throw new Error('no staff car parked');void __parking.traffic.leave(k);return k})()`;
+// The car park's own comings and goings stopped, and the gate quiet, so a check's cars are the only ones (at 06:00 a
+// background far-lane car could still turn in first, as it should, and spoil the timing). `plates`: those let in.
+const ONLY = plates => `(async()=>{const t=__parking.traffic,arrive=t.arrive,ok=new Set(${JSON.stringify(plates)});t.passBy=()=>false;t.__leave=t.leave;t.leave=()=>Promise.resolve();
+  t.arrive=o=>ok.has(o.plate)?arrive(o):Promise.resolve('blocked');
+  for(let i=0;i<400;i++){const s=t.inspect();if(!s.entryPending&&!s.westOnStreet&&!s.outbound&&!s.gateHolders&&!t.leaving&&__parking.sim.state.gate==='closed')return true;await new Promise(r=>setTimeout(r,50))}return false})()`;
 const viewport = (p, width = 1600, height = 1000) => p.cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
 
 export const scenarios = [
@@ -191,9 +196,10 @@ export const scenarios = [
     await p.until('window.__parking && __parking.story.running && __parking.story.index===0', {timeout: 40000});
     await p.eval(`document.querySelector('#parking-panel').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`);
     await p.eval(`new MutationObserver((m,o)=>{if(document.querySelector('[data-act="approve"][data-cue="true"]')){o.disconnect();window.__cueAt=performance.now()}}).observe(document.body,{subtree:true,childList:true,attributes:true})`);
+    await p.eval(`__parking.sim.subscribe((k,q)=>{if(k==='request'&&q?.status==='approved'&&!window.__approvedAt)window.__approvedAt=performance.now()})`);
     await p.until('window.__cueAt', {timeout: 60000, what: 'the Approve cue'});
-    await p.until(`${STORY_REQUEST}?.status==='approved'`, {timeout: 10000, what: 'approved'});
-    const after = await p.eval('(performance.now()-__cueAt)*5/1000');
+    await p.until('window.__approvedAt', {timeout: 10000, what: 'approved'});
+    const after = await p.eval('(__approvedAt-__cueAt)*5/1000');
     expect(after < 4.5, `approved ${after.toFixed(1)} s (demo) after the cue, not the 6 s a touch during it gives`);
   }},
   {name: 'an unknown car\'s Open reason is one choice, in the console card and the pop-up alike', async run(p, expect) {
@@ -217,6 +223,25 @@ export const scenarios = [
     await p.sleep(800); // 24 s of demo time
     const status = await p.eval(`__parking.sim.state.alerts.find(a=>a.plate==='2ฒษ 9077')?.status`);
     expect(status === 'denied', `its alert answered within the background car's 8 s (${status})`);
+  }},
+  {name: 'a story left before its unknown car reaches the barrier: that car is a background one (8 s, console left alone)', async run(p, expect) {
+    // Its alert came after the story had stopped: it got a presenter's 45 s and switched the console to the Gate tab.
+    await p.goto(parking('&story=1'));
+    await p.until('window.__parking && __parking.story.running && __parking.story.index===6 && !__parking.sim.state.alerts.some(a=>a.plate===\'2ฒษ 9077\')', {timeout: 90000, what: 'step 7, its car on the way'});
+    await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+    await p.click('[data-tab="vehicles"]');
+    await p.until(`__parking.sim.state.alerts.some(a=>a.plate==='2ฒษ 9077')`, {timeout: 20000, what: 'its car at the barrier'});
+    const r = JSON.parse(await p.eval(`JSON.stringify({ambient:__parking.sim.state.alerts.find(a=>a.plate==='2ฒษ 9077').ambient,tab:document.querySelector('[data-tab][aria-selected="true"]')?.dataset.tab})`));
+    expect(r.ambient === true && r.tab === 'vehicles', `a background car, the console left on its tab (ambient ${r.ambient}, tab ${r.tab})`);
+  }},
+  {name: 'a tap on the plate camera card or a toast leaves an auto story playing', async run(p, expect) {
+    // Neither is the 3D view, but a tap on either ended the story (toasts caught taps meant for the view under them).
+    await p.goto(parking('&story=1'));
+    await p.until(`window.__parking && __parking.story.running && document.querySelector('.pk-feed:not([hidden])')`, {timeout: 90000, what: 'the plate camera card in the story'});
+    await p.eval(`document.querySelector('.pk-feed').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`);
+    await p.sleep(200);
+    expect(await p.eval('__parking.story.running'), 'the story plays on after a tap on the camera card');
+    expect(await p.eval(`getComputedStyle(document.querySelector('.pk-toasts')).pointerEvents`) === 'none', 'toasts let taps through');
   }},
   {name: 'guided story: Free play at the approve cue does not approve', async run(p, expect) {
     await p.goto(parking('&story=1&auto=0'));
@@ -515,8 +540,10 @@ export const scenarios = [
     // The car ahead is an unknown one, held at the barrier until it is let in: the one behind is surely queued by then.
     await p.goto('?dest=parking&debug=1&speed=10&warm=0&time=06:00');
     await p.until(ready, {timeout: 40000});
-    const plate = await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic;t.passBy=()=>false;const inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));
-      const b=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
+    const b0 = await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));return sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)).plate})()`);
+    expect(await p.eval(ONLY(['1กก 1111', b0])), 'the car park quiet first');
+    const plate = await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic;
+      const b=sim.state.vehicles.find(v=>v.plate===${JSON.stringify(b0)});
       void t.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:1,fromX:-40});setTimeout(()=>void t.arrive({plate:b.plate,province:b.province,color:2,fromX:-50}),300);return b.plate})()`);
     const B = `__scene.getObjectByName('Demo_car_'+${JSON.stringify(plate)})`;
     await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='1กก 1111')`, {timeout: 20000, what: 'the car ahead held at the barrier'});
@@ -524,6 +551,31 @@ export const scenarios = [
     const z = await p.eval(`(async()=>{const a=__parking.sim.state.alerts.find(a=>a.status==='open'&&a.plate==='1กก 1111');__parking.sim.resolveAlert(a.id,'open','gate.reason.delivery');
       const b=${B},x0=b.position.x,A=__scene.getObjectByName('Demo_car_1กก 1111');for(let i=0;i<1000;i++){await new Promise(r=>setTimeout(r,10));if(Math.abs(b.position.x-x0)>.05)return A.position.z;}return null})()`);
     expect(z !== null && z > 18.6, `the car behind set off with the one ahead still at the barrier (its z ${z?.toFixed?.(1)}; past the arm is under 17.7)`);
+  }},
+  {name: 'a car leaving, a VIP behind it and two cars queued with far-lane traffic all get through (no gridlock)', async run(p, expect) {
+    // The next queued car set off as the arm rose for one that then stopped under it behind a VIP waiting for the car
+    // at the exit barrier; that car waited for the approaching one (`inbound`): each waited for the next, for good.
+    await p.goto('?dest=parking&debug=1&speed=10&warm=0&time=03:00');
+    await p.until(ready, {timeout: 40000});
+    const r = JSON.parse(await p.eval(`(async()=>{const S=10,T=__parking.traffic,sim=__parking.sim,sleep=ms=>new Promise(r=>setTimeout(r,ms/S));
+      const pass=T.passBy;T.passBy=()=>false;
+      const quiet=()=>{const i=T.inspect();return !T.busy&&!i.gateHolders&&!i.entryPending&&!T.leaving};
+      for(let i=0;i<200&&!quiet();i++)await sleep(200);
+      const free=type=>sim.state.vehicles.filter(v=>v.type===type&&v.enabled&&v.sync==='synced'&&!sim.state.presence.has(sim.key(v.plate,v.province))&&!T.isAround(sim.key(v.plate,v.province)));
+      const lv=free('staff')[0],st=sim.state.stalls.find(s=>s.row==='A'&&!s.occupant&&s.z>5);
+      sim.recordEntry({plate:lv.plate,province:lv.province,type:'staff',stallId:st.id,color:2});const kL=sim.key(lv.plate,lv.province);T.appear(kL);await sleep(300);
+      const vip=free('vip')[0],[c2,c3]=free('staff');
+      void T.leave(kL,{west:true});
+      let far=setInterval(()=>pass(-1),4400/S);
+      void T.arrive({plate:vip.plate,province:vip.province,color:5,fromX:-45});await sleep(1500);
+      void T.arrive({plate:c2.plate,province:c2.province,color:3,fromX:-60});await sleep(1500);
+      void T.arrive({plate:c3.plate,province:c3.province,color:7,fromX:-70});
+      const t0=performance.now();
+      while((performance.now()-t0)*S<120000){await sleep(500);if(far&&T.inspect().westExitHold){clearInterval(far);far=null}if(quiet()&&!T.isAround(kL))break}
+      if(far)clearInterval(far);
+      const keys=[vip,c2,c3].map(v=>sim.key(v.plate,v.province));
+      return JSON.stringify({done:quiet()&&!T.isAround(kL),parked:keys.filter(k=>sim.state.presence.has(k)&&!T.isAround(k)).length,s:T.inspect()})})()`));
+    expect(r.done && r.parked === 3, `all through: the leaver gone, 3 cars parked (${r.parked}; inbound ${r.s.inbound}, gate holders ${r.s.gateHolders}, waiting ${r.s.entryPending})`);
   }},
   {name: 'a car from the near lane signals left before turning in', async run(p, expect) {
     // speed 10: at 30 a flash lasts 13 ms and the car is on the street for ~170 ms, so the samples could miss them all.
@@ -574,17 +626,19 @@ export const scenarios = [
     // It held its aisle until it stood at the exit barrier: a car waiting to go in waited all that time.
     await p.goto('?dest=parking&debug=1&speed=10&warm=0&time=06:00');
     await p.until(ready, {timeout: 40000});
-    const r = JSON.parse(await p.eval(`(async()=>{const sim=__parking.sim,t=__parking.traffic;t.passBy=()=>false;
+    expect(await p.eval(ONLY([])), 'the car park quiet first');
+    const r = JSON.parse(await p.eval(`(async()=>{const sim=__parking.sim,t=__parking.traffic;
       // A staff car put in a free bay of row B (the quiet car park may have none parked).
       const inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId)),v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)),bay=sim.state.stalls.find(s=>s.row==='B'&&!s.occupant);
       sim.recordEntry({plate:v.plate,province:v.province,type:'staff',stallId:bay.id,color:2});const k=sim.key(v.plate,v.province);t.appear(k);await new Promise(r=>setTimeout(r,300));
       const stall=sim.state.stalls.find(s=>s.id===sim.state.presence.get(k).stallId),plate=sim.state.presence.get(k).plate,ax=String(stall.aisleX);
-      void t.leave(k,{west:false});
-      const car=()=>__scene.getObjectByName('Demo_car_'+plate);let freedAt=null;
+      void t.__leave(k,{west:false});
+      const car=()=>__scene.getObjectByName('Demo_car_'+plate);let freedAt=null,held=false; // freed: the aisle taken, then let go
       for(let i=0;i<600;i++){await new Promise(r=>setTimeout(r,20));const c=car();if(!c)break;const out=t.inspect().aisles[ax]?.out??0;
-        if(out===0&&freedAt===null&&i>5)freedAt=c.position.z;if(Math.abs(c.position.z-${19.3 - 2.7})<.3&&c.position.x>-21)break;}
+        if(out>0)held=true;else if(held&&freedAt===null)freedAt=c.position.z;if(Math.abs(c.position.z-${19.3 - 2.7})<.3&&c.position.x>-21)break;}
       return JSON.stringify({freedAt,aisle:ax})})()`));
-    expect(r.freedAt !== null && r.freedAt < 15.5, `the aisle (${r.aisle}) free while the car was still on the driveway (at z ${r.freedAt?.toFixed?.(1)})`);
+    // Not before it is out of the aisle either: on the exit lane (z 14.8), past the turn out of the aisle.
+    expect(r.freedAt !== null && r.freedAt > 13.8 && r.freedAt < 15.5, `the aisle (${r.aisle}) freed once the car was on the exit lane, before the barrier (at z ${r.freedAt?.toFixed?.(1)})`);
   }},
   {name: 'the ground is grass, on the real start-up path (shaders warmed up)', async run(p, expect) {
     // A flat pale plane; and on the test GPU the grass drew as background when its shader came from the first frame.
@@ -1188,6 +1242,16 @@ export const scenarios = [
     await p.sleep(300);
     const b = await yaw();
     expect(Math.abs(b - a) < 1, `the view kept its heading (${a.toFixed(1)}° -> ${b.toFixed(1)}°)`);
+  }},
+  {name: 'zooming toward the lower screen at the car park keeps the point under the cursor in place', async run(p, expect) {
+    // The pivot went under the ground with the zoom, and the limit lifting it back slid the picture (some 200 px).
+    await p.goto(parking());
+    await p.until(`${ready} && ${STILL}`, {timeout: 40000, what: 'at the car park'});
+    const drift = await p.eval(`(()=>{const c=document.querySelector('#viewport canvas'),r=c.getBoundingClientRect(),V=__camera.position.constructor,nx=0,ny=-.6;
+      const ground=()=>{const a=new V(nx,ny,.5).unproject(__camera),d=a.sub(__camera.position).normalize(),t=-__camera.position.y/d.y;return __camera.position.clone().addScaledVector(d,t)};
+      const p0=ground();for(let i=0;i<4;i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:r.left+r.width*(nx+1)/2,clientY:r.top+r.height*(1-ny)/2,deltaY:-100,deltaMode:0}));
+      __controls.update();const q=p0.clone().project(__camera);return Math.hypot((q.x-nx)*r.width/2,(q.y-ny)*r.height/2)})()`);
+    expect(drift < 8, `the ground point under the cursor stays put (${drift.toFixed(1)} px)`);
   }},
   {name: 'camera up and down: the ▲ ▼ buttons and Page Up / Page Down change the height, still looking at the same point', async run(p, expect) {
     // Panning keeps the height, so the height has its own control.
@@ -2439,6 +2503,8 @@ export const scenarios = [
     // A view key on the 3D view too (the story's next camera move overrode the presenter's).
     await start(true); await p.eval(`document.querySelector('#viewport canvas').dispatchEvent(new KeyboardEvent('keydown',{key:'PageUp',code:'PageUp',bubbles:true,cancelable:true}))`); await p.sleep(200);
     expect(!(await p.eval('__parking.story.running')), 'a view key on the 3D view ends an auto story');
+    await start(true); await p.eval(`document.querySelector('#viewport canvas').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',code:'ArrowLeft',ctrlKey:true,bubbles:true,cancelable:true}))`); await p.sleep(200);
+    expect(!(await p.eval('__parking.story.running')), 'Ctrl+arrow (it turns the view) ends it too');
     await start(false); await drag(); await p.sleep(200);
     expect(await p.eval('__parking.story.running'), 'in Next mode a drag only looks around');
     expect(/Exit story|ออกจากเรื่องราว/.test(await p.eval(`document.querySelector('[data-bar="free"]').textContent`)), 'an Exit story button');

@@ -443,10 +443,14 @@ export function createTraffic({lot, sim, schedule, hooks}) {
             }
             await raiseFor(gen);
           } catch (error) { if (stall.occupant === k) stall.occupant = null; throw error; }
-          // The arm is up and this car is on its way: the next car may drive up to the stop line now (it set off only
-          // once this one was past the arm, and got there as this one reached its aisle). It waits there for its own
-          // turn at the barrier, and brakes on the way for any car in its path.
-          releaseLane();
+          // The arm is up and this car is on its way: with the driveway beyond the arm clear, so that it will not stop
+          // under the arm, the next car may drive up to the stop line now (it set off only once this one was past the
+          // arm, and got there as this one reached its aisle). It waits there for its own turn at the barrier. Not
+          // with a car standing beyond the arm (one at the exit barrier, one bound for P1 behind it): this one could
+          // stop under the arm, the next one's approach (`inbound`) then held the car at the exit barrier, and each
+          // waited for the next for good. Then it waits as before, until this one is past the arm (below).
+          const beyondArmClear = ![...live].some(a => a !== agent && a.car.visible && !parked(a) && a.car.position.z < GATE.z && a.car.position.z > LANE_OUT - 3 && a.car.position.x > GATE.entryX - 8 && a.car.position.x < GATE.exitX + 8);
+          if (beyondArmClear) releaseLane();
           // Given its bay (so parked, lamps off, once it stops) only now: given before the arm rose, it went dark at the barrier.
           Object.assign(agent, {type, stall, key: k});
           sim.recordEntry({plate, province, type, stallId: stall.id, color, manual});

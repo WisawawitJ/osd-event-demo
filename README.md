@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (183), about 130 s: run before a commit
+npm test                 # all behaviour checks (187), about 130 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -49,7 +49,7 @@ different area (load, language, night, flights, lights, pond, clock, car park, s
 (`/usr/lib/chromium/chromium` itself where it exists, so the desktop's own Chromium flags and extensions stay out;
 `CHROMIUM=` names another binary). Browser profiles go in `$TEST_TMP` (default the system temp folder) under
 `osd-demo-test`, named after the runner's process; each is removed once its browser has exited, and at the next start
-any whose runner is gone (killed outright) is removed, its browser killed if still running. Each check starts with the page's saved settings (language, idle orbit) and console log cleared, and every browser runs at low CPU priority. A filter
+any whose runner is gone (killed outright) is removed, its browser killed if still running. Each check starts with the page's saved settings (language, idle orbit) and console log cleared; after it the browser goes to a blank page (so a page still running cannot log into the next check) and back to its usual window size. A browser whose page stops answering (90 s) gets no more checks. Every browser runs at low CPU priority. A filter
 that matches no check fails. There are no npm dependencies; the tests need Node 22 or newer for its built-in
 WebSocket. **It never uses the Intel iGPU by itself**: on this laptop headless Chromium on the iGPU hung it twice (i915
 GPU hang, then a failed reset), and since the iGPU drives the display the whole desktop froze. By default it renders on

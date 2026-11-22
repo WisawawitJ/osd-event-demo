@@ -18,6 +18,8 @@ export const PARKING_POSES = {
   rowA: {eye: [-14, 13, 24], target: [-30.5, .5, 7], fov: 44},
 };
 const STORY_START = bkk(2026, 11, 24, 9, 0);
+// The story's own cars: its visitor and its unknown car (neither can come from the Gate tab's test buttons).
+const storyCar = a => a.plate === STORY.plate || a.plate === STORY.unknown.plate;
 const UNKNOWN_PLATES = [['4ศย 5150', 'ปทุมธานี'], ['ผต 8812', 'กรุงเทพมหานคร'], ['3ฆง 6047', 'ชลบุรี'], ['ฌธ 2290', 'นครปฐม']];
 const pickOne = list => list[Math.floor(Math.random() * list.length)];
 const lotOnScreen = lot => lot.root.visible && document.visibilityState === 'visible';
@@ -306,6 +308,10 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     }
     // A presenter's own unknown car brings up the Gate tab; a background one does not (every few minutes it closed the
     // request or reason being worked on).
+    // The story's own cars reaching the barrier after it was left (its unknown car, or its visitor with no pass) are
+    // background ones: turned away after 8 s, the console left where it is (they took the 45 s a presenter's own car
+    // gets, and switched the console to the Gate tab, for a car nobody had sent).
+    if (kind === 'alert' && !story.running && storyCar(payload)) payload.ambient = true;
     if (kind === 'alert') { overlays.showAlert(payload.id); if (!story.running && !payload.ambient) panel.show('gate'); }
     if (kind === 'entry' || kind === 'exit') panel.flash(payload.id);
     if (kind === 'alertReason') overlays.refresh(); // the pop-up shows the card's pick
@@ -343,7 +349,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     if (!story.running && releaseClock) { releaseClock(); releaseClock = null; }
     // Its unknown car still waiting at the barrier is turned away like a background one (8 s, not a presenter's 45 s:
     // left at step 7, it held the barrier and every car behind it).
-    if (storyWasRunning && !story.running) { phone.setCue(null); phone.cancelRead(); for (const a of sim.state.alerts) if (a.status === 'open' && a.plate === STORY.unknown.plate) a.ambient = true; }
+    if (storyWasRunning && !story.running) { phone.setCue(null); phone.cancelRead(); for (const a of sim.state.alerts) if (a.status === 'open' && storyCar(a)) a.ambient = true; }
     storyWasRunning = story.running; renderBar(); panel.render(); // the Gate tab's test buttons
   });
 
@@ -391,15 +397,20 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   const viewport = $('#viewport');
   const takeOver = event => {
     if (!active || !story.running || !story.auto) return;
-    if (event.target.closest?.('#pk-phone, .pk-caption, .pk-alert-pop, #view-orbit')) return;
+    // Nor the plate camera card or a toast (they are not the view: a tap on them ended the story).
+    if (event.target.closest?.('#pk-phone, .pk-caption, .pk-alert-pop, .pk-feed, .pk-toasts, #view-orbit')) return;
     leaveStory();
   };
   viewport.addEventListener('pointerdown', takeOver, {capture: true});
   viewport.addEventListener('wheel', takeOver, {capture: true, passive: true});
   // A view key on the 3D view too (arrows, + −, Page Up/Down, R): the story's next camera move overrode the presenter.
+  // As the view reads them: an arrow with any modifier (Ctrl+arrow turns it), the others without, by key place or, from
+  // an on-screen keyboard (no key place), by character.
   viewport.addEventListener('keydown', event => {
-    if (event.ctrlKey || event.metaKey || event.altKey || event.target.tagName !== 'CANVAS') return;
-    if (/^(Arrow|Page)/.test(event.key) || ['KeyR', 'Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(event.code)) takeOver(event);
+    if (event.target.tagName !== 'CANVAS') return;
+    if (/^Arrow/.test(event.key)) return takeOver(event);
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (/^Page/.test(event.key) || ['KeyR', 'Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(event.code) || ['r', 'R', '+', '=', '-'].includes(event.key)) takeOver(event);
   }, {capture: true});
   panelRoot.addEventListener('click', event => { if (event.target.closest('[data-tab]')) takeOver(event); }, {capture: true});
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && active && story.running) leaveStory(); });

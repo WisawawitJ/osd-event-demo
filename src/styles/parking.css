@@ -432,3 +432,6 @@ html[data-night=true] .ph-caption { background: #ffffffe6; }
 }
 /* Toasts over the story caption (on top in a narrow view, it hid them). */
 .pk-toasts { z-index: 7; }
+/* Toasts let taps through to the view under them (a later rule made them catch taps: one ended the story, and in free
+   play swallowed a drag on the view). */
+#parking-layer .pk-toasts, #parking-layer .pk-toasts > * { pointer-events: none; }

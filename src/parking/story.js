@@ -44,7 +44,9 @@ export function createStory(ctx) {
         let seen;
         do {
           seen = touches;
-          await Promise.race([wait(seen !== before ? Math.max(delay, 6000) : delay, () => !auto || touches !== seen), until(done)]);
+          // `done` with no time limit: the wait does the timing, and story Pause stops it (until's own 60 s ran on
+          // through a Pause, and the action fired the moment the story resumed).
+          await Promise.race([wait(seen !== before ? Math.max(delay, 6000) : delay, () => !auto || touches !== seen), until(done, Infinity)]);
           alive();
         } while (auto && !done() && touches !== seen);
         if (auto && !done()) { ctx.tap(cue); await wait(250); perform(); }
