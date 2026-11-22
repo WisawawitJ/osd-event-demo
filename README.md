@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (159), about 115 s: run before a commit
+npm test                 # all behaviour checks (160), about 115 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -163,7 +163,8 @@ About a third of the cars coming in arrive along the far lane: the near lane has
 turn, signalling right, for a gap in it and a clear gate mouth, then turn in across it. About a third of the cars
 leaving turn right out to the far lane: at the barrier they signal right and wait for a gap in both lanes and for no car
 on its way into the entry. Cars signal from 30 m before their turn off the street (queuing included), while waiting at
-the exit barrier or an aisle's mouth, and before every other turn (amber lenses at the four corners). The barrier's one
+the exit barrier or an aisle's mouth, and before every other turn (amber lenses at the four corners). Cars go in in the order they get to the entry,
+whichever lane they come along. The barrier's one
 arm serves both lanes, and each lane takes its own turn at it: a car going in does not wait for one going out. The arm
 is up while any car passes under it and stays down while an unknown car waits for staff (cars going out wait too). A
 car bound for P1 drives in along the exit lane, so it waits at the barrier while a car is driving out. No car drives

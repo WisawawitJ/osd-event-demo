@@ -295,6 +295,21 @@ export const scenarios = [
     expect(o.right, 'its right blinker flashed at the barrier');
     expect(o.far, 'it drove off westbound in the far lane');
   }},
+  {name: 'the car that gets to the entry first goes in first, whichever lane it came along', async run(p, expect) {
+    // The order was fixed when cars were sent: a far-lane car sent first, starting 110 m further out, kept a near-lane
+    // car that reached the barrier first waiting until it had driven up and turned in.
+    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
+    await p.until(ready, {timeout: 40000});
+    const [far, near] = JSON.parse(await p.eval(`JSON.stringify((()=>{const sim=__parking.sim,t=__parking.traffic,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));
+      const [a,b]=sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
+      void t.arrive({plate:a.plate,province:a.province,color:a.color,west:true});
+      setTimeout(()=>void t.arrive({plate:b.plate,province:b.province,color:b.color,fromX:-40}),50);
+      return [sim.key(a.plate,a.province),sim.key(b.plate,b.province)]})())`));
+    await p.until(`[${JSON.stringify(far)},${JSON.stringify(near)}].every(k=>__parking.sim.state.presence.has(k))`, {timeout: 40000, what: 'both cars in'});
+    // Entry times (the log lists the newest first).
+    const [nearAt, farAt] = await p.eval(`(()=>{const e=__parking.sim.state.events.filter(e=>e.kind==='entry');const at=k=>e.find(v=>__parking.sim.key(v.plate,v.province)===k)?.at;return [at(${JSON.stringify(near)}),at(${JSON.stringify(far)})]})()`);
+    expect(nearAt < farAt, `the near-lane car, there first, went in first (${((farAt - nearAt) / 1000).toFixed(0)} s of demo time before the far-lane one)`);
+  }},
   {name: 'a car from the near lane signals left before turning in', async run(p, expect) {
     // speed 10: at 30 a flash lasts 13 ms and the car is on the street for ~170 ms, so the samples could miss them all.
     await p.goto('?dest=parking&debug=1&speed=10&warm=0');

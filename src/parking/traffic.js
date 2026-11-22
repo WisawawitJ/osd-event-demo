@@ -90,7 +90,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   const agents = new Map(); // presence key -> parked (or leaving) agent
   const movers = new Set();
   const ambientCars = new Set();
-  let entryLane = Promise.resolve(), entryShown = Promise.resolve(), exitLane = Promise.resolve();
+  // The entry's order: the last car to have taken its turn (`done` once it is through the barrier, or gone).
+  let entryLast = {done: true, promise: Promise.resolve()}, entryShown = Promise.resolve(), exitLane = Promise.resolve();
   let gateLanes = {in: Promise.resolve(), out: Promise.resolve()}, plateReads = Promise.resolve();
   let generation = 0, frame = 0, last = 0;
   // Street discipline: through-traffic keeps one speed per lane, yields to cars joining the eastbound lane,
@@ -222,7 +223,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     for (const m of [...movers]) { movers.delete(m); m.resolve(); }
     for (const a of [...agents.values(), ...ambientCars]) removeAgent(a);
     agents.clear(); ambientCars.clear();
-    entryLane = entryShown = exitLane = plateReads = Promise.resolve();
+    entryShown = exitLane = plateReads = Promise.resolve();
+    entryLast = {done: true, promise: Promise.resolve()};
     gateLanes = {in: Promise.resolve(), out: Promise.resolve()};
     entryPending = exitingStreet = eastHold = gateHolders = under = armHeld = westOnStreet = crossing = westHold = outWest = westExitHold = inbound = outbound = p1In = 0;
     aisles.clear();
@@ -295,16 +297,26 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     const k = sim.key(plate, province);
     let resolveLane, resolveShown, released = false, onStreet = false, joined = false, westing = false, turning = false, coming = false, toP1 = false;
     const endP1 = () => { if (toP1) { toP1 = false; if (gen === generation) p1In--; } };
-    const previous = entryLane, previousShown = entryShown;
-    let ready = false; previous.then(() => { ready = true; });
-    entryLane = new Promise(r => { resolveLane = r; });
-    // Cars appear in arrival order: a later car holding at the queue point could otherwise stand on the spawn point
-    // of an earlier one still waiting for a gap, and each would wait for the other.
-    entryShown = new Promise(r => { resolveShown = r; });
+    // Its turn at the entry is taken when it gets there (a near-lane car as it appears, a far-lane one at its turn),
+    // not when it is sent: a far-lane car sent first, 110 m further out, kept a near-lane car that got there first
+    // waiting until it had driven up and turned in.
+    let earlier = null;
+    const takeTurn = () => {
+      earlier = entryLast;
+      const turn = {done: false};
+      turn.promise = new Promise(r => { resolveLane = () => { turn.done = true; r(); }; });
+      entryLast = turn;
+    };
+    const previous = () => earlier.promise, ready = () => earlier.done;
+    // Near-lane cars appear in the order they were sent: a later car holding at the queue point could otherwise stand
+    // on the spawn point of an earlier one still waiting for a gap, and each would wait for the other.
+    const previousShown = west ? Promise.resolve() : entryShown;
+    resolveShown = () => {};
+    if (!west) entryShown = new Promise(r => { resolveShown = r; });
     entryPending++;
     arriving.add(k);
     // Counters belong to the run that raised them: after a reset they start from zero and must stay there.
-    const releaseLane = () => { if (!released) { released = true; if (gen === generation) entryPending--; resolveLane(); } };
+    const releaseLane = () => { if (!released) { released = true; if (gen === generation) entryPending--; resolveLane?.(); } };
     const offStreet = () => { if (onStreet) { onStreet = false; if (gen === generation) streetCars.delete(agent); } };
     // Its last stretch to the barrier starts once no car is crossing to the far lane, and keeps one from starting.
     const comeIn = async () => { await waitFor(() => !outWest, gen); inbound++; coming = true; };
@@ -332,7 +344,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           place(agent, {x: 95, z: STREET.laneWest, h: WEST}); onto(-1);
           agent.signal = 'right'; agent.signalFrom = TURN_X + SIGNAL_AHEAD; // from 30 m before its turn
           await drive(agent, westToTurn(95), {speed: 8, startMoving: true}, gen);
-          await previous; alive();
+          takeTurn();
+          await previous(); alive();
           // The near lane has right of way: the car waits, signalling, for a gap in it (the stretch near-lane traffic
           // covers in about 5 s) and for the gate's mouth to be clear, without holding anyone back. Exits wait while
           // it turns.
@@ -349,8 +362,9 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           // Its place in the queue: behind the last car on the street (one driving up to the barrier counts as at it).
           // Counted from the cars there, not from a running total: that gave a new car the place of one still in it.
           const holdBehind = () => Math.min(QUEUE_HEAD, ...laneCars(1).map(a => (a.holdX ?? QUEUE_HEAD + QUEUE_GAP) - QUEUE_GAP));
-          if (!ready && holdBehind() <= fromX + 2) { await previous; alive(); await waitFor(spawnClear, gen); }
-          const holdX = holdBehind(), queue = !ready && holdX > fromX + 2;
+          takeTurn();
+          if (!ready() && holdBehind() <= fromX + 2) { await previous(); alive(); await waitFor(spawnClear, gen); }
+          const holdX = holdBehind(), queue = !ready() && holdX > fromX + 2;
           agent.holdX = queue ? holdX : undefined;
           place(agent, {x: fromX, z: STREET.laneEast, h: EAST}); onto(1);
           // Into the car park: signalling from 30 m before the turn, queuing included (it flashed all the way from
@@ -358,12 +372,12 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           agent.signal = 'left'; agent.signalFrom = GATE.entryX - ENTRY_R - SIGNAL_AHEAD;
           if (queue) {
             await drive(agent, streetToHold(fromX, holdX), {startMoving: fromX > -90}, gen);
-            await previous; alive();
+            await previous(); alive();
             await comeIn();
             agent.holdX = undefined;
             await drive(agent, streetToGate(holdX), {}, gen);
           } else {
-            await previous; alive();
+            await previous(); alive();
             await comeIn();
             await drive(agent, streetToGate(fromX), {startMoving: fromX > -90}, gen);
           }
