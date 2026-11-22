@@ -419,3 +419,8 @@ html[data-night=true] .ph-caption { background: #ffffffe6; }
 @container scene (max-width: 720px) {
   .parking-active.phone-open .pk-caption { left: 50%; top: 10px; bottom: auto; width: calc(100% - 20px); padding: 10px 14px 11px; z-index: 6; }
 }
+
+/* A narrow view: the stop's chip (bottom left) sits above the view controls' row, which reaches across under it. */
+@container scene (max-width: 560px) {
+  .showcase-page .scene-bottom { bottom: 62px; }
+}

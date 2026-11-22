@@ -9,7 +9,7 @@ const VEHICLE_RANK = {vip: 0, guest: 1, staff: 2};
 
 export function createPanel({root, sim, actions}) {
   let shownTab = null;
-  const ui = {tab: 'overview', reqFilter: 'pending', reqSearch: '', selected: null, rejecting: false, rejectText: '', vehFilter: 'all', vehSearch: '', add: {plate: '', province: PROVINCES[0][0], owner: ''}, manualReason: REASONS[0], alertReason: {}, newIds: new Set(), cue: null, flash: null, snapshots: {in: '', out: ''}};
+  const ui = {tab: 'overview', reqFilter: 'pending', reqSearch: '', selected: null, rejecting: false, rejectText: '', vehFilter: 'all', vehSearch: '', add: {plate: '', province: PROVINCES[0][0], owner: ''}, manualReason: REASONS[0], newIds: new Set(), cue: null, flash: null, snapshots: {in: '', out: ''}};
   let frame = 0;
   const schedule = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; render(); }); };
 
@@ -110,7 +110,7 @@ export function createPanel({root, sim, actions}) {
     <div class="dashboard-section"><h3>${t('gate.log')}</h3>${sim.state.events.slice(0, 14).map(eventRow).join('')}</div>`;
   }
   function alertCard(a) {
-    const reason = ui.alertReason[a.id] || REASONS[1];
+    const reason = a.openReason || REASONS[1];
     return `<div class="pk-alert-card" data-alert="${a.id}"><div class="pk-alert-head">${icon('alert')}<div><strong>${t('alert.title')}</strong><small>${fmtTime(a.at, true)} · ${t('gate.camIn')}</small></div></div>
     ${a.snapshot ? `<img src="${a.snapshot}" alt="">` : ''}<div class="pk-plate-big small">${esc(a.plate)}<small>${esc(a.province)}</small></div><p>${t('alert.body')}</p>
     <label class="pk-inline">${t('alert.openReason')}<select data-alert-reason="${a.id}">${REASONS.map(r => `<option value="${r}"${reason === r ? ' selected' : ''}>${t(r)}</option>`).join('')}</select></label>
@@ -177,7 +177,7 @@ export function createPanel({root, sim, actions}) {
       else { ui.tab = 'vehicles'; ui.vehFilter = 'all'; ui.vehSearch = ''; }
       render(); root.scrollTop = 0; return;
     }
-    if (d.alertOpen) { actions.resolveAlert(d.alertOpen, 'open', ui.alertReason[d.alertOpen] || REASONS[1]); return; }
+    if (d.alertOpen) { actions.resolveAlert(d.alertOpen, 'open', sim.state.alerts.find(a => a.id === d.alertOpen)?.openReason || REASONS[1]); return; }
     if (d.alertDeny) { actions.resolveAlert(d.alertDeny, 'deny'); return; }
     // Not while the story plays: a car sent then got into its steps (the visitor's car denied in the stray's place).
     if (d.sim) { if (!actions.storyRunning?.()) actions.simulate(d.sim); return; }
@@ -206,7 +206,7 @@ export function createPanel({root, sim, actions}) {
   });
   root.addEventListener('change', e => {
     if (e.target.dataset.focus === 'manual-reason') ui.manualReason = e.target.value;
-    if (e.target.dataset.alertReason) ui.alertReason[e.target.dataset.alertReason] = e.target.value;
+    if (e.target.dataset.alertReason) sim.setAlertReason(e.target.dataset.alertReason, e.target.value);
     if (e.target.name === 'province') ui.add.province = e.target.value;
   });
   root.addEventListener('submit', e => {
@@ -229,6 +229,6 @@ export function createPanel({root, sim, actions}) {
     flash(id) { ui.flash = id; schedule(); setTimeout(() => { if (ui.flash === id) { ui.flash = null; schedule(); } }, 2400); },
     setSnapshot(which, url) { ui.snapshots[which] = url; if (ui.tab === 'gate') schedule(); },
     // Alert reasons go too: ids start again after a reset, and a new alert showed an old one's reason.
-    reset() { Object.assign(ui, {tab: 'overview', reqFilter: 'pending', reqSearch: '', selected: null, rejecting: false, vehFilter: 'all', vehSearch: '', cue: null, flash: null, snapshots: {in: '', out: ''}, alertReason: {}}); ui.newIds.clear(); render(); },
+    reset() { Object.assign(ui, {tab: 'overview', reqFilter: 'pending', reqSearch: '', selected: null, rejecting: false, vehFilter: 'all', vehSearch: '', cue: null, flash: null, snapshots: {in: '', out: ''}}); ui.newIds.clear(); render(); },
   };
 }

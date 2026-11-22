@@ -36,7 +36,7 @@ const pageText={
  panel:['ข้อมูลประกอบจุดที่เลือก','Details for the selected spot'],'panel.title':['ภาพรวมอาคาร','Building overview'],'panel.status':['พร้อมพาชม','Ready to tour'],
  incidents:['จุดที่ควรดู','Worth a look'],'incidents.loading':['กำลังเตรียมเหตุการณ์…','Preparing events…'],
 'panel.loading':['กำลังเตรียมข้อมูลจำลอง…','Preparing simulated data…'],
- 'view.group':['ควบคุมมุมมอง','View controls'],'parking.storyBar':['เรื่องเล่าที่จอดรถ','Parking story'],'view.zoomIn':['ซูมเข้า','Zoom in'],'view.zoomOut':['ซูมออก','Zoom out'],'view.reset':['มุมเริ่มต้น','Reset view'],'view.orbit':['หมุนเมื่อว่าง','Idle orbit'],'view.orbit.title':['หมุนมุมกล้องช้า ๆ เมื่อไม่มีการใช้งาน','Slowly circle the view when nobody is using it'],
+ 'view.group':['ควบคุมมุมมอง','View controls'],'parking.storyBar':['เรื่องเล่าที่จอดรถ','Parking story'],'view.zoomIn':['ซูมเข้า','Zoom in'],'view.zoomOut':['ซูมออก','Zoom out'],'view.up':['ยกกล้องขึ้น','Camera up'],'view.down':['ลดกล้องลง','Camera down'],'view.reset':['มุมเริ่มต้น','Reset view'],'view.orbit':['หมุนเมื่อว่าง','Idle orbit'],'view.orbit.title':['หมุนมุมกล้องช้า ๆ เมื่อไม่มีการใช้งาน','Slowly circle the view when nobody is using it'],
  'tour.play':['เริ่มพาชม','Start tour'],'tour.reset':['เริ่มใหม่','Start over'],'tour.progress':['เลือกจุดที่สนใจ หรือให้เราพาชม','Pick a spot, or let us show you around'],
  kiosk:()=>pt('story.kiosk'),disclosure:()=>pt('sim.disclosure'),
  // The exploration page (src/pages/explore.html).

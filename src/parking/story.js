@@ -8,7 +8,7 @@ const ABORT = Symbol('story-abort');
 const at = (h, m) => bkk(2026, 11, 24, h, m);
 
 export function createStory(ctx) {
-  let shownVariant, token = 0, index = -1, auto = true, paused = false, running = false, nextWaiter = null, requestId = null;
+  let shownVariant, token = 0, index = -1, auto = true, paused = false, running = false, nextWaiter = null, requestId = null, touches = 0;
   const listeners = new Set();
   const emit = () => { for (const fn of listeners) fn(); };
 
@@ -36,15 +36,21 @@ export function createStory(ctx) {
       ctx.cue(cue);
       ctx.hint(hint);
       // Auto-advance turned off while it waits: the presenter takes the step over (it was done for them anyway).
+      // A touch on the console or the alert meanwhile (Reject, a reason to open with) waits on: done for them anyway,
+      // the presenter's own choice was overridden. Until 6 s pass with no touch.
       if (auto) {
-        await Promise.race([wait(delay, () => !auto), until(done)]);
-        alive();
+        let seen;
+        do {
+          seen = touches;
+          await Promise.race([wait(seen ? Math.max(delay, 6000) : delay, () => !auto || touches !== seen), until(done)]);
+          alive();
+        } while (auto && !done() && touches !== seen);
         if (auto && !done()) { ctx.tap(cue); await wait(250); perform(); }
       }
       if (!auto && !done()) {
         // Next performs the action for the presenter; stopping the story (token bumped first) must not.
-        await Promise.race([until(done, 1e9), new Promise(r => { nextWaiter = () => { if (my === token && !done()) perform(); r(); }; })]);
-        nextWaiter = null;
+        await Promise.race([until(done, 1e9), new Promise(r => { nextWaiter = () => { if (my === token && !done()) perform(); r(); }; emit(); })]);
+        nextWaiter = null; emit();
       }
       ctx.cue(null); ctx.hint(null);
       alive();
@@ -62,7 +68,8 @@ export function createStory(ctx) {
       ctx.sim.setNow(at(9, 2));
       await s.wait(500);
       // Typing stops with this run (Restart starts a new one without stopping: it typed on into the new run's form).
-      const v = STORY.visitor, opts = {cps: 26, isCancelled: s.cancelled};
+      // And it pauses with the story (it typed on through Pause).
+      const v = STORY.visitor, opts = {cps: 26, isCancelled: s.cancelled, isPaused: () => paused};
       await ctx.phone.typeInto('name', v.name, opts); s.alive();
       await ctx.phone.typeInto('email', v.email, opts); s.alive();
       await ctx.phone.typeInto('contact', STORY.contact, opts); s.alive();
@@ -86,14 +93,16 @@ export function createStory(ctx) {
       await s.wait(1600);
       ctx.panel.show('requests', {request: requestId});
     }, hold: 4500},
-    {key: 's4', cam: 'lot', async run(s) {
+    // Rejected already (at step 3, its Reject on screen there), or now: the rejected captions.
+    {key: 's4', cam: 'lot', variant: () => (ctx.sim.state.requests.find(q => q.id === requestId)?.status === 'rejected' ? 'r' : ''), async run(s) {
       const req = () => ctx.sim.state.requests.find(q => q.id === requestId);
       ctx.panel.show('requests', {request: requestId});
       await s.userAction({cue: 'approve', hint: 'story.hint.approve', done: () => req()?.status !== 'pending', perform: () => ctx.actions.approve(requestId)});
+      if (req()?.status === 'rejected' && shownVariant !== 'r') { shownVariant = 'r'; ctx.caption(captionFor(index, 'r')); }
       // Rejected, no ticket email follows (it waited 8 s for one).
       if (req()?.status === 'approved') await s.until(() => req()?.history.some(h => h.key === 'h.email'), 8000);
     }, hold: 2500},
-    {key: 's5', cam: 'lot', variant: () => (noPass() ? 'r' : ''), async run(s) {
+    {key: 's5', cam: 'lot', variant: () => (!noPass() ? '' : ctx.sim.state.requests.find(q => q.id === requestId)?.status === 'revoked' ? 'v' : 'r'), async run(s) {
       ctx.phone.setOpen(true);
       // On the story's request (a tap on the phone's New request since then left it on an empty form).
       ctx.phone.follow(requestId);
@@ -192,7 +201,8 @@ export function createStory(ctx) {
         s.alive();
         // Auto-advance turned off during the hold: it waits for Next from there (it went on to the next step).
         if (auto) await s.wait(step.hold, () => !auto);
-        if (!auto) { await new Promise(r => { nextWaiter = r; }); nextWaiter = null; s.alive(); }
+        // The bar redrawn as Next starts and stops waiting: its pulse showed only while the next step ran.
+        if (!auto) { await new Promise(r => { nextWaiter = r; emit(); }); nextWaiter = null; emit(); s.alive(); }
       }
       running = false; index = -1;
       ctx.caption(null);
@@ -215,10 +225,13 @@ export function createStory(ctx) {
     get total() { return steps.length; },
     get waitingForNext() { return Boolean(nextWaiter); },
     play({auto: a = true} = {}) { auto = a; return run(); },
-    setAuto(a) { auto = a; if (a && nextWaiter) nextWaiter(); emit(); },
+    // Off while paused: unpaused too (with Auto-advance off the bar has Next, no Resume, and the step stood still).
+    setAuto(a) { auto = a; if (!a) paused = false; if (a && nextWaiter) nextWaiter(); emit(); },
     pause() { paused = true; emit(); },
     resume() { paused = false; emit(); },
-    next() { if (nextWaiter) nextWaiter(); },
+    next() { paused = false; if (nextWaiter) nextWaiter(); emit(); },
+    // The presenter touched the console or the alert: a cue waiting on auto-advance waits on.
+    touched() { touches++; },
     stop() { token++; running = false; paused = false; index = -1; if (nextWaiter) nextWaiter(); nextWaiter = null; ctx.caption(null); ctx.cue(null); ctx.hint(null); emit(); },
     // In the variant on show (a language switch went back to the step's first pick after step 6 switched to no-pass).
     refreshCaption() { if (running && index >= 0) ctx.caption(captionFor(index, shownVariant)); },

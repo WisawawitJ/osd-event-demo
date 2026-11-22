@@ -149,7 +149,7 @@ export function createPhone({root, sim, actions}) {
   }
 
   let typingRun = 0;
-  async function typeInto(name, text, {cps = 28, isCancelled = () => false} = {}) {
+  async function typeInto(name, text, {cps = 28, isCancelled = () => false, isPaused = () => false} = {}) {
     const mine = ++typingRun;
     // Cancelled (the story stopped or restarted): it leaves the field alone (it wrote the whole text into the new run's
     // empty form), and its highlight goes unless a newer typing has taken over (it stayed on in free play). Checked
@@ -160,6 +160,7 @@ export function createPhone({root, sim, actions}) {
       if (cancelled()) return;
       ui.form[name] += ch; render();
       await sleep(1000 / cps);
+      while (isPaused() && !isCancelled()) await sleep(100);
     }
     if (cancelled()) return;
     ui.form[name] = text; ui.typing = null; render();

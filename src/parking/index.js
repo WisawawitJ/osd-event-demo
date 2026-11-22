@@ -296,6 +296,8 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   const panel = createPanel({root: panelRoot, sim, actions});
   const phone = createPhone({root: phoneRoot, sim, actions: {interact: actions.interact, openChanged: () => renderBar()}});
   const overlays = createOverlays({layer: $('#pk-overlays'), sim, actions});
+  // A presenter working the console or the alert during the story: a cue on auto-advance waits for them.
+  for (const el of [panelRoot, $('#pk-overlays')]) for (const type of ['pointerdown', 'keydown']) el.addEventListener(type, () => { if (story.running) story.touched(); }, {capture: true});
 
   sim.subscribe((kind, payload) => {
     if (kind === 'request' && payload?.status === 'pending' && payload.history.length === 1) {
@@ -306,6 +308,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     // request or reason being worked on).
     if (kind === 'alert') { overlays.showAlert(payload.id); if (!story.running && !payload.ambient) panel.show('gate'); }
     if (kind === 'entry' || kind === 'exit') panel.flash(payload.id);
+    if (kind === 'alertReason') overlays.refresh(); // the pop-up shows the card's pick
     // Which email went (a rejection or revocation said "Ticket emailed" too).
     if (kind === 'email') overlays.toast(`${icon('check')}<span>${esc(t(payload.kind === 'approved' ? 'req.emailSent' : `req.emailSent.${payload.kind}`))}</span>`, 'ok');
     panel.render();

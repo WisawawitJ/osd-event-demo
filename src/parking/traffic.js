@@ -312,9 +312,10 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     const startBacking = () => { if (!backing) { backing = true; backingOut++; } };
     const endBacking = () => { if (backing) { backing = false; if (gen === generation) backingOut--; } };
     const endP1 = () => { if (toP1) { toP1 = false; if (gen === generation) p1In--; } };
-    // Its turn at the entry is taken when it gets there (a near-lane car as it appears, a far-lane one at its turn),
-    // not when it is sent: a far-lane car sent first, 110 m further out, kept a near-lane car that got there first
-    // waiting until it had driven up and turned in.
+    // Its turn at the entry is taken when it gets there (a near-lane car a stopping distance short of its place in the
+    // queue, a far-lane one at its turn), not when it is sent or appears: a far-lane car sent first, 110 m further out,
+    // kept a near-lane car that got there first waiting until it had driven up and turned in, and a near-lane car taking
+    // its turn as it appeared, 50 m out, did the same to a far-lane car already waiting at its turn.
     let earlier = null;
     const takeTurn = () => {
       earlier = entryLast;
@@ -374,30 +375,37 @@ export function createTraffic({lot, sim, schedule, hooks}) {
         } else {
           // Appear with no through-traffic behind (it would run into a car queuing) and every earlier arrival ahead.
           const spawnClear = () => eastClear(-99, fromX + 30) && !laneCars(1).some(a => a.car.position.x < fromX + 9);
+          // Its place in the queue, from `x`: behind the last car ahead of it on the street (one driving up to the barrier
+          // counts as at it). Counted from the cars there, not from a running total: that gave a new car the place of one
+          // still in it. Only those ahead: cars that appeared behind it since do not push it back.
+          const holdBehind = x => Math.min(QUEUE_HEAD, ...laneCars(1).filter(a => a !== agent && a.car.position.x > x).map(a => (a.holdX ?? QUEUE_HEAD + QUEUE_GAP) - QUEUE_GAP));
           await eastGap(-99, fromX + 30, gen);
-          await waitFor(spawnClear, gen);
-          // Its place in the queue: behind the last car on the street (one driving up to the barrier counts as at it).
-          // Counted from the cars there, not from a running total: that gave a new car the place of one still in it.
-          const holdBehind = () => Math.min(QUEUE_HEAD, ...laneCars(1).map(a => (a.holdX ?? QUEUE_HEAD + QUEUE_GAP) - QUEUE_GAP));
-          takeTurn();
-          if (!ready() && holdBehind() <= fromX + 2) { await previous(); alive(); await waitFor(spawnClear, gen); }
-          const holdX = holdBehind(), queue = !ready() && holdX > fromX + 2;
-          agent.holdX = queue ? holdX : undefined;
+          // Not onto a queue reaching back to where it appears.
+          await waitFor(() => spawnClear() && holdBehind(fromX) > fromX + 2, gen);
+          agent.holdX = holdBehind(fromX);
           place(agent, {x: fromX, z: STREET.laneEast, h: EAST}); onto(1);
           // Into the car park: signalling from 30 m before the turn, queuing included (it flashed all the way from
           // the edge of the map).
           agent.signal = 'left'; agent.signalFrom = GATE.entryX - ENTRY_R - SIGNAL_AHEAD;
-          if (queue) {
-            await drive(agent, streetToHold(fromX, holdX), {startMoving: fromX > -90}, gen);
+          // Its turn at the entry is taken on getting there: a stopping distance short of its place in the queue. (Taken
+          // as it appeared, 50 m out, a far-lane car already at its turn waited for it to drive up and go in first.)
+          const decideX = agent.holdX - 9;
+          let x = fromX;
+          if (fromX < decideX) { await drive(agent, streetToHold(fromX, decideX), {startMoving: fromX > -90, endSpeed: () => 6.5}, gen); x = decideX; }
+          takeTurn();
+          if (ready() && !outWest && !outEast) {
+            // The entry is free: on without stopping.
+            await comeIn();
+            agent.holdX = undefined;
+            await drive(agent, streetToGate(x), {startSpeed: x === fromX ? (fromX > -90 ? 6.5 : 0) : agent.speed}, gen);
+          } else {
+            // Its place again (the car ahead may have gone in meanwhile), then wait there for its turn.
+            const holdX = agent.holdX = Math.max(x, holdBehind(x));
+            await drive(agent, streetToHold(x, holdX), {startSpeed: x === fromX ? (fromX > -90 ? 6.5 : 0) : agent.speed}, gen);
             await previous(); alive();
             await comeIn();
             agent.holdX = undefined;
             await drive(agent, streetToGate(holdX), {}, gen);
-          } else {
-            await previous(); alive();
-            const waited = await comeIn();
-            // Rolling on unless it stood waiting (released, it set off at full speed from a standstill).
-            await drive(agent, streetToGate(fromX), {startMoving: fromX > -90 && !waited}, gen);
           }
           arrived();
         }

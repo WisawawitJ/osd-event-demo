@@ -255,6 +255,9 @@ export function createParkingSim() {
     emit('alert', alert);
     return alert;
   }
+  // The reason to open with, picked in the console's alert card or the pop-up: one choice for both (each kept its own,
+  // and Open in the pop-up ignored the card's).
+  function setAlertReason(id, reasonKey) { const a = state.alerts.find(x => x.id === id); if (a) { a.openReason = reasonKey; emit('alertReason', a); } }
   function resolveAlert(id, decision, reasonKey = 'gate.reason.other', actor = 'staff.name') {
     const alert = state.alerts.find(a => a.id === id);
     if (!alert || alert.status !== 'open') return null;
@@ -441,7 +444,7 @@ export function createParkingSim() {
   reset();
   return {
     get state() { return state; }, now, setNow, reset, subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    decide, freeStall, recordEntry, recordExit, raiseAlert, resolveAlert, setGate, manualGate,
+    decide, freeStall, recordEntry, recordExit, raiseAlert, setAlertReason, resolveAlert, setGate, manualGate,
     submitRequest, approve, reject, revoke, flagsFor, addVehicle, importCsv, setEnabled, retrySync,
     stats, attention, findVehicle, key,
   };

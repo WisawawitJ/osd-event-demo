@@ -143,6 +143,11 @@ try {
   // Below ~20 m a 5% step is under a metre; from there on, steps stay about a metre long.
   const closeRange = () => Math.max(controls.minDistance * 2.5, 20);
   controls.zoomSpeed = 1.4;
+  // Camera up / down (the ▲ ▼ buttons, Page Up / Page Down): the camera alone moves, still looking at the same point, so
+  // the view looks further down from higher up. Panning keeps the height; this is the way to change it directly. A step
+  // is a third of the height above that point (at least a metre); the view's limits stop it (the camera never goes
+  // below the point it looks at, nor further out than zooming).
+  const heightStep = sign => sign * Math.max(1, Math.abs(camera.position.y - controls.target.y) / 3);
   function pushForward(metres, clientX = null, clientY = null) {
     const rect = canvas.getBoundingClientRect();
     pushNdc.set(clientX == null ? 0 : (clientX - rect.left) / rect.width * 2 - 1, clientY == null ? 0 : -(clientY - rect.top) / rect.height * 2 + 1);
@@ -413,7 +418,7 @@ try {
   stairsButton.addEventListener('click',()=>interiorCamera('stairs'));
   // The view keys, by the key's place (the Thai layout types other characters on them), else by the character: a
   // keyboard may send no place, and other layouts put - and + elsewhere (German: - on the Slash key).
-  const VIEW_KEYS = {KeyR: 'reset', Equal: 'in', NumpadAdd: 'in', Minus: 'out', NumpadSubtract: 'out'}, VIEW_CHARS = {r: 'reset', R: 'reset', '+': 'in', '=': 'in', '-': 'out'};
+  const VIEW_KEYS = {KeyR: 'reset', Equal: 'in', NumpadAdd: 'in', Minus: 'out', NumpadSubtract: 'out', PageUp: 'up', PageDown: 'down'}, VIEW_CHARS = {r: 'reset', R: 'reset', '+': 'in', '=': 'in', '-': 'out', PageUp: 'up', PageDown: 'down'};
   const viewKey = event => VIEW_KEYS[event.code] ?? VIEW_CHARS[event.key];
   canvas.addEventListener('keydown', event => {
     if (!model) return;
@@ -423,6 +428,7 @@ try {
     // (An on-screen keyboard may send no key place: then the character.)
     const zoomOut = viewKey(event) === 'out', zoomIn = viewKey(event) === 'in';
     if (viewKey(event) === 'reset') { if (showcase) showcase.resetView(); else frameVisible(); }
+    else if (viewKey(event) === 'up' || viewKey(event) === 'down') { event.preventDefault(); camera.position.y += heightStep(viewKey(event) === 'up' ? 1 : -1); controls.update(); schedule(); }
     else if (zoomIn || zoomOut) {
       event.preventDefault();
       const offset = camera.position.clone().sub(controls.target);
@@ -769,6 +775,14 @@ try {
        }
        document.querySelector('#view-zoom-in').addEventListener('click',()=>zoomBy(1/1.3),{signal:abort.signal});
        document.querySelector('#view-zoom-out').addEventListener('click',()=>zoomBy(1.3),{signal:abort.signal});
+       function liftBy(sign){
+        userMove();cancelAnimationFrame(zoomFrame);
+        const from=camera.position.y,to=from+heightStep(sign),start=performance.now();
+        const step=time=>{const t=Math.min(1,(time-start)/260),e=t*(2-t);camera.position.y=from+(to-from)*e;controls.update();schedule();if(t<1)zoomFrame=requestAnimationFrame(step);};
+        zoomFrame=requestAnimationFrame(step);
+       }
+       document.querySelector('#view-up').addEventListener('click',()=>liftBy(1),{signal:abort.signal});
+       document.querySelector('#view-down').addEventListener('click',()=>liftBy(-1),{signal:abort.signal});
        document.querySelector('#view-reset').addEventListener('click',()=>{userMove();showcase.resetView();},{signal:abort.signal});
        const orbitButton=document.querySelector('#view-orbit');
        let orbitEnabled=true;try{orbitEnabled=localStorage.getItem('osd-demo-orbit')!=='off';}catch{}

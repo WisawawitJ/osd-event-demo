@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (172), about 120 s: run before a commit
+npm test                 # all behaviour checks (178), about 125 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -127,7 +127,9 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 - On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance** and
   **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
-  Unticking auto-advance mid-step stops right there, at the cue or the step's pause. A drag on the 3D view, Esc or
+  Unticking auto-advance mid-step stops right there, at the cue or the step's pause (and ends a Pause, since the bar
+  then has Next). On auto-advance, a cue waits while the presenter works the console or the alert (Reject, a reason to
+  open with), until 6 s pass untouched. **Pause** stops the phone's typing too. A drag on the 3D view, Esc or
   **Exit story** leaves the story.
 - **EN / TH** in the header switches the whole showcase page (building and parking) between Thai and English. Names, plates and provinces stay as entered. The `#explore` page opens in the language last chosen (room names included).
 - **Night** / **Day** in the header moves the world clock on to 20:00 or 07:30 (showcase and explore).
@@ -140,7 +142,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   fades into the background from 65 m to 95 m out from the site's middle, so the ground's edge never shows, and zooming
   out stops a little past the whole-site view. The ground
   is a field of mown grass with light and dark patches (a grass texture sampled twice at different sizes and angles, blended with patches worked out per pixel, so it never repeats).
-- **View controls** at the bottom right of the 3D view: zoom in, zoom out, **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input (a flight to a stop the visitor picked counts as input) the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
+- **View controls** at the bottom right of the 3D view: zoom in, zoom out, camera up and down (▲ ▼, or Page Up / Page
+  Down: the camera rises or drops, still looking at the same point; panning keeps the height), **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input (a flight to a stop the visitor picked counts as input) the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
 
 ### The parking story (10 steps, about 2½ minutes on auto)
 
@@ -175,7 +178,8 @@ turn, signalling right, for a gap in it and a clear gate mouth, then turn in acr
 leaving turn right out to the far lane: at the barrier they signal right and wait for a gap in both lanes and for no car
 on its way into the entry. Cars signal from 30 m before their turn off the street (queuing included), while waiting at
 the exit barrier or an aisle's mouth, and before every other turn (amber lenses at the four corners). Cars go in in the order they get to the entry,
-whichever lane they come along. The barrier's one
+whichever lane they come along: a near-lane car is there a stopping distance before its place in the queue, a far-lane
+car at its turn (not when it appears, 50 m out, or is sent). The barrier's one
 arm serves both lanes, and each lane takes its own turn at it: a car going in does not wait for one going out. The arm
 is up while any car passes under it and stays down while an unknown car waits for staff (cars going out wait too). A
 car bound for P1 drives in along the exit lane, so it waits at the barrier while a car is driving out. No car drives

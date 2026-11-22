@@ -143,6 +143,57 @@ export const scenarios = [
     const toasts = await p.eval(`[...document.querySelectorAll('.pk-toast')].map(t=>t.textContent).join(' | ')`);
     expect(/ไม่อนุมัติ/.test(toasts) && !/ยืนยัน/.test(toasts), `the rejection's toast (${toasts})`);
   }},
+  {name: 'guided story: Next pulses while the story waits for it; rejected at step 3, step 4 says so', async run(p, expect) {
+    // The bar was not redrawn as Next began waiting: its pulse showed only while the next step ran. And step 4 said
+    // "Approve in one tap" over a request rejected at step 3.
+    await p.goto(parking('&story=1&auto=0'));
+    await p.until('window.__parking && __parking.story.running', {timeout: 40000});
+    await p.until('__parking.story.waitingForNext', {timeout: 30000, what: 'step 1 waiting'});
+    await p.sleep(200);
+    expect(await p.eval(`!!document.querySelector('[data-bar="next"][data-cue="true"]')`), 'Next pulses while the story waits');
+    for (let i = 0; i < 2; i++) { await p.click('[data-bar="next"]'); await p.until(`__parking.story.index===${i + 1} && __parking.story.waitingForNext`, {timeout: 30000, what: `step ${i + 2}`}); }
+    await p.eval(`__parking.sim.reject(${STORY_REQUEST}.id,'ทดสอบ')`);
+    await p.click('[data-bar="next"]');
+    await p.until('__parking.story.index===3 && __parking.story.waitingForNext', {timeout: 30000, what: 'step 4'});
+    const title = await p.eval(`document.querySelector('.pk-caption strong')?.textContent`);
+    expect(title === 'คำขอนี้ไม่ได้รับอนุมัติ', `step 4's rejected caption (${title})`);
+  }},
+  {name: 'story Pause stops the phone typing; unticking Auto-advance while paused leaves Next working', async run(p, expect) {
+    // Paused, the phone typed on; with Auto-advance then off, the bar had Next but no Resume and the step stood still.
+    await p.goto(parking('&story=1'));
+    await p.until(`window.__parking && __parking.story.running && document.querySelector('#pk-phone input[name=name]')?.value.length>2`, {timeout: 40000, what: 'step 1 typing'});
+    await p.click('[data-bar="pause"]');
+    const typed = () => p.eval(`document.querySelector('#pk-phone input[name=name]').value.length+document.querySelector('#pk-phone input[name=email]').value.length`);
+    const a = await typed(); await p.sleep(800); const b = await typed();
+    expect(b - a <= 1, `no typing while paused (${a} -> ${b} characters)`);
+    await p.eval('__parking.story.setAuto(false)');
+    expect(!await p.eval('__parking.story.paused'), 'unpaused with Auto-advance off (no Resume on the bar then)');
+    await p.until('__parking.story.index===0 && __parking.story.waitingForNext', {timeout: 30000, what: 'step 1 done, waiting for Next'});
+    await p.click('[data-bar="next"]');
+    await p.until('__parking.story.index===1', {timeout: 5000, what: 'Next moving on'});
+  }},
+  {name: 'story on auto-advance: a Reject tapped at the Approve cue is not overridden', async run(p, expect) {
+    // The story approved 2.6 s after the cue whatever the presenter had started: the reject form vanished under them.
+    await p.goto('?dest=parking&debug=1&speed=5&warm=0&story=1');
+    await p.until('window.__parking && __parking.story.running', {timeout: 40000});
+    await p.eval(`new MutationObserver((m,o)=>{const b=document.querySelector('[data-act="approve"][data-cue="true"]')&&document.querySelector('[data-act="reject"]');if(b){o.disconnect();b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));b.click();window.__tapped=performance.now()}}).observe(document.body,{subtree:true,childList:true,attributes:true})`);
+    await p.until('window.__tapped', {timeout: 60000, what: 'the Approve cue'});
+    await p.sleep(800); // 4 s of demo time: past the 2.6 s the story waited
+    const r = JSON.parse(await p.eval(`JSON.stringify({status:${STORY_REQUEST}?.status,form:!!document.querySelector('[data-act="reject-confirm"],.pk-reject textarea,textarea')})`));
+    expect(r.status === 'pending' && r.form, `still pending with the reject form open (${r.status}, form ${r.form})`);
+  }},
+  {name: 'an unknown car\'s Open reason is one choice, in the console card and the pop-up alike', async run(p, expect) {
+    // Each kept its own: the card's "plate misread", then Open in the pop-up, logged the pop-up's default.
+    await p.goto(parking());
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`void __parking.traffic.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:5,fromX:-40})`);
+    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='1กก 1111') && document.querySelector('[data-alert-reason]') && document.querySelector('[data-pop="open"]')`, {timeout: 30000, what: 'the alert in the card and the pop-up'});
+    await p.eval(`(()=>{const s=document.querySelector('[data-alert-reason]');s.value='gate.reason.misread';s.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+    const pop = await p.eval(`document.querySelector('[data-pop-reason]').value`);
+    await p.click('[data-pop="open"]');
+    const logged = await p.eval(`__parking.sim.state.audit.find(a=>a.target==='1กก 1111')?.reasonKey`);
+    expect(pop === 'gate.reason.misread' && logged === 'gate.reason.misread', `the pop-up shows and opens with the card's reason (shown ${pop}, logged ${logged})`);
+  }},
   {name: 'guided story: Free play at the approve cue does not approve', async run(p, expect) {
     await p.goto(parking('&story=1&auto=0'));
     await p.until('window.__parking && __parking.story.running', {timeout: 40000});
@@ -417,6 +468,22 @@ export const scenarios = [
     // Entry times (the log lists the newest first).
     const [nearAt, farAt] = await p.eval(`(()=>{const e=__parking.sim.state.events.filter(e=>e.kind==='entry');const at=k=>e.find(v=>__parking.sim.key(v.plate,v.province)===k)?.at;return [at(${JSON.stringify(near)}),at(${JSON.stringify(far)})]})()`);
     expect(nearAt < farAt, `the near-lane car, there first, went in first (${((farAt - nearAt) / 1000).toFixed(0)} s of demo time before the far-lane one)`);
+  }},
+  {name: 'a far-lane car nearly at its turn goes in before a near-lane car that appears further back', async run(p, expect) {
+    // A near-lane car took its turn as it appeared, 50 m out: a far-lane car reaching its turn first stood there
+    // signalling while the near-lane one drove up and went in.
+    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
+    await p.until(ready, {timeout: 40000});
+    const [far, near] = JSON.parse(await p.eval(`JSON.stringify((()=>{const sim=__parking.sim,t=__parking.traffic,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));
+      t.passBy=()=>false;
+      const [a,b]=sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
+      void t.arrive({plate:a.plate,province:a.province,color:a.color,west:true});
+      // Some 2 s of demo time before the far-lane car gets to its turn (112 m at 8 m/s from when it appears).
+      const go=()=>{if(!t.inspect().westOnStreet)return setTimeout(go,20);setTimeout(()=>void t.arrive({plate:b.plate,province:b.province,color:b.color,fromX:-70}),1200)};go();
+      return [sim.key(a.plate,a.province),sim.key(b.plate,b.province)]})())`));
+    await p.until(`[${JSON.stringify(far)},${JSON.stringify(near)}].every(k=>__parking.sim.state.presence.has(k))`, {timeout: 40000, what: 'both cars in'});
+    const [nearAt, farAt] = await p.eval(`(()=>{const e=__parking.sim.state.events.filter(e=>e.kind==='entry');const at=k=>e.find(v=>__parking.sim.key(v.plate,v.province)===k)?.at;return [at(${JSON.stringify(near)}),at(${JSON.stringify(far)})]})()`);
+    expect(farAt < nearAt, `the far-lane car, at the entry first, went in first (${((nearAt - farAt) / 1000).toFixed(0)} s of demo time before the near-lane one)`);
   }},
   {name: 'a car from the near lane signals left before turning in', async run(p, expect) {
     // speed 10: at 30 a flash lasts 13 ms and the car is on the street for ~170 ms, so the samples could miss them all.
@@ -1052,6 +1119,22 @@ export const scenarios = [
       expect(r.w > r.vw * .8 && r.top >= 0 && r.bottom >= 0, `${w}×${h}: the caption across the view (${Math.round(r.w)} of ${Math.round(r.vw)} px), inside it`);
     }
     await viewport(p);
+  }},
+  {name: 'camera up and down: the ▲ ▼ buttons and Page Up / Page Down change the height, still looking at the same point', async run(p, expect) {
+    // Panning keeps the height, so the height has its own control.
+    await p.goto(`?${FAST}&dest=energy`);
+    await p.until(`${IDLE} && document.body.dataset.tourDestination==='energy'`, {timeout: 40000, what: 'at the energy stop'});
+    const pose = async () => JSON.parse(await p.eval(`JSON.stringify({y:__camera.position.y,t:__controls.target.toArray()})`));
+    const a = await pose();
+    await p.click('#view-up'); await p.sleep(450);
+    const b = await pose();
+    await p.click('#view-down'); await p.sleep(450); await p.click('#view-down'); await p.sleep(450);
+    const c = await pose();
+    await p.eval(`document.querySelector('#viewport canvas').dispatchEvent(new KeyboardEvent('keydown',{key:'PageUp',code:'PageUp',bubbles:true,cancelable:true}))`);
+    const d = await pose();
+    const same = (u, v) => u.t.every((x, i) => Math.abs(x - v.t[i]) < 1e-6);
+    expect(b.y > a.y + .9 && c.y < b.y - 1 && d.y > c.y + .9, `the height goes up, down and up with Page Up (${[a, b, c, d].map(x => x.y.toFixed(1)).join(' → ')} m)`);
+    expect(same(a, b) && same(b, c) && same(c, d), 'still looking at the same point');
   }},
   {name: 'idle orbit: scrolling the panel leaves it turning; a wheel on the 3D view stops it', async run(p, expect) {
     await p.goto('?debug=1&dest=energy');
