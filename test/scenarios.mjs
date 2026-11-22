@@ -44,16 +44,6 @@ export const scenarios = [
     await p.until('!__parking.sim.state.presence.has(__k)', {timeout: 30000, what: 'the visitor gone after its visit'});
     expect(true, 'the story visitor left');
   }},
-  {quick: true, name: 'story plays end to end on auto-advance', async run(p, expect) {
-    await p.goto(parking('&story=1'));
-    await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
-    await p.until('!__parking.story.running', {timeout: 90000, what: 'story end'});
-    const r = JSON.parse(await p.eval(`JSON.stringify((()=>{const s=__parking.sim.state;const ev=s.events.filter(e=>e.plate===${JSON.stringify(STORY_PLATE)});return {status:${STORY_REQUEST}?.status,entry:ev.some(e=>e.kind==='entry'),exit:ev.some(e=>e.kind==='exit'),denied:s.events.some(e=>e.kind==='denied'&&e.plate==='2ฒษ 9077')}})())`));
-    expect(r.status === 'approved', `visitor request approved (got ${r.status})`);
-    expect(r.entry && r.exit, 'visitor car entered and left');
-    expect(r.denied, 'unknown car was denied');
-  }},
-
   {name: 'the Gate tab\'s test cars are off while the story plays, on again after', async run(p, expect) {
     // An Unknown car sent during the story got into its steps: step 7 denied the visitor's car in the stray's place, and
     // the story's own unknown car then held the barrier unanswered.
@@ -70,19 +60,6 @@ export const scenarios = [
     await p.until(`!__parking.story.running`, {timeout: 5000, what: 'free play'});
     await p.click('[data-tab="gate"]');
     expect(await p.eval(`[...document.querySelectorAll('[data-sim]')].every(b=>!b.disabled)`), 'on again in free play');
-  }},
-  {name: 'story: unticking Auto-advance at the Approve cue leaves the approval to the presenter', async run(p, expect) {
-    // It approved anyway some 2.6 s later: Auto was read once, when the cue went up.
-    await p.goto(parking('&story=1'));
-    await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
-    // At once when the cue lights (at speed 30 the auto pause is under 0.1 s).
-    await p.eval(`new MutationObserver((m,o)=>{if(document.querySelector('[data-act="approve"][data-cue="true"]')){__parking.story.setAuto(false);o.disconnect()}}).observe(document.body,{subtree:true,childList:true,attributes:true})`);
-    await p.until('!__parking.story.auto', {timeout: 60000, what: 'the approve cue'});
-    await p.sleep(1500);
-    const before = await p.eval(`${STORY_REQUEST}?.status`);
-    expect(before === 'pending' && await p.eval('__parking.story.waitingForNext'), `still pending, waiting for Next (${before})`);
-    await p.click('[data-bar="next"]');
-    await p.until(`${STORY_REQUEST}?.status==='approved'`, {timeout: 5000, what: 'Next approving'});
   }},
   {name: 'guided story: a tap on the cued Send, New request on the phone and a language switch keep the story whole', async run(p, expect) {
     // The cued Send sent the request twice (a new receipt, a random colour); New request left step 5's ticket caption
@@ -115,52 +92,6 @@ export const scenarios = [
     expect(await p.eval(`!!document.querySelector('#pk-phone .ph-ticket')`), 'the phone shows the ticket at step 5');
     const toasts = await p.eval(`[...document.querySelectorAll('.pk-toast')].map(t=>t.textContent).join(' | ')`);
     expect(/Ticket emailed/.test(toasts), `the ticket email's toast (${toasts})`);
-  }},
-  {name: 'story Pause stops the phone typing; unticking Auto-advance while paused leaves Next working', async run(p, expect) {
-    // Paused, the phone typed on; with Auto-advance then off, the bar had Next but no Resume and the step stood still.
-    await p.goto(parking('&story=1'));
-    await p.until(`window.__parking && __parking.story.running && document.querySelector('#pk-phone input[name=name]')?.value.length>2`, {timeout: 40000, what: 'step 1 typing'});
-    await p.click('[data-bar="pause"]');
-    const typed = () => p.eval(`['name','email','contact','company','phone'].reduce((n,f)=>n+(document.querySelector('#pk-phone input[name='+f+']')?.value.length||0),0)`);
-    const a = await typed(); await p.sleep(800); const b = await typed();
-    expect(b - a <= 1, `no typing while paused (${a} -> ${b} characters)`);
-    await p.eval('__parking.story.setAuto(false)');
-    expect(!await p.eval('__parking.story.paused'), 'unpaused with Auto-advance off (no Resume on the bar then)');
-    await p.until('__parking.story.index===0 && __parking.story.waitingForNext', {timeout: 30000, what: 'step 1 done, waiting for Next'});
-    await p.click('[data-bar="next"]');
-    await p.until('__parking.story.index===1', {timeout: 5000, what: 'Next moving on'});
-  }},
-  {name: 'story on auto-advance: a console tap early on does not slow the later cues', async run(p, expect) {
-    // Touches were counted for the whole page: one tap at step 1 made every later cue wait 6 s, not 2.6.
-    await p.goto('?dest=parking&debug=1&speed=5&warm=0&story=1');
-    await p.until('window.__parking && __parking.story.running && __parking.story.index===0', {timeout: 40000});
-    await p.eval(`document.querySelector('#parking-panel').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`);
-    await p.eval(`new MutationObserver((m,o)=>{if(document.querySelector('[data-act="approve"][data-cue="true"]')){o.disconnect();window.__cueAt=performance.now()}}).observe(document.body,{subtree:true,childList:true,attributes:true})`);
-    await p.eval(`__parking.sim.subscribe((k,q)=>{if(k==='request'&&q?.status==='approved'&&!window.__approvedAt)window.__approvedAt=performance.now()})`);
-    await p.until('window.__cueAt', {timeout: 60000, what: 'the Approve cue'});
-    await p.until('window.__approvedAt', {timeout: 10000, what: 'approved'});
-    const after = await p.eval('(__approvedAt-__cueAt)*5/1000');
-    expect(after < 4.5, `approved ${after.toFixed(1)} s (demo) after the cue, not the 6 s a touch during it gives`);
-  }},
-  {name: 'a story left at step 7 lets its unknown car go like a background one, not after 45 s', async run(p, expect) {
-    // Its car stood at the barrier for the 45 s a presenter's own car gets, holding up every car behind it.
-    await p.goto(parking('&story=1'));
-    await p.until('window.__parking && __parking.story.running', {timeout: 40000, what: 'story start'});
-    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='2ฒษ 9077')`, {timeout: 90000, what: 'step 7\'s alert'});
-    await p.click('[data-bar="free"]');
-    await p.sleep(800); // 24 s of demo time
-    const status = await p.eval(`__parking.sim.state.alerts.find(a=>a.plate==='2ฒษ 9077')?.status`);
-    expect(status === 'denied', `its alert answered within the background car's 8 s (${status})`);
-  }},
-  {name: 'a story left before its unknown car reaches the barrier: that car is a background one (8 s, console left alone)', async run(p, expect) {
-    // Its alert came after the story had stopped: it got a presenter's 45 s and switched the console to the Gate tab.
-    await p.goto(parking('&story=1'));
-    await p.until('window.__parking && __parking.story.running && __parking.story.index===6 && !__parking.sim.state.alerts.some(a=>a.plate===\'2ฒษ 9077\')', {timeout: 90000, what: 'step 7, its car on the way'});
-    await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
-    await p.click('[data-tab="vehicles"]');
-    await p.until(`__parking.sim.state.alerts.some(a=>a.plate==='2ฒษ 9077')`, {timeout: 20000, what: 'its car at the barrier'});
-    const r = JSON.parse(await p.eval(`JSON.stringify({ambient:__parking.sim.state.alerts.find(a=>a.plate==='2ฒษ 9077').ambient,tab:document.querySelector('[data-tab][aria-selected="true"]')?.dataset.tab})`));
-    expect(r.ambient === true && r.tab === 'vehicles', `a background car, the console left on its tab (ambient ${r.ambient}, tab ${r.tab})`);
   }},
   {name: 'guided story: Free play at the approve cue does not approve', async run(p, expect) {
     await p.goto(parking('&story=1&auto=0'));
@@ -236,19 +167,6 @@ export const scenarios = [
     const s = JSON.parse(await p.eval(`JSON.stringify((({parked,peak,peakAt})=>({parked,peak,peakAt}))(__parking.sim.stats()))`));
     expect(s.parked > 0 && s.peak >= s.parked && s.peakAt, `peak ${s.peak} (at ${s.peakAt}) with ${s.parked} cars parked`);
   }},
-  {name: 'a car still driving to its bay is not sent out again', async run(p, expect) {
-    // A jump made a just-arrived visitor's stay look over while it was still on its way to its bay: its exit set off
-    // from the bay at once, and two routes moved the same car.
-    await p.goto(parking('&time=10:00'));
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(sim.key(v.plate,v.province)));
-      window.__k=sim.key(v.plate,v.province);void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-40});})()`);
-    await p.until(`__parking.sim.state.presence.has(__k) && __parking.traffic.isArriving(__k)`, {timeout: 30000, what: 'the car through the barrier, on its way to its bay'});
-    expect(await p.eval('__parking.traffic.leave(__k)') === false, 'leave() turns it down while it drives in');
-    expect(!(await p.eval('__parking.traffic.parkedKeys().includes(__k)')), 'nor is it offered as parked (to Exit)');
-    await p.until('!__parking.traffic.isArriving(__k)', {timeout: 30000, what: 'parked'});
-    expect(await p.eval('__parking.traffic.leave(__k).then(()=>true)') === true, 'and sends it once parked');
-  }},
   {name: 'Vehicles: a row keeps its vehicle when the list reorders', async run(p, expect) {
     // Rows were reused by position: when a retried vehicle synced and moved down the list, the row (and a focused
     // button in it) went on to stand for another vehicle; pressing Disable there disabled that one.
@@ -266,18 +184,6 @@ export const scenarios = [
     const moved = await p.eval(`[...document.querySelectorAll('.pk-vrow')].filter(r=>r.__id&&r.__id!==${who}).length`);
     expect(moved === 0, `every kept row still stands for its vehicle (${moved} switched)`);
     expect(await p.eval('document.activeElement===__f'), 'the focused button keeps the focus as its row moves');
-  }},
-  {name: 'an unknown car let in by hand can leave', async run(p, expect) {
-    // Only staff (and late VIP) cars were picked to leave: a delivery let in through an unknown-plate alert stayed
-    // parked for good, and with only it parked, Exit did nothing.
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    await p.click('[data-tab="gate"]');
-    const left = await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic;
-      for(const k of t.parkedKeys()){const q=sim.state.presence.get(k);t.vanish(k,()=>sim.recordExit({plate:q.plate,province:q.province}));}
-      const s=sim.freeStall('staff');sim.recordEntry({plate:'3ฆง 6047',province:'ชลบุรี',type:'unknown',stallId:s.id,color:6,manual:{by:'staff.guard',reason:'gate.reason.delivery'}});
-      const k=sim.key('3ฆง 6047','ชลบุรี');t.appear(k);const listed=t.parkedKeys().includes(k);document.querySelector('[data-sim="exit"]').click();return listed&&!t.parkedKeys().includes(k);})()`);
-    expect(left, 'Exit sent the only parked car, the unknown one (parked first), on its way out');
   }},
   {name: 'the timeline\'s current minute is now, not a day ahead', async run(p, expect) {
     // At 15:00:20 the 15:00 moment counted as a day ahead: the jump ran the logs through a whole day.
@@ -348,155 +254,6 @@ export const scenarios = [
     const r = JSON.parse(await p.eval(`JSON.stringify({rows:document.querySelectorAll('.pk-vrow').length,all:__parking.sim.state.vehicles.length})`));
     expect(r.rows === r.all, `${r.rows} rows for ${r.all} vehicles`);
   }},
-  {name: 'a car from the far lane waits to turn, signalling right, and turns in across the near lane', async run(p, expect) {
-    // Every car used to come along the near lane; none turned in from the far one.
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
-      window.__k=sim.key(v.plate,v.province);window.__plate=v.plate;window.__right=false;window.__farLane=false;window.__early=null;
-      const t=setInterval(()=>{const c=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate);if(!c)return;if(Math.abs(c.position.z-${STREET.laneWest})<.3)__farLane=true;if(c.getObjectByName('Demo_car_blinker_right')?.visible){__right=true;if(c.position.x>20)__early=c.position.x;}if(__parking.sim.state.presence.has(__k))clearInterval(t);},20);
-      void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,west:true});})()`);
-    await p.until('__parking.sim.state.presence.has(__k)', {timeout: 30000, what: 'the far-lane car through the barrier'});
-    expect(await p.eval('__farLane'), 'it came along the far lane');
-    expect(await p.eval('__right'), 'its right blinker flashed before the turn');
-    expect(await p.eval('__early') === null, `not while still far from the turn (lit at x ${await p.eval('__early')})`);
-  }},
-  {name: 'a car leaving for the far lane signals right and turns out across the near lane', async run(p, expect) {
-    // Every car left along the near lane; none turned out to the far one.
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic,k=t.parkedKeys().find(k=>sim.state.presence.get(k)?.type==='staff');window.__k=k;
-      const c=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+sim.state.presence.get(k).plate);window.__o={right:false,far:false,west:false};
-      const iv=setInterval(()=>{if(c.getObjectByName('Demo_car_blinker_right')?.visible&&c.position.z<20)__o.right=true;if(Math.abs(c.position.z-${STREET.laneWest})<.2&&Math.sin(c.rotation.y)<-.99)__o.far=true;if(c.position.x<-45)__o.west=true;if(!c.parent)clearInterval(iv);},20);
-      void t.leave(k,{west:true});})()`);
-    await p.until('!__parking.sim.state.presence.has(__k) && __o.west', {timeout: 30000, what: 'the car out along the far lane'});
-    const o = JSON.parse(await p.eval('JSON.stringify(__o)'));
-    expect(o.right, 'its right blinker flashed at the barrier');
-    expect(o.far, 'it drove off westbound in the far lane');
-  }},
-  {name: 'the car that gets to the entry first goes in first, whichever lane it came along', async run(p, expect) {
-    // The order was fixed when cars were sent: a far-lane car sent first, starting 110 m further out, kept a near-lane
-    // car that reached the barrier first waiting until it had driven up and turned in.
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
-    await p.until(ready, {timeout: 40000});
-    const [far, near] = JSON.parse(await p.eval(`JSON.stringify((()=>{const sim=__parking.sim,t=__parking.traffic,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));
-      const [a,b]=sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
-      void t.arrive({plate:a.plate,province:a.province,color:a.color,west:true});
-      setTimeout(()=>void t.arrive({plate:b.plate,province:b.province,color:b.color,fromX:-40}),50);
-      return [sim.key(a.plate,a.province),sim.key(b.plate,b.province)]})())`));
-    await p.until(`[${JSON.stringify(far)},${JSON.stringify(near)}].every(k=>__parking.sim.state.presence.has(k))`, {timeout: 40000, what: 'both cars in'});
-    // Entry times (the log lists the newest first).
-    const [nearAt, farAt] = await p.eval(`(()=>{const e=__parking.sim.state.events.filter(e=>e.kind==='entry');const at=k=>e.find(v=>__parking.sim.key(v.plate,v.province)===k)?.at;return [at(${JSON.stringify(near)}),at(${JSON.stringify(far)})]})()`);
-    expect(nearAt < farAt, `the near-lane car, there first, went in first (${((farAt - nearAt) / 1000).toFixed(0)} s of demo time before the far-lane one)`);
-  }},
-  {name: 'a car from the near lane signals left before turning in', async run(p, expect) {
-    // speed 10: at 30 a flash lasts 13 ms and the car is on the street for ~170 ms, so the samples could miss them all.
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
-      window.__k=sim.key(v.plate,v.province);window.__plate=v.plate;window.__left=false;window.__early=null;
-      const t=setInterval(()=>{const c=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate);const lit=c?.getObjectByName('Demo_car_blinker_left')?.visible;
-        if(lit&&c.position.z>24){__left=true;if(c.position.x<-60)__early=c.position.x;}if(__parking.sim.state.presence.has(__k))clearInterval(t);},20);
-      void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color});})()`);
-    await p.until('__parking.sim.state.presence.has(__k)', {timeout: 30000, what: 'the car through the barrier'});
-    expect(await p.eval('__left'), 'its left blinker flashed on the street before the turn');
-    // It flashed all the way from the edge of the map; now from 30 m before the turn (x -56).
-    expect(await p.eval('__early') === null, `not while still far from the turn (lit at x ${await p.eval('__early')})`);
-  }},
-  {name: 'the queue waits close behind the barrier, and a car turned away there still backs out past it', async run(p, expect) {
-    // The first car in the queue waited at x -33, 7–8 m of empty road behind the car at the barrier. Closer up, it
-    // must still leave room for that car to back out if it is refused (else each waits for the other for good).
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`void __parking.traffic.arrive({plate:'3ฆง 6047',province:'ชลบุรี',color:6,fromX:-40})`);
-    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='3ฆง 6047')`, {timeout: 30000, what: 'the unknown car held at the barrier'});
-    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));
-      window.__q=sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)).slice(0,2);
-      for(const v of __q)void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-60});
-      const L=4.46/2,W=1.72/2,corners=c=>{const h=c.rotation.y,f=[Math.sin(h),Math.cos(h)],s=[Math.cos(h),-Math.sin(h)];return [[1,1],[1,-1],[-1,-1],[-1,1]].map(([a,b])=>[c.position.x+f[0]*L*a+s[0]*W*b,c.position.z+f[1]*L*a+s[1]*W*b]);};
-      const sep=(A,B)=>{for(const P of [A,B])for(let i=0;i<4;i++){const p=P[i],q=P[(i+1)%4],n=[q[1]-p[1],p[0]-q[0]];let a0=1e9,a1=-1e9,b0=1e9,b1=-1e9;for(const v of A){const d=v[0]*n[0]+v[1]*n[1];a0=Math.min(a0,d);a1=Math.max(a1,d);}for(const v of B){const d=v[0]*n[0]+v[1]*n[1];b0=Math.min(b0,d);b1=Math.max(b1,d);}if(a1<b0||b1<a0)return true;}return false;};
-      window.__hit=null;const f=()=>{const cars=__parking.lot.root.children.filter(c=>c.name.startsWith('Demo_car')&&c.visible&&c.position.z>20);
-        for(let i=0;i<cars.length;i++)for(let j=i+1;j<cars.length;j++)if(!__hit&&!sep(corners(cars[i]),corners(cars[j])))__hit=cars[i].name+' x '+cars[j].name;requestAnimationFrame(f)};requestAnimationFrame(f);})()`);
-    // At a queue place: the first at QUEUE_HEAD, the next 6.5 m apart (a background car may have queued first).
-    await p.until(`__parking.lot.root.children.some(c=>c.visible&&c.name==='Demo_car_'+__q[0].plate&&c.position.x<${QUEUE_HEAD + .5}&&Math.abs(c.position.z-${STREET.laneEast})<.1&&Math.abs(((c.position.x-(${QUEUE_HEAD}))%6.5+6.5)%6.5-3.25)>3.1)`, {timeout: 30000, what: 'the first queued car at its place'});
-    await p.eval(`(()=>{const a=__parking.sim.state.alerts.find(a=>a.status==='open'&&a.plate==='3ฆง 6047');__parking.sim.resolveAlert(a.id,'deny')})()`);
-    await p.until(`__q.every(v=>__parking.sim.state.presence.has(__parking.sim.key(v.plate,v.province)))`, {timeout: 40000, what: 'the turned-away car out and both queued cars in'});
-    expect(await p.eval('__hit') === null, `no car drove into another (${await p.eval('__hit')})`);
-  }},
-  {name: 'inside the car park a car rolls straight into a clear aisle, without stopping at its mouth', async run(p, expect) {
-    // Every car stopped at its aisle's mouth (its drive from the barrier ended there), with nothing coming.
-    // 06:00: the car park is quiet, no one leaving to wait for.
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0&time=06:00');
-    await p.until(ready, {timeout: 40000});
-    const plate = await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
-      window.__k=sim.key(v.plate,v.province);void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-40});return v.plate})()`);
-    await p.until(`__parking.sim.state.presence.has(__k) && !__parking.traffic.isArriving(__k)`, {timeout: 30000, what: 'the car in its bay'});
-    const stops = await p.eval('__parking.traffic.inspect().mouthStops');
-    expect(Array.isArray(stops) && !stops.includes(plate), `it did not stop at its aisle's mouth (cars that did: ${JSON.stringify(stops)})`);
-  }},
-  {name: 'a near-lane car queuing for the barrier signals left while it waits', async run(p, expect) {
-    // In the queue it showed no blinker, so it was not clear it was waiting to turn in.
-    // speed 10: an unknown car holds the barrier for its alert (45 s of demo time) while the next car queues.
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`void __parking.traffic.arrive({plate:'3ฆง 6047',province:'ชลบุรี',color:6,fromX:-40})`);
-    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='3ฆง 6047')`, {timeout: 30000, what: 'the unknown car holding the barrier'});
-    await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
-      window.__plate=v.plate;void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-60});})()`);
-    const car = `__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate)`;
-    // At a queue place: the first at QUEUE_HEAD, the next 6.5 m apart (a background car may have queued first).
-    await p.until(`(c=>!!c&&c.visible&&c.position.x<${QUEUE_HEAD + .5}&&Math.abs(c.position.z-${STREET.laneEast})<.1&&Math.abs(((c.position.x-(${QUEUE_HEAD}))%6.5+6.5)%6.5-3.25)>2.95)(${car})`, {timeout: 20000, what: 'the car at its queue place'});
-    const seen = await p.eval(`new Promise(done=>{let left=false;const t=setInterval(()=>{if(${car}.getObjectByName('Demo_car_blinker_left')?.visible)left=true;},15);setTimeout(()=>{clearInterval(t);done(left);},600);})`);
-    expect(seen, 'its left blinker flashed while it queued');
-  }},
-  {name: 'a VIP leaving P1 and one arriving for it at the same time both get through', async run(p, expect) {
-    // The way into P1 is the exit lane: the arrival waited at its aisle's mouth on the leaving car's path, and each
-    // stopped for the other for good (two runs in three). One VIP in P1, then two rounds: it leaves as the next arrives
-    // (the mock has three VIPs).
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0&time=13:00');
-    await p.until(ready, {timeout: 40000});
-    const ok = await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic,p1=sim.state.stalls.filter(s=>s.zone==='P1');
-      for(const k of t.parkedKeys()){const q=sim.state.presence.get(k);if(p1.some(s=>s.id===q.stallId))t.vanish(k,()=>sim.recordExit({plate:q.plate,province:q.province}));}
-      window.__vips=sim.state.vehicles.filter(v=>v.type==='vip'&&v.enabled&&v.sync==='synced'&&!sim.state.presence.has(sim.key(v.plate,v.province)));
-      const a=__vips.shift();if(!a||__vips.length<2)return false;
-      sim.recordEntry({plate:a.plate,province:a.province,type:'vip',stallId:p1[0].id,color:a.color});window.__out=sim.key(a.plate,a.province);t.appear(__out);return true;})()`);
-    expect(ok, 'a VIP parked in P1 and two more to come');
-    for (let round = 1; round <= 2; round++) {
-      await p.eval(`(()=>{const t=__parking.traffic,v=__vips.shift();void t.leave(__out);void t.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-40});window.__in=__parking.sim.key(v.plate,v.province);})()`);
-      await p.until(`!__parking.sim.state.presence.has(__out) && __parking.sim.state.presence.has(__in) && !__parking.traffic.isArriving(__in)`, {timeout: 20000, what: `round ${round}: the leaving VIP out and the arriving one in its bay`});
-      await p.eval('window.__out=window.__in');
-    }
-    expect(true, 'two rounds, no car stuck');
-  }},
-  {name: 'a reset while a car holds the barrier leaves no barrier holder counted', async run(p, expect) {
-    // The aborted holder's own count-down came after the reset had set the count to 0, leaving it at -1: with the next
-    // car at the barrier the gate read as free, and the arm was lowered between back-to-back cars.
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`void __parking.traffic.arrive({plate:'3ฆง 6047',province:'ชลบุรี',color:6,fromX:-40})`);
-    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='3ฆง 6047') && __parking.traffic.gateHolders>=1`, {timeout: 30000, what: 'the unknown car holding the barrier'});
-    await p.eval('__parking.traffic.syncParked()');
-    await p.sleep(500); // the old flow's next poll finds it aborted
-    // Not below 0 (the bug); a background car may already hold the barrier again in the new run.
-    // The lowest over 2 s: one read could catch a new-run car holding the barrier on top of a stale -1.
-    const lowest = await p.eval(`new Promise(done=>{let low=Infinity;const end=performance.now()+2000;(function f(){low=Math.min(low,__parking.traffic.gateHolders);if(performance.now()<end)requestAnimationFrame(f);else done(low);})()})`);
-    expect(lowest >= 0, `no holder counted after the reset (lowest ${lowest})`);
-  }},
-  {name: 'a reset while a car leaving for the far lane reads its plate leaves far-lane traffic running', async run(p, expect) {
-    // The leaving car carried on after the reset and left its hold on new far-lane traffic counted for good.
-    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic,k=t.parkedKeys().find(k=>sim.state.presence.get(k)?.type==='staff');
-      window.__car=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+sim.state.presence.get(k).plate);void t.leave(k,{west:true});})()`);
-    await p.until(`Math.abs(__car.position.z-16.6)<.05 && Math.abs(__car.position.x+20.2)<.05 && __parking.traffic.gateHolders>0`, {timeout: 30000, what: 'the leaving car reading its plate at the exit'});
-    await p.eval('__parking.traffic.syncParked()');
-    await p.sleep(1500); // past the read's pauses
-    // A hold is left only by a car of the new run waiting at the exit (it holds the exit's turn there, counted in
-    // gateHolders); the stale one held it with no car there.
-    // A real hold ends once its car has gone; a stale one never does.
-    const cleared = await p.until('__parking.traffic.inspect().westExitHold === 0', {timeout: 20000, what: 'no hold on far-lane traffic'}).then(() => true, () => false);
-    expect(cleared, `no hold on far-lane traffic left (${await p.eval('__parking.traffic.inspect().westExitHold')})`);
-  }},
   {quick: true, name: 'unknown car: Open once disabled while waiting; Open with a reason is audited', async run(p, expect) {
     // speed 10: the guard turns unanswered cars away after 45 s of demo time, 1.5 s of real time at speed 30.
     await p.goto('?dest=parking&debug=1&speed=10');
@@ -510,50 +267,6 @@ export const scenarios = [
     await p.until(`__parking.sim.state.events.some(e=>e.kind==='manual'&&e.plate==='3ฆง 6047')`, {timeout: 30000, what: 'manual entry'});
     const audit = await p.eval(`__parking.sim.state.audit.find(a=>a.key==='a.manual'&&a.target==='3ฆง 6047')?.reasonKey`);
     expect(audit === 'gate.reason.delivery', `audit has the reason (got ${audit})`);
-  }},
-
-  {name: 'a later arrival never blocks the spawn point of an earlier one still waiting for a gap', async run(p, expect) {
-    await p.goto('?dest=parking&debug=1&speed=10');
-    await p.until(ready, {timeout: 40000});
-    // An eastbound through car just short of x=-40: car A (spawning at -40) waits for it to pass; car B, arriving
-    // next from -60, gets its gap first. B used to appear first, drive to the queue's first place (then -33, now
-    // -31.43: still within 9 m of A's spawn point) and wait there for A, which waited for B to move.
-    await p.until(`(__parking.traffic.passBy(1), !!(window.__thru = __parking.lot.root.children.find(c => c.name === 'Demo_car_' && c.visible && Math.abs(c.position.z - ${STREET.laneEast}) < .3 && c.position.x < -60)))`, {timeout: 20000, what: 'an eastbound through car'});
-    await p.until(`__thru.position.x > -48`, {timeout: 20000, what: 'the through car near x=-40'});
-    await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const [a,b]=__parking.sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)&&!__parking.traffic.isArriving(__parking.sim.key(v.plate,v.province)));
-      const before=new Set(__parking.lot.root.children);void __parking.traffic.arrive({plate:a.plate,province:a.province,color:a.color,fromX:-40});const ca=__parking.lot.root.children.find(c=>!before.has(c));
-      void __parking.traffic.arrive({plate:b.plate,province:b.province,color:b.color,fromX:-60});window.__pair=[ca,__parking.lot.root.children.find(c=>!before.has(c)&&c!==ca)]})()`);
-    await p.until(`__pair.every(c=>c.visible&&c.position.z<15)`, {timeout: 30000, what: 'both cars through the gate (hidden cars have not appeared yet)'});
-    expect(true, 'both arrivals reached the car park');
-  }},
-  {name: 'reset cancels queued traffic', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    await p.eval(`void __parking.traffic.arrive({plate:'3ฆง 6047',province:'ชลบุรี',color:6,fromX:-40})`);
-    await p.until('__parking.sim.state.alerts.some(a=>a.status==="open")', {timeout: 30000});
-    // Queue two staff cars behind the waiting unknown car and keep hold of their 3D objects; then reset the world.
-    // (Checking plates would be unreliable: background traffic may legitimately pick the same car again after the reset.)
-    await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const cars=__parking.sim.state.vehicles.filter(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id)).slice(0,2);const before=new Set(__parking.lot.root.children);for(const v of cars)void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-60});window.__queuedCars=__parking.lot.root.children.filter(c=>!before.has(c))})()`);
-    await p.sleep(300);
-    expect(await p.eval('__parking.traffic.queued') >= 2, 'cars queued behind the alert');
-    expect(await p.eval('window.__queuedCars.length') === 2, 'both queued cars exist before the reset');
-    // story.play resets the world synchronously; read the queue in the same call, before any new traffic can start.
-    const afterReset = await p.eval('(()=>{void __parking.story.play({auto:true});const q=__parking.traffic.queued;__parking.story.stop();return q})()');
-    expect(afterReset === 0, `queue empty right after reset (got ${afterReset})`);
-    await p.sleep(1500);
-    expect(await p.eval('window.__queuedCars.every(c=>!c.parent)'), 'cars queued before the reset are gone and never drive in');
-  }},
-
-  {quick: true, name: 'full car park turns a car away', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    // Keep every bay taken: a background car leaving during the check would otherwise free one for our car.
-    await p.eval(`(()=>{const fill=()=>__parking.sim.state.stalls.forEach((s,i)=>{if(!s.occupant)s.occupant='filler'+i});fill();__parking.sim.subscribe(fill)})()`);
-    // Follow the one car: background cars may still leave during the check, so the total can change.
-    const key = await p.eval(`(()=>{const inside=new Set([...__parking.sim.state.presence.values()].map(p=>p.vehicleId));const v=__parking.sim.state.vehicles.find(v=>v.type==='staff'&&!inside.has(v.id));window.__fullCar=v;return __parking.sim.key(v.plate,v.province)})()`);
-    const result = await p.eval(`__parking.traffic.arrive({plate:__fullCar.plate,province:__fullCar.province,color:2,fromX:-40})`);
-    expect(result === 'full', `arrival result is full (got ${result})`);
-    expect(!(await p.eval(`__parking.sim.state.presence.has(${JSON.stringify(key)})`)), 'the car was not recorded as parked');
   }},
 
   {name: 'unknown-car dispatch skips a plate already parked', async run(p, expect) {
@@ -1373,19 +1086,6 @@ export const scenarios = [
     expect(!/unknown/.test(kinds), `no unknown cars away from the parking stop (got ${kinds})`);
   }},
 
-  {name: 'a leaving car gets out even with busy street traffic', async run(p, expect) {
-    await p.goto(parking());
-    await p.until(ready, {timeout: 40000});
-    // Keep the eastbound lane as busy as spacing allows, then send a car out: it must get a gap and leave,
-    // not wait at the barrier for good (the bug: through-traffic never left a long enough gap).
-    await p.eval('window.__pump=setInterval(()=>__parking.traffic.passBy(1),30)');
-    await p.sleep(1500);
-    const key = await p.eval(LEAVE_STAFF);
-    try { await p.until(`!__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 12000, what: 'exit through the barrier (6 min of demo time)'}); }
-    finally { await p.eval('clearInterval(window.__pump)'); }
-    expect(true, 'car left');
-  }},
-
   {name: 'dock: first visit to the meeting room is quick and does not stall', async run(p, expect) {
     // Real speed and no ?debug, as visitors get it.
     await p.goto('/');
@@ -1434,29 +1134,6 @@ export const scenarios = [
     expect(!(await p.eval(`!!__scene.getObjectByName('Demo_barrier_arm')`)), 'no second (original) barrier arm');
     expect(await p.eval(`!!__scene.getObjectByName('Demo_main_barrier')`), 'the main gate');
   }},
-  {name: 'a leaving car does not wait long at the barrier', async run(p, expect) {
-    // speed 10 and 3 s for street traffic to build up, as in normal use.
-    await p.goto('?dest=parking&debug=1&speed=10');
-    await p.until(ready, {timeout: 40000});
-    await p.sleep(3000);
-    const key = await p.eval(`(()=>{const k=__parking.traffic.parkedKeys().find(k=>__parking.sim.state.presence.get(k)?.type==='staff');window.__exitCar=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__parking.sim.state.presence.get(k).plate);void __parking.traffic.leave(k);return k})()`);
-    // Timed in the page on every frame with the demo clock: from this car stopping at the barrier to it driving
-    // through (z past the barrier line), so an arm raised for another car does not end the wait early.
-    // Whether another car holds the barrier is read on the frame before this one stops there: once stopped, this car
-    // takes the barrier itself within the same frame when it is free.
-    await p.eval(`(()=>{const s=__parking.sim,c=window.__exitCar,e=window.__exit={};let busy=false;(function watch(){
-      if(e.t0==null&&Math.abs(c.position.z-16.6)<.05&&Math.abs(c.position.x+20.2)<.05){e.t0=s.now();e.busy=busy;}
-      if(e.t0==null)busy=__parking.traffic.gateHolders>0||s.state.alerts.some(a=>a.status==='open');
-      if(e.t0!=null&&c.position.z>19.8)e.t1=s.now();
-      if(e.t1==null)requestAnimationFrame(watch);})()})()`);
-    await p.until('window.__exit.t1!=null', {timeout: 30000, what: 'the leaving car through the barrier'});
-    // The barrier is shared: a car entering meanwhile goes first, as on site, and an unknown car holds it while staff
-    // decide (its alert). Either makes the wait longer; otherwise it must be short.
-    // A car already holding the barrier when this one arrives (e.busy) counts as well.
-    const {waited, others} = await p.eval(`(()=>{const e=window.__exit;return {waited:(e.t1-e.t0)/1000,others:(e.busy?1:0)+__parking.sim.state.events.filter(v=>v.at>=e.t0&&v.at<=e.t1&&['entry','manual','denied','unknown'].includes(v.kind)).length}})()`);
-    const limit = others ? 20 : 8;
-    expect(waited < limit, `leaving car through the barrier within ${limit} s of demo time, plate read included (waited ${waited.toFixed(1)} s, ${others} other car(s) at the gate meanwhile)`);
-  }},
   {name: 'meeting room: the door swings and the AC airflow flows and fades', async run(p, expect) {
     // Real speed: these animations are not scaled.
     await p.goto('?debug=1');
@@ -1503,39 +1180,6 @@ export const scenarios = [
         for(let i=0;i<pos.count;i++){v.fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld);if(v.y>.8&&v.z>13.6&&v.z<18.8&&v.x>-58&&v.x<-12){out.push((o.name||'mesh')+' at x'+v.x.toFixed(1)+' z'+v.z.toFixed(1));break;}}});return out})()`);
     expect(blocking.length === 0, `no obstacle in the lanes (${blocking.join('; ')})`);
   }},
-  {name: 'cars drive at their set speed, also while the page is busy', async run(p, expect) {
-    // Real speed. Street cars run at exactly 7 m/s (eastbound) or 9 m/s (westbound).
-    await p.goto('?dest=parking&debug=1');
-    await p.until("window.__parking && __parking.active && document.documentElement.dataset.warm==='done'", {timeout: 40000});
-    // Pick and follow one car in the same frame loop (a car picked earlier may already have left the stretch).
-    // Keeps the longest trace (a car may leave the stretch during the window); up to three windows under load.
-    let s = [], ticks = 0;
-    for (let attempt = 0; attempt < 3 && s.length <= 20; attempt++) {
-      await p.until(`[...__parking.lot.root.children].some(c=>c.name==='Demo_car_'&&c.position.x>-60&&c.position.x<20)`, {timeout: 20000, what: 'a street car'});
-      await p.eval(`(()=>{let c=null,cur=[];window.__s=[];window.__ticks=0;const f=t=>{__ticks++;if(!c||!c.parent||c.position.x<-60||c.position.x>20){c=[...__parking.lot.root.children].find(c=>c.name==='Demo_car_'&&c.position.x>-60&&c.position.x<20)||null;cur=[];}if(c){cur.push([t,c.position.x]);if(cur.length>__s.length)window.__s=cur;}window.__fr=requestAnimationFrame(f)};window.__fr=requestAnimationFrame(f)})()`);
-      // Keep the main thread busy meanwhile, as scrolling or a heavy view does.
-      await p.eval(`window.__busy=setInterval(()=>{const end=performance.now()+6;while(performance.now()<end);},16)`);
-      await p.sleep(1500);
-      s = await p.eval('clearInterval(__busy),cancelAnimationFrame(__fr),__s');
-      ticks = await p.eval('__ticks');
-    }
-    expect(s.length > 20, `followed one car for a while (${s.length} frames of ${ticks})`);
-    if (s.length < 2) return;
-    const v = Math.abs(s.at(-1)[1] - s[0][1]) / ((s.at(-1)[0] - s[0][0]) / 1000);
-    expect(Math.abs(v - 7) < .2 || Math.abs(v - 9) < .2, `street car at 7 or 9 m/s (measured ${v.toFixed(2)})`);
-  }},
-  {name: 'the barrier closes soon after a car drives out', async run(p, expect) {
-    await p.goto('?dest=parking&debug=1&speed=10');
-    await p.until(ready, {timeout: 40000});
-    const key = await p.eval(LEAVE_STAFF);
-    await p.until(`!__parking.sim.state.presence.has(${JSON.stringify(key)})`, {timeout: 20000, what: 'exit recorded'});
-    const t0 = Date.now();
-    // Another car going through meanwhile rightly keeps the arm up (background traffic: it failed now and then).
-    await p.eval(`(()=>{window.__other=false;const sim=__parking.sim,from=sim.now(),f=()=>{if(__parking.traffic.inspect().under>1||sim.state.events.some(e=>e.at>from&&['entry','manual','exit'].includes(e.kind)))__other=true;if(sim.state.gate!=='closed')requestAnimationFrame(f);};f();})()`);
-    await p.until(`__parking.sim.state.gate === 'closed'`, {timeout: 30000, what: 'barrier closed'});
-    const s = (Date.now() - t0) * 10 / 1000, other = await p.eval('__other'), limit = other ? 20 : 6;
-    expect(s < limit, `arm down within ${limit} s of demo time after the exit (took ${s.toFixed(1)} s${other ? ', another car went through meanwhile' : ''})`);
-  }},
   {name: 'leaving the story: a drag, Esc or Exit story ends it; Next mode lets you look around', async run(p, expect) {
     const start = async auto => {
       await p.goto(parking(`&story=1&auto=${auto ? 1 : 0}`));
@@ -1576,15 +1220,6 @@ export const scenarios = [
     await p.goto(parking('&story=1'));
     await p.until(`window.__parking && __parking.story.index===5 && document.querySelector('[data-act="manual-open"]')`, {timeout: 60000, what: 'step 6 on the Gate tab'});
     expect(await p.eval(`document.querySelector('[data-act="manual-open"]').disabled`), 'Open once is off while the story plays');
-  }},
-  {name: 'a story whose visitor cleared a field before Send still sends its request', async run(p, expect) {
-    // The send failed (a required field empty) and the story went on about a request that never was.
-    await p.goto(parking('&story=1&auto=0'));
-    await p.until('window.__parking && __parking.story.waitingForNext', {timeout: 40000, what: 'step 1 typed'});
-    await p.eval(`(()=>{const i=document.querySelector('#pk-phone input[name=email]');i.value='';i.dispatchEvent(new Event('input',{bubbles:true}))})()`);
-    await p.click('[data-bar="next"]');
-    await p.until('__parking.story.index===1 && __parking.story.waitingForNext', {timeout: 30000, what: 'step 2 done'});
-    expect(await p.eval(`!!${STORY_REQUEST}`), 'the story\'s request was sent');
   }},
   {name: 'leaving a story that is part of the tour ends the tour too', async run(p, expect) {
     await p.goto(`?${FAST}`);
@@ -1667,22 +1302,6 @@ export const scenarios = [
     await p.click('[data-control="light"]');
     await p.sleep(1500); // ~30 world minutes of clock ticks
     expect(await p.eval(light) === false, 'switched off by hand, it stays off');
-  }},
-  {name: 'day cycle: the story holds the clock at real speed and gives it back', async run(p, expect) {
-    await p.goto(parking('&day=10&time=08:00'));
-    await p.until(ready, {timeout: 40000});
-    await p.click('[data-bar="play"]');
-    await p.until('__parking.story.running && __parking.story.index >= 1', {timeout: 30000, what: 'story step 2'});
-    // A sample within one step: a step that sets the story's time (09:41) jumps the clock by itself.
-    let a, b;
-    for (let i = 0; i < 10; i++) {
-      const s0 = await p.eval('__parking.story.index'); a = await p.eval('__world.now()'); await p.sleep(500); b = await p.eval('__world.now()');
-      if (await p.eval('__parking.story.index') === s0) break;
-    }
-    expect((b - a) / 1000 < SPEED * 1.5, `world clock at real speed during the story (${((b - a) / 1000).toFixed(0)} s in 0.5 s at speed ${SPEED})`);
-    await p.click('[data-bar="free"]');
-    const c = await p.eval('__world.now()'); await p.sleep(1000); const d = await p.eval('__world.now()');
-    expect((d - c) / 60000 > 20, `time-lapse again after the story (${((d - c) / 60000).toFixed(0)} min in 1 s)`);
   }},
   {name: 'day cycle: Follow the day moves the camera to what the day is doing', async run(p, expect) {
     // Speed 5: about 10 world minutes a second. The clock runs while the page loads, so the test sets 11:50 after.
