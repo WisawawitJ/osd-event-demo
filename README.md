@@ -22,7 +22,7 @@ original free-exploration page, with the car park, its cars and street traffic (
 ## Testing
 
 ```sh
-npm test                 # every test, in Node: about 3 s, no browser
+npm test                 # every test, in Node: about 6 s, no browser
 npm run shots [words]    # screenshots of every UI state, with a contact sheet (shots/<time>/index.html)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -36,7 +36,9 @@ npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, d
   rules between them. `src/viewer/director.js`: the tour, Follow the day and the kiosk. `src/viewer/readings.js`:
   readings set by hand against the building's schedule. `src/viewer/view-math.js`: the camera's limits and steps.
 - `test/unit/` steps them as fast as it can: a whole parking story takes about 0.2 s, a busy hour of random traffic
-  (checked every tick for cars driving through each other) under a second, a day of the car park half a second.
+  (checked every tick for cars driving through each other) under a second, a whole day of the car park on screen
+  (every car through the barrier; the car count checked against the hour every half hour, every pair of cars for
+  touching) about a second. `SEEDS=1,2,3 npm test` runs that day with other dice.
 
 How things look is not tested automatically: run the screenshot script and look. It drives headless Chromium over
 the DevTools protocol (`test/browser.mjs`: `/usr/lib/chromium/chromium`, or `CHROMIUM=`), one browser, on the NVIDIA
@@ -82,9 +84,12 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   reading itself; temperature and solar, which the schedule moves all the time, stay for an hour of world time.
 - **Car park:** cars come and go to match the hour: a morning rush in from 07:00, a dip at lunch, an evening rush out
   from 16:30, two or three cars overnight. Visitors with a pass for the day (ten are booked) drop in between 09:30
-  and 15:30, each at most once, stay 45 minutes to three hours, and drive out by themselves. On screen they drive through the barrier as fast as its one lane allows; the
-  rest is made up in the bays (with log entries over that time), as it is while the car park is off screen, but only
-  in bays out of the camera's view, so no car pops in or out where you can see it (a jump in time changes them all).
+  and 15:30, each at most once, stay 45 minutes to three hours, and drive out by themselves. On screen every car drives
+  through the barrier, which keeps up with the rushes of a 20-minute day (about a car every 5 s each way): cars set off
+  for the hour it will be when they get through (half an hour of the time-lapse ahead), as many at once as the car park
+  is short or over. What the barrier cannot bring in or out (a shorter day, a jump in time) is made up in the bays
+  (with log entries over that time), as it is while the car park is off screen, but only in bays out of the camera's
+  view, so no car pops in or out where you can see it (a jump in time changes them all).
 - **Timeline** (under the 3D view): the live time. Drag the slider, or press a moment, to move the world on to that
   time (always forward: what happened stays in the logs). **Night** in the header moves it on to 20:00, **Day** to 07:30.
 - **Follow the day** (timeline button) moves the camera to what the day is doing: the car park in the rushes, the meeting
@@ -159,8 +164,10 @@ leaving turn right out to the far lane: at the barrier they signal right and wai
 on its way into the entry. Cars signal from 30 m before their turn off the street (queuing included), while waiting at
 the exit barrier or an aisle's mouth, and before every other turn (amber lenses at the four corners). Cars go in in the order they get to the entry,
 whichever lane they come along: a near-lane car is there a stopping distance before its place in the queue, a far-lane
-car at its turn (not when it appears, 50 m out, or is sent). A queued car drives up to the stop line as soon as the
-arm rises for the car ahead, and waits there for its own turn at the barrier. The barrier's one
+car at its turn (not when it appears, 50 m out, or is sent). The queue moves up as the cars ahead go in, and the next
+car drives up to the stop line while the car ahead is being let in; the arm stays up between cars let in one after
+another (a car not let in lowers it). Going out, cars from different aisles pull out at the same time, each giving
+way where its aisle meets the exit lane, and the camera reads a plate as the car rolls up to the stop line. The barrier's one
 arm serves both lanes, and each lane takes its own turn at it: a car going in does not wait for one going out. The arm
 is up while any car passes under it and stays down while an unknown car waits for staff (cars going out wait too). A
 car bound for P1 drives in along the exit lane, so it waits at the barrier while a car is driving out. No car drives
@@ -245,7 +252,6 @@ model/                   building model and data, extracted from the reference
 vendor/three/            three.js r186 as shipped in the reference
 scripts/serve.mjs        dependency-free static server
 scripts/shots.mjs        screenshots of every UI state, with a contact sheet
-test/unit/               Node tests on the simulation engine (setup, a car park world, the tests)
 test/unit/               the tests, in Node (setup, a car park and showcase without a page, the tests)
 test/                    browser.mjs (headless Chromium driver for the screenshots), bench.mjs
 reference/               the original standalone HTML (not committed)

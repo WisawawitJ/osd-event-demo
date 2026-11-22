@@ -686,7 +686,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   // Cosmetic through-traffic on the street.
   function passBy(preferDir = rng() < .5 ? 1 : -1) {
     const now = demoNow();
-    // Spacing is in simulation time, so ?speed keeps the same traffic density the visitors see.
+    // Spacing is in simulation time, so the `speed` option keeps the same traffic density the visitors see.
     const ok = dir => now - lastSpawn[dir] > 4200 && (dir < 0 ? !westOnStreet && !westHold && !westExitHold : !laneCars(1).length && !exitingStreet && !eastHold && eastClear(-99, -84));
     const dir = ok(preferDir) ? preferDir : ok(-preferDir) ? -preferDir : 0;
     if (!dir) return false;
@@ -777,7 +777,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     return {any, changed};
   }
   // Movement: a system on the engine's tick (every 50 ms of simulation time), so cars move the same whatever the
-  // frame rate or ?speed, and tests can drive them without a browser. kick() is kept for callers: nothing to start.
+  // frame rate or the `speed` option, and tests can drive them without a browser. kick() is kept for callers: nothing to start.
   function kick() {}
   const offTick = onTick(dt => {
     let active = lot.update(dt);

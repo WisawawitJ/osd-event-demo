@@ -7,7 +7,7 @@
 //   motion stays smooth at 60 fps); pausing stops the stepping, so everything stops together. In Node (tests)
 //   nothing steps it but the test, in whole ticks: runs are instant, and the same seed and inputs give the same
 //   result every time.
-// - Randomness comes from a seeded generator (rng), so a run can be repeated (`?seed=N` in the browser).
+// - Randomness comes from a seeded generator (rng), so a run can be repeated (the `seed` option in the browser).
 // Between ticks the engine lets promise chains settle, so `await` code (the cars' and the story's steps) moves on
 // in step with the ticks.
 
@@ -55,7 +55,7 @@ function pop() {
 }
 // Simulation time, in ms. (`demoNow` kept as the name everything already reads.)
 export const demoNow = () => simNow;
-// Real milliseconds that stop while paused: for presentation animations that keep their real pace under ?speed
+// Real milliseconds that stop while paused: for presentation animations that keep their real pace under the `speed` option
 // (the meeting room's airflow, door swings, a scenario's timing).
 export const realNow = () => simNow / SPEED;
 // Runs `fn` after `ms` of simulation time. Cancel with cancelLater.
@@ -110,10 +110,10 @@ export async function runUntil(cond, ms = 600000) {
 // --- World clock -----------------------------------------------------------------------------------------------
 // One simulated day on the event date (24 Nov 2026, Bangkok time) that runs by itself and loops.
 // Everything reads it: the sky, the building's rooms and solar, and the car park's traffic and logs.
-// - A day takes `?day=N` real minutes (default 20; the timeline's button picks 10, 20, 40 or 60); the night
+// - A day takes `day` (an option, for tests) real minutes (default 20; the timeline's button picks 10, 20, 40 or 60); the night
 //   (21:00–05:00) goes 1.5× faster than the daytime. Pausing stops it with everything else.
-// - `?day=0` turns the time-lapse off: the clock then runs at real speed, as one scene would (tests use this).
-// - `?time=HH:MM` sets the start (default 09:00).
+// - `day: 0` turns the time-lapse off: the clock then runs at real speed, as one scene would (tests use this).
+// - `time: 'HH:MM'` sets the start (default 09:00).
 // Cars, flights and the story keep real speed: only the clock is sped up. While the parking story plays, it holds
 // the clock at real speed too, so its steps keep their own times.
 const DAY_MS = 864e5, DAY0 = Date.UTC(2026, 10, 24, -7); // 24 Nov 2026 00:00 in Bangkok
@@ -139,7 +139,7 @@ function createWorldClock() {
     if (time >= WRAP) { time -= DAY_MS; emit('wrap', -DAY_MS); }
   });
   return {
-    // Real minutes a day takes (0: real speed, as with `?day=0`), and whether the clock is paused.
+    // Real minutes a day takes (0: real speed, as with `day: 0`), and whether the clock is paused.
     get dayLength() { return dayLength; },
     // World ms per simulation ms now.
     get rate() { return rate(); },

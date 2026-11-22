@@ -43,7 +43,7 @@ let renderer, controls, model, resizeObserver, showcase, flight, sceneTransition
 const isShowcase=Boolean(document.querySelector('#showcase'));
 const dayBackground=isShowcase?'#e6ecee':'#dce5e5'; // the 3D view's daytime background (the sky darkens it at night)
 // The view's limits and the fog's distances: view-math.js.
-// ?debug=1 (tests, the benchmark: test/) exposes the scene and the demo's parts on window.
+// The `debug` option (tests, the benchmark: test/) exposes the scene and the demo's parts on window.
 const debug='debug' in options;
 // The page's night look (night.css) switches in one go and cross-fades as a whole (a view transition). Fading each
 // element's text and background colours instead took both through the same grey halfway, so text blinked out.
@@ -96,7 +96,7 @@ try {
   fogChunk('fog_fragment', 'vFogDepth', 'length(vFogGround)');
   scene.fog = new THREE.Fog(dayBackground, WORLD_CLEAR, WORLD_GONE);
   const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 1000);
-  // ?render=0.5 (the test harness sets it): the 3D view at that fraction of its resolution, without antialiasing and
+  // The `render: 0.5` option (the test harness sets it): the 3D view at that fraction of its resolution, without antialiasing and
   // with smaller shadow maps, so software WebGL keeps up (test/browser.mjs). The booth never sets it.
   const renderScale = Math.min(1, Math.max(.25, Number(options.render) || 1));
   renderer = new THREE.WebGLRenderer({ antialias: renderScale === 1, powerPreference: 'default' });
@@ -113,7 +113,7 @@ try {
   renderer.toneMappingExposure = 1;
   renderer.localClippingEnabled = true;
   // Shader error checks read every program's link log on first use, which blocks on the GPU: with them on,
-  // a stop's first visit stalled ~0.4 s. Keep them for ?debug (tests), skip them for visitors.
+  // a stop's first visit stalled ~0.4 s. Keep them for the `debug` option (tests), skip them for visitors.
   renderer.debug.checkShaderErrors = debug;
   renderer.shadowMap.enabled=true;
   renderer.shadowMap.type=THREE.PCFShadowMap; // PCFSoftShadowMap is gone from three.js (it fell back to this, warning on every load)
@@ -296,7 +296,7 @@ try {
   const readPose=()=>({eye:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov});
   const writePose=pose=>{camera.position.fromArray(pose.eye);controls.target.fromArray(pose.target);camera.fov=pose.fov;camera.updateProjectionMatrix();controls.update();schedule();};
   flight=createCameraFlight({read:readPose,write:writePose,onState(active){viewport.classList.toggle('flying',active);const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';setInMotion(active);}});
-  // ?speed=N (tests, rehearsals) shortens every camera flight like the rest of the demo's timing.
+  // The `speed` option (tests, rehearsals) shortens every camera flight like the rest of the demo's timing.
   if (SPEED !== 1) { const flyPath = flight.flyPath; flight.flyPath = steps => flyPath(steps.map(step => ({...step, duration: (step.duration ?? 1800) / SPEED}))); }
 
   function visibleBounds() {
@@ -720,7 +720,7 @@ try {
        // Warm-up: a stop's first visit stalled 0.3–0.7 s, compiling and linking shader variants on the spot: the flight's
        // floor change cuts geometry with one more clipping plane (scene-transition.js), and the night's lights change
        // the number of lights. Compile every material each way at load, draw one tiny off-screen frame each way
-       // (shadows included), and upload every texture, before anyone clicks. `?warm=0` skips it (tests that do not
+       // (shadows included), and upload every texture, before anyone clicks. The `warm: 0` option skips it (tests that do not
        // measure smoothness; it takes over a second of each page load).
        if(options.warm==='0')document.documentElement.dataset.warm='done';
        else{
@@ -731,7 +731,7 @@ try {
         status.dataset.state='loading';status.textContent=L('กำลังเตรียมอาคาร…','Preparing the building…');
         // Hidden objects are drawn too, so their shaders compile: they read as visible only inside the warm-up's own
         // compile and draw calls (where writes, such as the pond mirror hiding itself for its pass, stay inside too).
-        // Everywhere else the app reads and sets their real visibility, which a ?dest= stop may change meanwhile.
+        // Everywhere else the app reads and sets their real visibility, which a `dest` option's stop may change meanwhile.
         let forcing=0;const forced=fn=>{forcing++;try{return fn();}finally{forcing--;}};
         // The object's `visible` then reads and writes `state.forced` inside forced(), `state.wanted` everywhere else.
         const split=(object,state)=>{Object.defineProperty(object,'visible',{configurable:true,enumerable:true,get:()=>forcing?state.forced:state.wanted,set:value=>{if(forcing)state.forced=value;else state.wanted=value;}});return [object,state];};

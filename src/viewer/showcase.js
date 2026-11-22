@@ -210,7 +210,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
  listen(document,'visibilitychange',()=>{if(document.hidden)director.hiddenPage();});
  onUserOrbit(()=>director.exploring());
  insights=createBuildingInsights({model,simulation,schedule,read:()=>state,write:value=>{Object.assign(state,structuredClone(value));},render,navigate:id=>select(id,{guided:true}),
-  // A parking story played on its own (?story=1, the bar's Play) stops too: it holds the clock, and set a jump back.
+  // A parking story played on its own (the `story` option, the bar's Play) stops too: it holds the clock, and set a jump back.
   stopActivity:()=>director.stopActivity(),
   following:()=>director.following,onFollow:on=>director.setFollowing(on)}); // a flight Follow started stops with it
  // Kiosk mode: the director follows the day when left alone. Every touch is reported to it; the tour, Follow the day

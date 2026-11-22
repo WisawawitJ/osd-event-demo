@@ -140,7 +140,7 @@ export function startLotLife({sim, traffic, lot, camera = null, staffOnly = fals
     if (stall) { sim.recordEntry({plate: v.plate, province: v.province, type: 'guest', stallId: stall.id, color: v.color}); traffic.appear(sim.key(v.plate, v.province)); }
   }
   let last = world.now(), timer = 0;
-  // Opened later than the seeded 09:00 (a page at ?time=23:00): the car park is that hour's at once, its log spread
+  // Opened later than the seeded 09:00 (a page opened at 23:00): the car park is that hour's at once, its log spread
   // over the hours since, not the morning's cars left to drive out through the barrier one by one.
   if (last > STORY_START && !paused()) catchUp(0, STORY_START, last, {anywhere: true});
   function tick() {

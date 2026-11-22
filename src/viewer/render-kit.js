@@ -113,7 +113,7 @@ export function createRenderKit(renderer, scene) {
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(25,25);texture.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),8);
   // Patches: smooth value noise across the ground, three octaves, as a brightness from 0.76 to 1.12, worked out per pixel
   // from the ground position the fog passes on (main.js), so they need no vertex data of their own. (On the test GPU,
-  // with the start-up warm-up skipped, ?warm=0, the ground draws as background until its shader is next rebuilt;
+  // with the start-up warm-up skipped (the `warm: 0` option), the ground draws as background until its shader is next rebuilt;
   // with the warm-up, as the booth runs, it draws: see the check 'the ground is grass'.)
   const material=new THREE.MeshStandardMaterial({map:texture,roughness:1});
   material.onBeforeCompile=shader=>{
