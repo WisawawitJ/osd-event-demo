@@ -24,7 +24,7 @@ const SIZES = [BOOTH, [1080, 1920], [1366, 768], [768, 1024], [390, 844]];
 const LANGS = ['th', 'en'];
 const sizeName = ([w, h]) => `${w}x${h}`;
 
-// Page states, as the behaviour checks (test/scenarios.mjs) wait for them.
+// Page states to wait for before each screenshot.
 const LOADED = "document.querySelector('#status')?.dataset.state === 'ready'";
 const UP = `${LOADED} && !!window.__parking`;
 const STILL = "!document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')";

@@ -5,6 +5,7 @@ import {createShowcase,translatePage,pageString} from 'osd/viewer/showcase.js';
 import {L} from 'osd/parking/i18n.js';
 import {SPEED, world, isPaused} from 'osd/parking/clock.js';
 import {options} from 'osd/parking/options.js';
+import {WORLD_CLEAR, WORLD_GONE, CAMERA_FLOOR, MAX_POLAR, heightStep as stepHeight, easedPanStep, settlePivot, screenPlaneZoom, viewKey, maxZoomOut} from 'osd/viewer/view-math.js';
 import {applySky, isDark} from 'osd/viewer/daylight.js';
 import {createRoomSchedule} from 'osd/viewer/building-day.js';
 import {createKoi} from 'osd/viewer/koi.js';
@@ -41,12 +42,7 @@ let currentFloor = 'all', exploded = false, cutaway = false;
 let renderer, controls, model, resizeObserver, showcase, flight, sceneTransition, securityPreview, parking = null;
 const isShowcase=Boolean(document.querySelector('#showcase'));
 const dayBackground=isShowcase?'#e6ecee':'#dce5e5'; // the 3D view's daytime background (the sky darkens it at night)
-// The world (measured across the ground from the site's middle) is clear to WORLD_CLEAR metres out and gone in the fog by
-// WORLD_GONE; panning is free while the view's pivot stays within PAN_FREE and slows to a stop at PAN_LIMIT.
-// The pivot's height stays between the ground and PAN_TOP (the roof is about 20 m up; the explore page's exploded view
-// lifts the top floor to about 30 m).
-// The camera keeps CAMERA_FLOOR metres up, above the grass (0.26 m).
-const WORLD_CLEAR=65,WORLD_GONE=95,PAN_FREE=55,PAN_LIMIT=90,PAN_TOP=35,CAMERA_FLOOR=.8;
+// The view's limits and the fog's distances: view-math.js.
 // ?debug=1 (tests, the benchmark: test/) exposes the scene and the demo's parts on window.
 const debug='debug' in options;
 // The page's night look (night.css) switches in one go and cross-fades as a whole (a view transition). Fading each
@@ -139,9 +135,9 @@ try {
   // straight ahead) when flatter, where off turned the building some 16° a pinch (the overview). On everywhere, a zoom
   // toward the lower screen at the car park or the pond took the pivot under the ground, and the limit lifting it back
   // slid the picture from under the fingers.
-  const ZOOM_TILT = Math.cos(THREE.MathUtils.degToRad(70)), viewDir = new THREE.Vector3();
+  const viewDir = new THREE.Vector3();
   const baseUpdate = controls.update.bind(controls);
-  controls.update = (...args) => { controls.screenSpacePanning = Math.abs(camera.getWorldDirection(viewDir).y) < ZOOM_TILT; return baseUpdate(...args); };
+  controls.update = (...args) => { controls.screenSpacePanning = screenPlaneZoom(camera.getWorldDirection(viewDir).y); return baseUpdate(...args); };
   controls.zoomToCursor = true;
   controls.listenToKeyEvents(canvas);
   // OrbitControls zooms by a percentage of the distance to its pivot, so steps shrink as you close in and
@@ -158,13 +154,7 @@ try {
   // Clamped to the view's limits, so a press at one does nothing (OrbitControls put the camera back along another
   // line: ▲ at the zoom-out limit swung it overhead, and ▼ there backed it away or dropped it into the building). ▼
   // undoes ▲ (× 4/3 up, × 3/4 down).
-  function heightStep(sign) {
-    const t = controls.target, h = camera.position.y - t.y, r = Math.hypot(camera.position.x - t.x, camera.position.z - t.z);
-    const top = Math.sqrt(Math.max(0, controls.maxDistance ** 2 - r * r));
-    const bottom = Math.max(r * Math.tan(Math.PI / 2 - controls.maxPolarAngle) + .01, Math.sqrt(Math.max(0, controls.minDistance ** 2 - r * r)), CAMERA_FLOOR - t.y);
-    const to = sign > 0 ? Math.min(h + Math.max(1, h / 3), top) : Math.max(h <= 4 ? h - 1 : h * 3 / 4, bottom);
-    return sign > 0 ? Math.max(0, to - h) : Math.min(0, to - h);
-  }
+  const heightStep = sign => stepHeight({camera: camera.position, target: controls.target, minDistance: controls.minDistance, maxDistance: controls.maxDistance, maxPolarAngle: controls.maxPolarAngle}, sign);
   function pushForward(metres, clientX = null, clientY = null) {
     const rect = canvas.getBoundingClientRect();
     pushNdc.set(clientX == null ? 0 : (clientX - rect.left) / rect.width * 2 - 1, clientY == null ? 0 : -(clientY - rect.top) / rect.height * 2 + 1);
@@ -208,29 +198,19 @@ try {
     const zoomSetting = controls.screenSpacePanning;
     controls.screenSpacePanning = false; basePan(deltaX, deltaY); controls.screenSpacePanning = zoomSetting;
     panStep.subVectors(controls._panOffset, panBefore);
-    // Measured on where the step lands, so a pan round the site (no outward part) cannot creep out either.
-    const t = controls.target, x = t.x + panStep.x, z = t.z + panStep.z, r = Math.hypot(t.x, t.z), landed = Math.hypot(x, z);
-    if (landed <= r || landed <= PAN_FREE) return;
-    const ease = (1 - THREE.MathUtils.clamp((r - PAN_FREE) / (PAN_LIMIT - PAN_FREE), 0, 1)) ** 2;
-    const scale = Math.max(r, Math.min(r + (landed - r) * ease, PAN_LIMIT)) / landed;
-    controls._panOffset.copy(panBefore).add(panStep.set(x * scale - t.x, panStep.y, z * scale - t.z));
+    const eased = easedPanStep(controls.target, panStep);
+    controls._panOffset.copy(panBefore).add(panStep.set(eased.x, panStep.y, eased.z));
   };
   // Hard limits, after every move of the view (pans, zoom toward the cursor, the close zoom below, keys, the idle
   // orbit): the pivot stays within PAN_LIMIT of the site's middle and between the ground and PAN_TOP, the camera moving
   // with it, and the camera stays above the grass. (Zooming toward the sky took the pivot 129 m under the ground, and
   // the camera after it.) Orbiting stops just above the horizon.
-  controls.maxPolarAngle = Math.PI * .49;
-  const boundShift = new THREE.Vector3();
+  controls.maxPolarAngle = MAX_POLAR;
   controls.addEventListener('change', () => {
     // A pivot a zoom took under the ground (toward the lower screen in a flat view, or the close zoom's walk forward)
     // slides back along the line of sight to the ground: the camera stays, so the picture does too. (Lifted below
     // with the camera, it threw the picture hundreds of pixels, two ▼ presses into a stop.)
-    const t0 = controls.target;
-    if (t0.y < 0 && camera.position.y > 0) t0.lerpVectors(camera.position, t0, camera.position.y / (camera.position.y - t0.y));
-    const t = controls.target, r = Math.hypot(t.x, t.z), out = r > PAN_LIMIT ? PAN_LIMIT / r - 1 : 0;
-    boundShift.set(t.x * out, THREE.MathUtils.clamp(t.y, 0, PAN_TOP) - t.y, t.z * out);
-    if (boundShift.lengthSq()) { t.add(boundShift); camera.position.add(boundShift); }
-    if (camera.position.y < CAMERA_FLOOR) { camera.position.y = CAMERA_FLOOR; camera.lookAt(t); }
+    if (settlePivot(camera.position, controls.target)) camera.lookAt(controls.target);
   });
   canvas.addEventListener('wheel', event => {
     if (!model || event.deltaY >= 0 || !controls.enabled || !controls.enableZoom) return;
@@ -370,7 +350,7 @@ try {
     camera.updateProjectionMatrix();
     controls.minDistance = radius * 0.12;
     // Not out to where the world is a disc floating in the sky (as on the showcase).
-    controls.maxDistance = Math.max(130, distance * 1.2);
+    controls.maxDistance = maxZoomOut(distance);
     controls.update();
     schedule();
   }
@@ -444,8 +424,6 @@ try {
   stairsButton.addEventListener('click',()=>interiorCamera('stairs'));
   // The view keys, by the key's place (the Thai layout types other characters on them), else by the character: a
   // keyboard may send no place, and other layouts put - and + elsewhere (German: - on the Slash key).
-  const VIEW_KEYS = {KeyR: 'reset', Equal: 'in', NumpadAdd: 'in', Minus: 'out', NumpadSubtract: 'out', PageUp: 'up', PageDown: 'down'}, VIEW_CHARS = {r: 'reset', R: 'reset', '+': 'in', '=': 'in', '-': 'out', PageUp: 'up', PageDown: 'down'};
-  const viewKey = event => VIEW_KEYS[event.code] ?? VIEW_CHARS[event.key];
   canvas.addEventListener('keydown', event => {
     if (!model) return;
     // Not with Ctrl, Alt or Cmd: those are the browser's (reload, its own zoom). By the key's place, not the character
@@ -647,7 +625,7 @@ try {
         updateView({reframe:false});if(id==='meeting')for(const device of deviceMeshes)device.visible=true;
         renderKit.ground.visible=true;controls.minDistance=.4;
         // Zooming out stops a little past the whole-site view (at 500 m the world was a disc floating in the sky colour).
-        const c=contextPose();controls.maxDistance=Math.max(130,1.2*Math.hypot(c.eye[0]-c.target[0],c.eye[1]-c.target[1],c.eye[2]-c.target[2]));
+        const c=contextPose();controls.maxDistance=maxZoomOut(Math.hypot(c.eye[0]-c.target[0],c.eye[1]-c.target[1],c.eye[2]-c.target[2]));
        }
        // The parking access demo adds its own lot, cars and UI to this scene (src/parking).
        const parkingModule=await import('osd/parking/index.js');

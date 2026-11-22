@@ -22,30 +22,27 @@ original free-exploration page, with the car park, its cars and street traffic (
 ## Testing
 
 ```sh
-npm run test:unit        # the simulation in Node: car park, traffic, story, records, text (about 1 s)
-npm run test:quick       # the unit tests, then a few browser checks (about 10 s)
-npm test                 # the unit tests, then every browser check (run before merging)
-npm test -- kiosk night  # only browser checks whose names match
-node scripts/shots.mjs [words]  # screenshots of every UI state, with a contact sheet (shots/<time>/index.html)
+npm test                 # every test, in Node: about 3 s, no browser
+npm run shots [words]    # screenshots of every UI state, with a contact sheet (shots/<time>/index.html)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
 
-**The simulation is an engine** (`src/parking/clock.js`): simulation time moves only when stepped, in ticks of at most
-50 ms; each tick fires the timers due in it in order, then the per-tick systems (cars moving, the world clock). The
-browser steps it every frame by the real time elapsed; pausing stops the stepping. Dice come from a seeded generator.
-So the whole car park (`src/parking/world.js`: records, traffic, the story, the background life and the rules between
-them) runs in Node without a page, the same every run: `test/unit/` steps it as fast as it can. A whole story takes
-about 0.2 s, a busy hour of random traffic (checked every tick for cars driving through each other) under a second.
+**The tests run the demo without a browser.** Its logic is separate from its page:
+- `src/parking/clock.js`, the engine: simulation time moves only when stepped, in ticks of at most 50 ms; each tick
+  fires the timers due in it in order, then the per-tick systems (cars moving, the world clock). The browser steps it
+  every frame by the real time elapsed; pausing stops the stepping. Dice come from a seeded generator, so a run can be
+  repeated exactly.
+- `src/parking/world.js`, the car park without a page: records, traffic, the story, the background life and the
+  rules between them. `src/viewer/director.js`: the tour, Follow the day and the kiosk. `src/viewer/readings.js`:
+  readings set by hand against the building's schedule. `src/viewer/view-math.js`: the camera's limits and steps.
+- `test/unit/` steps them as fast as it can: a whole parking story takes about 0.2 s, a busy hour of random traffic
+  (checked every tick for cars driving through each other) under a second, a day of the car park half a second.
 
-**Browser checks** (`test/scenarios.mjs`) cover what needs the page: the camera, flights, the tour and kiosk, the
-meeting room, touch and keys, the console and phone UI. How things look is not checked automatically: run the
-screenshot script and look. `test/run.mjs` starts its own server and drives headless Chromium over the DevTools
-protocol (`/usr/lib/chromium/chromium`, or `CHROMIUM=`). A check's `?name=value` settings (`debug`, `speed`, `time`,
-`day`, `dest`, `story`, `auto`, `kiosk`, `warm`, `render`, `fps`) are handed to the page as `window.__demoOptions`
-before it loads (`src/parking/options.js`). Checks run at `speed=30` with the world clock at real speed (`day=0`)
-unless they set their own. **It never uses the Intel iGPU by itself** (it froze this laptop twice): it renders on the
-NVIDIA GPU with one browser (`JOBS=n` for more), or in software without the NVIDIA driver; `GPU=nvidia|software|vulkan|egl`
-forces one (`egl` is the iGPU: don't). Screenshots of failed checks go to `test/out/shots/<time>-<pid>/`.
+How things look is not tested automatically: run the screenshot script and look. It drives headless Chromium over
+the DevTools protocol (`test/browser.mjs`: `/usr/lib/chromium/chromium`, or `CHROMIUM=`), one browser, on the NVIDIA
+GPU or in software, **never the Intel iGPU** (it froze this laptop twice; `GPU=nvidia|software|vulkan|egl` forces one).
+The page itself takes no settings from its address; the screenshot script hands it test settings (`time`, `dest`,
+`story`, `auto`, `kiosk`, `speed`, `debug` …) as `window.__demoOptions` before it loads (`src/parking/options.js`).
 
 ## Brand
 
@@ -249,6 +246,7 @@ vendor/three/            three.js r186 as shipped in the reference
 scripts/serve.mjs        dependency-free static server
 scripts/shots.mjs        screenshots of every UI state, with a contact sheet
 test/unit/               Node tests on the simulation engine (setup, a car park world, the tests)
-test/                    browser.mjs (headless Chromium driver), run.mjs + scenarios.mjs (browser checks), bench.mjs
+test/unit/               the tests, in Node (setup, a car park and showcase without a page, the tests)
+test/                    browser.mjs (headless Chromium driver for the screenshots), bench.mjs
 reference/               the original standalone HTML (not committed)
 ```

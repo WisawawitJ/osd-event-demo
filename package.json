@@ -4,9 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/serve.mjs 8080",
-    "test:unit": "node --import ./test/unit/setup.mjs --test --test-concurrency=1 test/unit/",
-    "test": "npm run test:unit && node test/run.mjs",
-    "test:quick": "npm run test:unit && node test/run.mjs quick",
+    "test": "node --import ./test/unit/setup.mjs --test --test-concurrency=1 test/unit/",
+    "shots": "node scripts/shots.mjs",
     "bench": "node test/bench.mjs"
   }
 }

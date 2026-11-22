@@ -3,11 +3,9 @@ import {createRoomLayers} from 'osd/viewer/room-layers.js';
 import {L} from 'osd/parking/i18n.js';
 import {world} from 'osd/parking/clock.js';
 import {morph} from 'osd/parking/dom.js';
+import {createReadings} from 'osd/viewer/readings.js';
 const legends={none:()=>'',temperature:()=>L('<i class="legend-cool"></i>ต่ำกว่า 25° <i class="legend-teal"></i>25–27° <i class="legend-warm"></i>27° ขึ้นไป','<i class="legend-cool"></i>Below 25° <i class="legend-teal"></i>25–27° <i class="legend-warm"></i>27° and up'),occupancy:()=>L('<i class="legend-teal"></i>มีคน <i class="legend-muted"></i>ห้องว่าง','<i class="legend-teal"></i>Occupied <i class="legend-muted"></i>Empty'),lights:()=>L('<i class="legend-warm"></i>ไฟเปิด <i class="legend-muted"></i>ไฟปิด','<i class="legend-warm"></i>Lights on <i class="legend-muted"></i>Lights off')};
-// A reading changed by hand (a scenario, or the pond switch) keeps its value until the building's schedule changes
-// that reading itself (the pond's level, a room becoming occupied), as a switch flipped by hand does. Readings the
-// schedule moves all the time (temperature, solar) are kept for HOLD_MINUTES of world time instead.
-const HOLD_MINUTES=60,STEADY=new Set(['pondAlert','water','occupied']);
+// Readings set by hand against the schedule: readings.js.
 // Real minutes a simulated day can take; the timeline's button steps through them.
 const DAY_LENGTHS=[10,20,40,60];
 // The building follows the world clock (src/parking/clock.js) through its daily schedule (building-day.js):
@@ -19,7 +17,7 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
  const listen=(el,event,fn)=>el.addEventListener(event,fn,{signal:abort.signal});
  let layer='none',disposed=false,lastContext=null,dragging=false,lastRender=0,lastShown='';
  const followRooms=createRoomSchedule(simulation);
- const held=new Map(); // reading → {base: the schedule's value when set by hand} or {until: world time}
+ const readings=createReadings(simulation.rooms);
  const events=$('#day-events'),incidentList=$('#incident-list'),range=$('#day-time');
  // Rebuilt on a language switch (relabel); paint() then restores aria-current.
  function relabel(){events.innerHTML=dayEvents.map((e,i)=>`<button data-day-event="${i}" title="${e.detail}"><time>${formatTime(e.minute)}</time><span>${e.title}</span></button>`).join('');}
@@ -43,11 +41,7 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
   const now=world.now(),snapshot=daySnapshot(world.minute(),simulation.rooms),state=read();
   // A running scenario (the meeting room cooling, the barrier demo) owns the readings until it ends.
   if(!state.scenario){
-   const telemetry={...snapshot.telemetry};
-   // The sun set: a sun-returning override ends with it (it kept 8.4 kW of output into the evening).
-   const dark=snapshot.telemetry.solar===0;
-   for(const [key,h] of held){if(!(dark&&(key==='solar'||key==='load'))&&('until' in h?now<h.until:telemetry[key]===h.base))delete telemetry[key];else held.delete(key);}
-   write(telemetry);
+   write(readings.scheduled(snapshot));
   }
   // The panels redraw when something they show as a state changes, otherwise every 2 s: no need to on every tick
   // (they are updated in place, see morph). A room change redraws them through the simulation.
@@ -56,11 +50,10 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
   else if(all||shown!==lastShown||performance.now()-lastRender>2000){lastRender=performance.now();lastShown=shown;render();}
   paint();
  }
- // Readings changed by hand: steady ones until the schedule changes them, the others for HOLD_MINUTES of world time.
- function hold(keys){const now=world.now(),planned=daySnapshot(world.minute(),simulation.rooms).telemetry;for(const key of keys)held.set(key,STEADY.has(key)?{base:planned[key]}:{until:now+HOLD_MINUTES*60000});}
+ const hold=keys=>readings.hold(keys);
  function setLayer(value){layer=value;paint();if(lastContext)update(lastContext);}
  // Moves the world forward to `minute` (today's or tomorrow's) and shows it.
- function jumpTo(minute){held.clear();world.jumpTo(minute);sync({all:true});}
+ function jumpTo(minute){readings.clear();world.jumpTo(minute);sync({all:true});}
  async function visit(event){stopActivity();setLayer(event.layer);jumpTo(event.minute);await navigate(event.destination);}
  function update(context){
   lastContext=context;const {destination,traveling,landed,state,sim}=context;paint();
@@ -93,13 +86,12 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
  listen(incidentList,'click',e=>{const b=e.target.closest('[data-incident]');if(!b)return;stopActivity();setLayer(b.dataset.insightLayer);void navigate(b.dataset.target);});
  document.querySelectorAll('[data-layer]').forEach(b=>{b.disabled=false;listen(b,'click',()=>{stopActivity();setLayer(b.dataset.layer);});});
  for(const selector of ['#day-play','#day-pause','#day-speed','#day-time'])$(selector).disabled=false;
- // The day wraps at 03:00 (back 24 h): a hand-set reading held past it keeps its time left.
- const offClock=world.subscribe((kind,payload)=>{if(kind==='wrap'){for(const h of held.values())if('until' in h)h.until+=payload;}else if(kind==='tick')sync();else if(kind==='jump'||kind==='set')sync({all:true});else if(kind==='rate')paint();});
+ const offClock=world.subscribe((kind,payload)=>{if(kind==='tick')sync();else if(kind==='jump'||kind==='set')sync({all:true});else if(kind==='rate')paint();});
  sync({all:true});
  return {update,hold,jumpTo,relabel,paint,
   history:key=>dayHistory(world.minute(),simulation.rooms,key),
   timeLabel:()=>L(`ข้อมูล ณ เวลา ${formatTime(world.minute())}`,`Data at ${formatTime(world.minute())}`),
   getState:()=>({minute:world.minute(),layer,following:following()}),
-  dispose(){disposed=true;offClock();abort.abort();layers.dispose();}
+  dispose(){disposed=true;offClock();readings.dispose();abort.abort();layers.dispose();}
  };
 }
