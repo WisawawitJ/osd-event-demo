@@ -1,8 +1,10 @@
-// Low-poly cars, four draw calls each (six with headlights on, three more while a blinker flashes) and no per-car geometry:
-//   body (body + roof, one material per paint colour), details (glass + wheels, vertex colours),
-//   decals (both plates, the four lamps and the blinker lenses, unlit, one small texture per plate), a soft blob shadow, and at night the
+// Low-poly cars and no per-car geometry. What every car has, its body (body + roof, in its paint colour), details
+// (glass + wheels, vertex colours) and a soft blob shadow, is drawn for all the cars at once (createCarInstances: three
+// draw calls however many cars). Each car's own object (createCar) holds the rest, one draw call each while shown:
+//   decals (both plates, the four lamps and the blinker lenses, unlit, one small texture per plate), and at night the
 //   headlights' light on the road (see headlightPool) and their beams in the air (see headlightBeams), and a blinker
 //   on each side (front and rear corners, amber) that the traffic flashes before a turn (setCarBlinker).
+// (Drawn car by car, 34 parked cars cost 136 draw calls a frame.)
 // A car faces local +Z and sits on y = 0.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -88,7 +90,6 @@ function sharedParts() {
     blinkLeft: blinker(1), blinkRight: blinker(-1), blinkMaterial: new THREE.MeshBasicMaterial({color: '#ffa31a', toneMapped: false}),
     glowLeft: blinkerGlow(1), glowRight: blinkerGlow(-1), glowMaterial: blinkerGlowMaterial(),
     ...blinkerLight(),
-    bodyMaterials: CAR_COLORS.map(color => new THREE.MeshStandardMaterial({color, roughness: .32, metalness: .45})),
     detailMaterial: new THREE.MeshStandardMaterial({vertexColors: true, roughness: .3, metalness: .5}),
     // The soft shadow sits on the road; the depth offset stops it flickering against the asphalt and paint.
     blobMaterial: new THREE.MeshBasicMaterial({map: blobTexture, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12}),
@@ -154,7 +155,7 @@ function headlightPool() {
   return {pool, poolMaterial, poolTexture};
 }
 
-// Headlight beams: the lit air in front of each lamp, as the meeting room's light cone is drawn (tour-effects.js).
+// Headlight beams: the lit air in front of each lamp, as the meeting room's light cone is drawn (light-cone.js).
 // One box ahead of the bumper holds both beams; for each pixel the shader adds up the glow of the two cones along the
 // view ray through the box (brightest near the lamps and on each beam's axis, thinning with distance, cut off at
 // the road), so the beams read as light in the air from any side, above included.
@@ -233,19 +234,18 @@ function blinkerGlowMaterial() {
   });
 }
 
+// Every car made and not yet taken out of its car park: createCarInstances draws their common parts.
+const cars = new Set();
 export function createCar({plate, province, color = 0}) {
   const p = sharedParts();
   const car = new THREE.Group();
   car.name = `Demo_car_${plate}`;
+  car.userData.paint = CAR_COLORS[color % CAR_COLORS.length];
   // Parts never move inside the car, and the car's own matrix is set when it is placed.
   car.matrixAutoUpdate = false;
-  const add = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; m.matrixAutoUpdate = false; car.add(m); return m; };
-  add(p.body, p.bodyMaterials[color % CAR_COLORS.length]);
-  add(p.details, p.detailMaterial);
+  const add = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.receiveShadow = false; m.matrixAutoUpdate = false; car.add(m); return m; };
   const decals = add(p.decals, plateTexture(plate, province));
-  decals.receiveShadow = false; decals.name = 'Demo_car_decals';
-  const blob = add(p.blob, p.blobMaterial);
-  blob.position.y = .025; blob.updateMatrix(); blob.renderOrder = -1; blob.receiveShadow = false;
+  decals.name = 'Demo_car_decals';
   const pool = add(p.pool, p.poolMaterial);
   pool.receiveShadow = false; pool.visible = false; pool.name = 'Demo_car_headlights';
   const beams = add(p.beam, p.beamMaterial);
@@ -261,31 +261,67 @@ export function createCar({plate, province, color = 0}) {
   }
   for (const [side, geo] of [['left', p.lightLeft], ['right', p.lightRight]]) {
     const l = add(geo, p.lightMaterial);
-    l.receiveShadow = false; l.visible = false; l.renderOrder = -1; l.name = `Demo_car_blinker_light_${side}`;
+    l.visible = false; l.renderOrder = -1; l.name = `Demo_car_blinker_light_${side}`;
   }
+  cars.add(car);
   return car;
+}
+
+// The common parts of every car in `root` (a car park's, already in its scene), drawn as one instanced mesh each: the
+// body in each car's paint (instance colours on a white material, the same shading), the details, and the blob shadow
+// under it. Brought up to date at the start of every draw of the scene (the scene's onBeforeRender, before three.js
+// uploads instance data: synced from the meshes' own, the data reached the GPU a draw late, and the first draw had no
+// colours at all), from the cars as they stand: a car moved, added, hidden or taken away needs nothing else.
+// `capacity`: the most cars shown at once.
+export function createCarInstances(root, capacity = 160) {
+  const p = sharedParts();
+  const paint = new THREE.MeshStandardMaterial({color: '#ffffff', roughness: .32, metalness: .45});
+  const body = new THREE.InstancedMesh(p.body, paint, capacity), details = new THREE.InstancedMesh(p.details, p.detailMaterial, capacity), blob = new THREE.InstancedMesh(p.blob, p.blobMaterial, capacity);
+  body.name = 'Demo_cars_body'; details.name = 'Demo_cars_details'; blob.name = 'Demo_cars_blob';
+  body.receiveShadow = details.receiveShadow = true;
+  body.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
+  blob.renderOrder = -1;
+  const colour = new THREE.Color(), lift = new THREE.Matrix4().makeTranslation(0, .025, 0), under = new THREE.Matrix4();
+  for (const mesh of [body, details, blob]) {
+    // The cars move every frame, beyond any bounds worked out once.
+    mesh.frustumCulled = false; mesh.matrixAutoUpdate = false; mesh.count = 0;
+    root.add(mesh);
+  }
+  const scene = root.parent, before = scene.onBeforeRender;
+  scene.onBeforeRender = function (...args) { before.apply(this, args); sync(); };
+  function sync() {
+    let n = 0;
+    for (const car of cars) {
+      if (!car.parent) { cars.delete(car); continue; }
+      if (car.parent !== root || !car.visible || n >= capacity) continue;
+      body.setMatrixAt(n, car.matrix); details.setMatrixAt(n, car.matrix); blob.setMatrixAt(n, under.multiplyMatrices(car.matrix, lift));
+      body.setColorAt(n, colour.set(car.userData.paint));
+      n++;
+    }
+    for (const mesh of [body, details, blob]) { mesh.count = n; mesh.instanceMatrix.needsUpdate = true; }
+    body.instanceColor.needsUpdate = true;
+  }
+  return {dispose() { scene.onBeforeRender = before; for (const mesh of [body, details, blob]) { mesh.removeFromParent(); mesh.dispose(); } paint.dispose(); }};
 }
 
 // Lamps and plate at night: a car with its engine on shows its lamps (and plate) bright; a parked one at night is
 // dim, as unlit paint would be. In daytime both look as drawn. Each car's plate material is its own (one per plate;
 // through-traffic shares one, and it is always on the move).
 export function setCarLamps(car, on, night) {
-  const decals = car.children[2], pool = car.children[4], beams = car.children[5];
-  if (decals) decals.material.color.setScalar(!night || on ? 1 : .3);
-  if (pool) pool.visible = night && on;
-  if (beams) beams.visible = night && on;
+  const [decals, pool, beams] = car.children;
+  decals.material.color.setScalar(!night || on ? 1 : .3);
+  pool.visible = beams.visible = night && on;
 }
 
-// The blinkers (children 6 and 7, their flares 8 and 9, their light on the road 10 and 11): `side` is 'left', 'right'
+// The blinkers (children 3 and 4, their flares 5 and 6, their light on the road 7 and 8): `side` is 'left', 'right'
 // or null; `lit` is the flash's on half.
 export function setCarBlinker(car, side, lit) {
-  car.children.slice(6, 12).forEach((o, i) => { o.visible = side === (i % 2 ? 'right' : 'left') && lit; });
+  car.children.slice(3, 9).forEach((o, i) => { o.visible = side === (i % 2 ? 'right' : 'left') && lit; });
 }
 
 export function disposeCars() {
   if (!shared) return;
   for (const k of ['body', 'details', 'decals', 'blob', 'pool', 'beam', 'blinkLeft', 'blinkRight', 'glowLeft', 'glowRight', 'lightLeft', 'lightRight']) shared[k].dispose();
-  for (const m of shared.bodyMaterials) m.dispose();
   for (const k of ['detailMaterial', 'blobMaterial', 'blobTexture', 'poolMaterial', 'poolTexture', 'beamMaterial', 'blinkMaterial', 'glowMaterial', 'lightMaterial', 'lightTexture']) shared[k].dispose();
   for (const m of plateCache.values()) { m.map.dispose(); m.dispose(); }
   plateCache.clear();

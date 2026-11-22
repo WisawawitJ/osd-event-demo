@@ -1,7 +1,7 @@
 import {daySnapshot,dayEvents,dayHistory,formatTime,incidentsFor,createRoomSchedule} from 'osd/viewer/building-day.js';
 import {createRoomLayers} from 'osd/viewer/room-layers.js';
 import {L} from 'osd/parking/i18n.js';
-import {world} from 'osd/parking/clock.js';
+import {world, realNow} from 'osd/parking/clock.js';
 import {morph} from 'osd/parking/dom.js';
 import {createReadings} from 'osd/viewer/readings.js';
 const legends={none:()=>'',temperature:()=>L('<i class="legend-cool"></i>ต่ำกว่า 25° <i class="legend-teal"></i>25–27° <i class="legend-warm"></i>27° ขึ้นไป','<i class="legend-cool"></i>Below 25° <i class="legend-teal"></i>25–27° <i class="legend-warm"></i>27° and up'),occupancy:()=>L('<i class="legend-teal"></i>มีคน <i class="legend-muted"></i>ห้องว่าง','<i class="legend-teal"></i>Occupied <i class="legend-muted"></i>Empty'),lights:()=>L('<i class="legend-warm"></i>ไฟเปิด <i class="legend-muted"></i>ไฟปิด','<i class="legend-warm"></i>Lights on <i class="legend-muted"></i>Lights off')};
@@ -38,19 +38,19 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
  // Brings the building to the clock's time of day. `all` re-applies every room (a jump in time, or a reset).
  function sync({all=false}={}){
   if(disposed)return;
-  const now=world.now(),snapshot=daySnapshot(world.minute(),simulation.rooms),state=read();
-  // A running scenario (the meeting room cooling, the barrier demo) owns the readings until it ends.
+  const snapshot=daySnapshot(world.minute(),simulation.rooms),state=read();
+  // A running scenario (the meeting room cooling, the sun returning) owns the readings until it ends.
   if(!state.scenario){
    write(readings.scheduled(snapshot));
   }
   // The panels redraw when something they show as a state changes, otherwise every 2 s: no need to on every tick
   // (they are updated in place, see morph). A room change redraws them through the simulation.
   const shown=JSON.stringify([state.occupied,state.pondAlert,state.water]);
-  if(followRooms(snapshot.minute,{all})){lastRender=performance.now();lastShown=shown;}
-  else if(all||shown!==lastShown||performance.now()-lastRender>2000){lastRender=performance.now();lastShown=shown;render();}
+  // At most every 2 s of the demo's real pace when only the time moved (on its clock: the same in every run).
+  if(followRooms(snapshot.minute,{all})){lastRender=realNow();lastShown=shown;}
+  else if(all||shown!==lastShown||realNow()-lastRender>2000){lastRender=realNow();lastShown=shown;render();}
   paint();
  }
- const hold=keys=>readings.hold(keys);
  function setLayer(value){layer=value;paint();if(lastContext)update(lastContext);}
  // Moves the world forward to `minute` (today's or tomorrow's) and shows it.
  function jumpTo(minute){readings.clear();world.jumpTo(minute);sync({all:true});}
@@ -86,12 +86,11 @@ export function createBuildingInsights({model,simulation,schedule,read,write,ren
  listen(incidentList,'click',e=>{const b=e.target.closest('[data-incident]');if(!b)return;stopActivity();setLayer(b.dataset.insightLayer);void navigate(b.dataset.target);});
  document.querySelectorAll('[data-layer]').forEach(b=>{b.disabled=false;listen(b,'click',()=>{stopActivity();setLayer(b.dataset.layer);});});
  for(const selector of ['#day-play','#day-pause','#day-speed','#day-time'])$(selector).disabled=false;
- const offClock=world.subscribe((kind,payload)=>{if(kind==='tick')sync();else if(kind==='jump'||kind==='set')sync({all:true});else if(kind==='rate')paint();});
+ const offClock=world.subscribe(kind=>{if(kind==='tick')sync();else if(kind==='jump'||kind==='set')sync({all:true});else if(kind==='rate')paint();});
  sync({all:true});
- return {update,hold,jumpTo,relabel,paint,
+ return {update,hold:readings.hold,jumpTo,relabel,paint,
   history:key=>dayHistory(world.minute(),simulation.rooms,key),
   timeLabel:()=>L(`ข้อมูล ณ เวลา ${formatTime(world.minute())}`,`Data at ${formatTime(world.minute())}`),
-  getState:()=>({minute:world.minute(),layer,following:following()}),
   dispose(){disposed=true;offClock();readings.dispose();abort.abort();layers.dispose();}
  };
 }

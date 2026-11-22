@@ -129,8 +129,8 @@ export function createDirector({select, flight = () => ({traveling: false, lande
   }
 
   return {
-    get touring() { return touring; }, get following() { return following; }, get kiosk() { return kiosk; },
-    startTour, stopTour, startFollowing, stopFollowing, follow, setKiosk,
+    get touring() { return touring; }, get following() { return following; },
+    startTour, stopTour, startFollowing, stopFollowing, setKiosk,
     // A stop picked by hand (the dock): the visitor takes over from the tour and Follow.
     picked() { stopFollowing(); stopTour(PICK_SPOT); },
     // A touch anywhere in kiosk mode. `own`: on a control that handles the loop itself (the tour and Follow buttons,

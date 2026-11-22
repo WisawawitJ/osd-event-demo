@@ -1,11 +1,12 @@
 // Tiny static server for the event demo: no dependencies, local files only.
-// Usage: node scripts/serve.mjs [port]   (default 8080)
+// Usage: node scripts/serve.mjs [port] [folder]   (default 8080, this checkout; the screenshots serve an older version
+// of the demo from its own checkout)
 import {createServer} from 'node:http';
 import {readFile, stat} from 'node:fs/promises';
 import {extname, join, normalize, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const root = resolve(process.argv[3] || fileURLToPath(new URL('..', import.meta.url)));
 const port = Number(process.argv[2] || process.env.PORT || 8080);
 const types = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',

@@ -3,9 +3,9 @@ import {createSecurityPreview} from 'osd/viewer/security-preview.js';
 import {createSceneTransition} from 'osd/viewer/scene-transition.js';
 import {createShowcase,translatePage,pageString} from 'osd/viewer/showcase.js';
 import {L} from 'osd/parking/i18n.js';
-import {SPEED, world, isPaused} from 'osd/parking/clock.js';
+import {SPEED, TICK, world, isPaused, advance, demoNow, onTick} from 'osd/parking/clock.js';
 import {options} from 'osd/parking/options.js';
-import {WORLD_CLEAR, WORLD_GONE, CAMERA_FLOOR, MAX_POLAR, heightStep as stepHeight, easedPanStep, settlePivot, screenPlaneZoom, viewKey, maxZoomOut} from 'osd/viewer/view-math.js';
+import {WORLD_CLEAR, WORLD_GONE, MAX_POLAR, heightStep as stepHeight, easedPanStep, settlePivot, screenPlaneZoom, viewKey, maxZoomOut} from 'osd/viewer/view-math.js';
 import {applySky, isDark} from 'osd/viewer/daylight.js';
 import {createRoomSchedule} from 'osd/viewer/building-day.js';
 import {createKoi} from 'osd/viewer/koi.js';
@@ -43,8 +43,12 @@ let renderer, controls, model, resizeObserver, showcase, flight, sceneTransition
 const isShowcase=Boolean(document.querySelector('#showcase'));
 const dayBackground=isShowcase?'#e6ecee':'#dce5e5'; // the 3D view's daytime background (the sky darkens it at night)
 // The view's limits and the fog's distances: view-math.js.
-// The `debug` option (tests, the benchmark: test/) exposes the scene and the demo's parts on window.
+// The `debug` option (screenshots and the benchmark: scripts/shots.mjs, test/bench.mjs) exposes the scene and the
+// car park on window.
 const debug='debug' in options;
+// The car park's code, fetched from the start alongside the WebGL setup and the model (asked for only once the model
+// was up, its dozen files came one level of imports at a time, a third of a second after the first frame).
+const parkingCode=import('osd/parking/index.js');
 // The page's night look (night.css) switches in one go and cross-fades as a whole (a view transition). Fading each
 // element's text and background colours instead took both through the same grey halfway, so text blinked out.
 let pageNight=null; // the look the page has or is switching to (the switch applies it a frame or two later)
@@ -56,7 +60,8 @@ function setPageNight(night){
   root.classList.add('theme-switch');
   let applied=false;
   const apply=()=>{applied=true;root.dataset.night=pageNight;requestAnimationFrame(()=>requestAnimationFrame(()=>root.classList.remove('theme-switch')));};
-  if(first||!document.startViewTransition||matchMedia('(prefers-reduced-motion: reduce)').matches){apply();return;}
+  // Screenshots (`manual`): at once, as a view transition runs on real time and was caught part way.
+  if(first||!document.startViewTransition||matchMedia('(prefers-reduced-motion: reduce)').matches||'manual' in options){apply();return;}
   // A switch made while another is still starting replaces it; the skipped one only rejects its promises.
   const transition=document.startViewTransition(apply);transition.ready.catch(()=>{});transition.finished.catch(()=>{});transition.updateCallbackDone.catch(()=>{});
   // The cross-fade starts at the browser's next frame; if that is slow to come (a busy or idle page), the new look
@@ -106,14 +111,17 @@ try {
   let pixelRatio = maxPixelRatio, slowFrames = 0, lastFrameAt = 0;
   let warming = false;
   const afterRender = new Set(); // extra views drawn into the same canvas after each frame (the live LPR feed)
-  if (debug) Object.assign(window, {__renderer: renderer, __scene: scene, __camera: camera, __world: world});
+  if (debug) Object.assign(window, {__renderer: renderer, __scene: scene, __camera: camera});
   renderer.setPixelRatio(pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1;
   renderer.localClippingEnabled = true;
   // Shader error checks read every program's link log on first use, which blocks on the GPU: with them on,
-  // a stop's first visit stalled ~0.4 s. Keep them for the `debug` option (tests), skip them for visitors.
+  // a stop's first visit stalled ~0.4 s. Visitors' pages have them off (the warm-up at load compiles every shader).
+  // Screenshot and benchmark pages (`debug`, with no warm-up) keep them: that wait is also what makes a draw wait for
+  // a shader still compiling; without it, the first draw with a new shader (night's, the plate camera's) was dropped,
+  // and whatever used it was missing from that frame (a booth, the parked cars, the ground came and went in the shots).
   renderer.debug.checkShaderErrors = debug;
   renderer.shadowMap.enabled=true;
   renderer.shadowMap.type=THREE.PCFShadowMap; // PCFSoftShadowMap is gone from three.js (it fell back to this, warning on every load)
@@ -126,7 +134,6 @@ try {
   canvas.setAttribute('aria-label', pageString('canvas'));
   viewport.prepend(canvas);
   controls = new OrbitControls(camera, canvas);
-  if (debug) window.__controls = controls;
   controls.enableDamping = false;
   // Panning slides the view across the ground at the height it has (two fingers, a touchpad scroll, Shift-drag, the
   // arrow keys): up and down on the screen go forward and back, not up and down in the air. Set for each pan (in _pan
@@ -147,13 +154,7 @@ try {
   // Below ~20 m a 5% step is under a metre; from there on, steps stay about a metre long.
   const closeRange = () => Math.max(controls.minDistance * 2.5, 20);
   controls.zoomSpeed = 1.4;
-  // Camera up / down (the ▲ ▼ buttons, Page Up / Page Down): the camera alone moves, still looking at the same point, so
-  // the view looks further down from higher up. Panning keeps the height; this is the way to change it directly. A step
-  // is a third of the height above that point (at least a metre); the view's limits stop it (the camera never goes
-  // below the point it looks at, nor further out than zooming).
-  // Clamped to the view's limits, so a press at one does nothing (OrbitControls put the camera back along another
-  // line: ▲ at the zoom-out limit swung it overhead, and ▼ there backed it away or dropped it into the building). ▼
-  // undoes ▲ (× 4/3 up, × 3/4 down).
+  // Camera up / down (the ▲ ▼ buttons, Page Up / Page Down): view-math.js heightStep.
   const heightStep = sign => stepHeight({camera: camera.position, target: controls.target, minDistance: controls.minDistance, maxDistance: controls.maxDistance, maxPolarAngle: controls.maxPolarAngle}, sign);
   function pushForward(metres, clientX = null, clientY = null) {
     const rect = canvas.getBoundingClientRect();
@@ -227,16 +228,42 @@ try {
   const key = new THREE.DirectionalLight(0xffe7ba, 3.2);
   key.position.set(-18, 35, 28);
   key.castShadow=true;
-  const shadowSize=(innerWidth<700?1024:2048)*(renderScale<1?.5:1);
+  // 4096 on a desktop: about 2 cm a texel over the site, so a thin thing (the barrier's 11 cm arm, a post) keeps its
+  // shadow; at 2048 with a wider blur and offset, those washed out to a faint smudge or nothing.
+  const shadowSize=(innerWidth<700?1024:4096)*(renderScale<1?.5:1);
   key.shadow.mapSize.set(shadowSize,shadowSize);
   Object.assign(key.shadow.camera,{left:-42,right:42,top:38,bottom:-38,near:.5,far:110});
-  key.shadow.bias=-.00025;key.shadow.normalBias=.06;key.shadow.radius=3;
+  key.shadow.bias=-.00025;key.shadow.normalBias=.025;key.shadow.radius=1.5;
   scene.add(key);
+  // The sun's shadows cover the site: the building, the car park out to its west hedge and trees, and the street beside
+  // them (not the street lamps far along it, which would thin the map out). A fixed box around the building's centre
+  // left the west half of the car park without shadows. Fitted around the site in the sun's own view at each sun step
+  // (after applySky, which points the light from the origin), so whatever the sun's angle every shadow the site casts
+  // is on the map; deep enough for the longest (low sun), the bias kept at about 2.7 cm whatever the depth.
+  // Up to 32 m: the explore page's exploded view raises the top floor about 10 m above the roof's 19 m.
+  const SHADOW_SITE=new THREE.Box3(new THREE.Vector3(-66,0,-22),new THREE.Vector3(26,32,31)),siteCentre=SHADOW_SITE.getCenter(new THREE.Vector3());
+  const corner=new THREE.Vector3();
+  const fitShadow=()=>{
+    const cam=key.shadow.camera;
+    key.target.position.copy(siteCentre);key.target.updateMatrixWorld();
+    // Out along the same direction, far enough that the whole site is in front of the shadow camera.
+    key.position.normalize().multiplyScalar(150).add(siteCentre);key.updateMatrixWorld();
+    cam.position.copy(key.position);cam.lookAt(siteCentre);cam.updateMatrixWorld();
+    let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity,z0=Infinity,z1=-Infinity;
+    for(let i=0;i<8;i++){
+      corner.set(i&1?SHADOW_SITE.max.x:SHADOW_SITE.min.x,i&2?SHADOW_SITE.max.y:SHADOW_SITE.min.y,i&4?SHADOW_SITE.max.z:SHADOW_SITE.min.z).applyMatrix4(cam.matrixWorldInverse);
+      x0=Math.min(x0,corner.x);x1=Math.max(x1,corner.x);y0=Math.min(y0,corner.y);y1=Math.max(y1,corner.y);z0=Math.min(z0,corner.z);z1=Math.max(z1,corner.z);
+    }
+    const sinElevation=Math.max(.1,(key.position.y-siteCentre.y)/key.position.distanceTo(siteCentre));
+    Object.assign(cam,{left:x0,right:x1,bottom:y0,top:y1,near:Math.max(.5,-z1-1),far:-z0+SHADOW_SITE.max.y/sinElevation+1});
+    cam.updateProjectionMatrix();
+    key.shadow.bias=-.027/(cam.far-cam.near);
+  };
   const fill = new THREE.DirectionalLight(0xc9e2ed, .6);
   fill.position.set(-30, 20, -20);
   scene.add(fill);
 
-  // ?fps=1 shows how many frames per second the 3D view actually draws (for checking the event laptop).
+  // The `fps` option shows how many frames per second the 3D view actually draws (for checking the event laptop).
   const fpsMeter = 'fps' in options ? (() => {
     const el = Object.assign(document.createElement('div'), {style: 'position:fixed;left:8px;bottom:8px;z-index:99;padding:4px 8px;border-radius:6px;background:#0f1720cc;color:#9ff0b5;font:12px/1.4 ui-monospace,monospace;pointer-events:none'});
     document.body.append(el);
@@ -245,14 +272,19 @@ try {
   })() : null;
   // Every draw of the main view also draws the extra views, or the LPR pop-up would show the main scene for a frame.
   function draw() {
+    // What moves on the demo's clock (light fades, the tour's effects) is brought to this moment first.
+    simulation?.beforeDraw();
+    showcase?.beforeDraw();
     renderer.render(scene, camera);
     for (const extra of afterRender) extra();
   }
+  // `holdDraws`: a screenshot's frame is on screen (__engine.settle): nothing draws over it until the next step.
+  let holdDraws = false;
   function schedule() {
-    if (frame || disposed || document.hidden) return;
+    if (frame || disposed || document.hidden || holdDraws) return;
     frame = requestAnimationFrame(time => {
       frame = 0;
-      if (disposed || warming) return;
+      if (disposed || warming || holdDraws) return;
       draw();
       fpsMeter?.();
       adaptResolution(time);
@@ -296,6 +328,54 @@ try {
   const readPose=()=>({eye:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov});
   const writePose=pose=>{camera.position.fromArray(pose.eye);controls.target.fromArray(pose.target);camera.fov=pose.fov;camera.updateProjectionMatrix();controls.update();schedule();};
   flight=createCameraFlight({read:readPose,write:writePose,onState(active){viewport.classList.toggle('flying',active);const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';setInMotion(active);}});
+  // Screenshots (the `manual` and `debug` options): `__engine.run(cond, ms)` steps simulation time until `cond()` holds
+  // or `ms` have passed (`cond` omitted: all of `ms`), and resolves whether it held. While the camera flies or the
+  // showcase is on its way to a stop (real time, with a wait for the page's layout before the flight sets off) it
+  // waits for the landing instead of stepping, so each state is reached at the same simulation time on every run. Paused, it steps nothing. It hands back to the caller after about 5 s of real time (`done: false`).
+  if (debug) window.__engine = {
+    now: demoNow,
+    // The benchmark: draws one frame of the view as it stands (the pond mirror and the LPR inset with it) and waits
+    // for the GPU to finish it (a one-pixel read), and says what it cost. A shadow update still pending is drawn
+    // first, untimed: the shadows are redrawn only when the sun moves or the view changes, not every frame.
+    // Screenshots: the frame for the picture. The GPU (this laptop's NVIDIA driver) draws the same frame a shade
+    // differently now and then (software rendering never does): it is drawn again until two draws in a row agree, and
+    // then held (nothing else draws) until the next step.
+    settle() {
+      const gl = renderer.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight, pixels = new Uint8Array(w * h * 4);
+      const sum = () => { draw(); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels); let a = 0, b = 0; for (let i = 0; i < pixels.length; i += 4) { a = (a + pixels[i] + pixels[i + 1] * 3 + pixels[i + 2] * 7) | 0; b = (b * 31 + pixels[i + 1]) | 0; } return `${a}:${b}`; };
+      if (renderer.shadowMap.needsUpdate) draw();
+      let last = sum(), tries = 1;
+      for (let next; tries < 8 && (next = sum()) !== last; tries++) last = next;
+      holdDraws = true;
+      return tries;
+    },
+    frame() {
+      const gl = renderer.getContext(), pixel = new Uint8Array(4);
+      if (renderer.shadowMap.needsUpdate) draw();
+      renderer.info.reset(); renderer.info.autoReset = false;
+      const start = performance.now();
+      try { draw(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel); } finally { renderer.info.autoReset = true; }
+      return {ms: performance.now() - start, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs.length};
+    },
+    async run(cond = () => false, ms = 600000) {
+      holdDraws = false;
+      const end = demoNow() + ms, started = performance.now();
+      // The panels repaint on the clock's tick, as they would between frames, and the shadows are drawn again for the
+      // moment reached: redrawn only when something asks, they kept the sun of whichever frame happened to be drawn
+      // while stepping, a different one each run.
+      const out = result => { world.tick(); renderer.shadowMap.needsUpdate = true; schedule(); return result; };
+      for (;;) {
+        if (cond()) return out({held: true, done: true});
+        if (demoNow() >= end || isPaused()) return out({held: false, done: true});
+        if (performance.now() - started > 5000) return out({held: false, done: false, left: end - demoNow()});
+        if (flight.running || showcase?.getState().traveling) { await new Promise(r => requestAnimationFrame(r)); continue; }
+        const second = Math.floor(demoNow() / 1000);
+        await advance(TICK);
+        // The clock's tick (the panels follow it) every second of simulation time, at the same moments in every run.
+        if (Math.floor(demoNow() / 1000) !== second) { world.tick(); await new Promise(r => requestAnimationFrame(r)); }
+      }
+    },
+  };
   // The `speed` option (tests, rehearsals) shortens every camera flight like the rest of the demo's timing.
   if (SPEED !== 1) { const flyPath = flight.flyPath; flight.flyPath = steps => flyPath(steps.map(step => ({...step, duration: (step.duration ?? 1800) / SPEED}))); }
 
@@ -422,18 +502,15 @@ try {
   servicesButton.addEventListener('click',()=>interiorCamera('services'));
   parkingButton.addEventListener('click',()=>interiorCamera('parking'));
   stairsButton.addEventListener('click',()=>interiorCamera('stairs'));
-  // The view keys, by the key's place (the Thai layout types other characters on them), else by the character: a
-  // keyboard may send no place, and other layouts put - and + elsewhere (German: - on the Slash key).
+  // The view keys (view-math.js viewKey: by the key's place, else by the character).
   canvas.addEventListener('keydown', event => {
     if (!model) return;
-    // Not with Ctrl, Alt or Cmd: those are the browser's (reload, its own zoom). By the key's place, not the character
-    // it types: on the Thai layout R types พ and -/= type ข/ช.
+    // Not with Ctrl, Alt or Cmd: those are the browser's (reload, its own zoom).
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    // (An on-screen keyboard may send no key place: then the character.)
-    const zoomOut = viewKey(event) === 'out', zoomIn = viewKey(event) === 'in';
-    if (viewKey(event) === 'reset') { if (showcase) showcase.resetView(); else frameVisible(); }
+    const key = viewKey(event), zoomOut = key === 'out', zoomIn = key === 'in';
+    if (key === 'reset') { if (showcase) showcase.resetView(); else frameVisible(); }
     // Its matrix at once too: a zoom toward the cursor before the next frame worked from the view before the step.
-    else if (viewKey(event) === 'up' || viewKey(event) === 'down') { event.preventDefault(); camera.position.y += heightStep(viewKey(event) === 'up' ? 1 : -1); controls.update(); camera.updateMatrixWorld(); schedule(); }
+    else if (key === 'up' || key === 'down') { event.preventDefault(); camera.position.y += heightStep(key === 'up' ? 1 : -1); controls.update(); camera.updateMatrixWorld(); schedule(); }
     else if (zoomIn || zoomOut) {
       event.preventDefault();
       const offset = camera.position.clone().sub(controls.target);
@@ -486,29 +563,49 @@ try {
     renderer.dispose();
   }, { signal: abort.signal });
 
-  // Interior partition walls are many small static meshes that nothing addresses one by one: merge each
-  // floor's walls of the same look into one mesh. Fewer draw calls, same picture, same cutaway clipping.
-  function mergeStaticPartitions(root) {
-    const groups = new Map();
-    const look = m => [m.type, m.color?.getHexString(), m.map?.uuid, m.roughness, m.metalness, m.transparent, m.opacity, m.side, m.alphaTest].join('|');
-    root.traverse(o => {
-      if (!o.isMesh || !/interior_partition/.test(o.name) || o.children.length || Array.isArray(o.material)) return;
-      const key = [o.parent.uuid, o.userData.type, look(o.material), Object.keys(o.geometry.attributes).sort().join(), Boolean(o.geometry.index)].join('#');
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(o);
-    });
-    for (const list of groups.values()) {
-      if (list.length < 2) continue;
-      const parent = list[0].parent;
-      const parts = list.map(o => { o.updateMatrix(); return o.geometry.clone().applyMatrix4(o.matrix); });
-      const merged = mergeGeometries(parts);
-      for (const g of parts) g.dispose();
-      if (!merged) continue;
-      const mesh = new THREE.Mesh(merged, list[0].material);
-      mesh.name = `${parent.name}_interior_partitions`;
-      mesh.userData = {type: list[0].userData.type, merged: list.length};
-      for (const o of list) { o.removeFromParent(); o.geometry.dispose(); }
-      parent.add(mesh);
+  // The building is about 900 small meshes, most of which nothing addresses one by one: each floor's static meshes of
+  // the same look (and type, shadow casting and exterior flag) become one mesh in the floor's own space. Fewer draw
+  // calls (the building was ~600 a frame), the same picture, the same cutaway clipping and exploded view. Left as they
+  // are: anything the page finds or changes by itself (devices, doors and what swings with them, rooms, the pond, the
+  // lift doors, the solar panels, roofs and ceilings), meshes with children, several materials or morph targets.
+  const KEEP_NAMES = /koi_pond|Courtyard_water|lift_doors|solar_modules/;
+  // (A door's frame carries its door's id but stays put: only what hangs from its hinge, `deviceKind`, swings.)
+  const KEEP_DATA = ['deviceKind', 'roomId', 'room', 'deviceIndicator', 'insightRoom', 'simulation', 'ceilingScope', 'arrivalCameras', 'parking', 'receptionSign'];
+  const KEEP_TYPES = new Set(['roof', 'ceiling', 'device', 'water']);
+  function mergeStaticMeshes(floors) {
+    const look = m => [m.type, m.color?.getHexString(), m.emissive?.getHexString(), m.emissiveIntensity, m.map?.uuid, m.bumpMap?.uuid, m.bumpScale, m.alphaMap?.uuid,
+      m.roughness, m.metalness, m.transparent, m.opacity, m.side, m.alphaTest, m.depthWrite, m.vertexColors, m.flatShading, m.polygonOffset, m.polygonOffsetFactor, m.polygonOffsetUnits].join('|');
+    const toFloor = new THREE.Matrix4();
+    for (const root of floors) {
+      root.updateMatrixWorld(true);
+      toFloor.copy(root.matrixWorld).invert();
+      const groups = new Map();
+      root.traverse(o => {
+        if (!o.isMesh || o === root) return;
+        // Its type, as the loading below works it out (its own, or its nearest typed parent's).
+        let type = o.userData.type, held = false;
+        for (let p = o; p && p !== root; p = p.parent) {
+          if (KEEP_DATA.some(k => p.userData[k] != null) || KEEP_NAMES.test(p.name)) held = true;
+          if (!type && p.userData.type) type = p.userData.type;
+        }
+        if (held || KEEP_TYPES.has(type) || o.children.length || Array.isArray(o.material) || Object.keys(o.geometry.morphAttributes).length) return;
+        const g = o.geometry, key = [look(o.material), type, Boolean(o.userData.exterior), o.castShadow, o.receiveShadow, o.renderOrder, o.visible, Object.keys(g.attributes).sort().join(), Boolean(g.index)].join('#');
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push({o, type});
+      });
+      for (const list of groups.values()) {
+        if (list.length < 2) continue;
+        const parts = list.map(({o}) => o.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(toFloor, o.matrixWorld)));
+        const merged = mergeGeometries(parts);
+        for (const g of parts) g.dispose();
+        if (!merged) continue;
+        const first = list[0].o, mesh = new THREE.Mesh(merged, first.material);
+        mesh.name = `${root.name}_static_${list[0].type || 'part'}`;
+        mesh.userData = {type: list[0].type, merged: list.length, ...(first.userData.exterior ? {exterior: true} : {})};
+        mesh.castShadow = first.castShadow; mesh.receiveShadow = first.receiveShadow; mesh.renderOrder = first.renderOrder;
+        for (const {o} of list) { o.removeFromParent(); o.geometry.dispose(); }
+        root.add(mesh);
+      }
     }
   }
 
@@ -537,7 +634,9 @@ try {
       model.position.x -= center.x;
       model.position.z -= center.z;
       surfaceTextures.apply(model);
-      mergeStaticPartitions(model);
+      // No arrows painted on the ground (noise from the demo's views; the car park draws none either).
+      model.getObjectByName('Parking_aisle_direction_arrows')?.removeFromParent();
+      mergeStaticMeshes(floorRoots);
       // Preserve all Y coordinates: floor elevations are provisional but meaningful.
       for (const root of floorRoots) root.traverse(object => {
         if (!object.isMesh && !object.isLine) return;
@@ -576,7 +675,6 @@ try {
       scene.add(model);
       renderKit.addPondReflections(model);
       const koi=createKoi({model,camera,schedule});abort.signal.addEventListener('abort',()=>koi.dispose(),{once:true});
-      if(debug)window.__koi=koi;
       // Night room lighting: a pool of 6 spot lights, 1 casting shadows, to stay light on laptop GPUs.
       simulation=await createSimulation({THREE,scene,model,floorRoots,renderer,camera,schedule,spotLights:6,shadowSpots:1,
         onSelectFloor(n){if(currentFloor!==String(n)){currentFloor=String(n);interiorView=null;updateView();}},
@@ -584,18 +682,22 @@ try {
         onNightChange(night){setPageNight(night);renderer.shadowMap.needsUpdate=true;schedule();},
         onNightRequest(wantNight){world.jumpTo(wantNight?20*60:7*60+30);}
       });
-      // The world clock drives the sky (in 2-minute steps of world time, each one redraw and one shadow update) and
+      // The world clock drives the sky (in steps of 6 s of world time, each one redraw and one shadow update: about ten a
+      // second in a 20-minute day, so the shadows move smoothly; in 2-minute steps they jumped every 2 s) and
       // switches the rooms' lights on after dusk.
       let skyStep=null;
       const followClock=()=>{
-        const minute=world.minute(),step=Math.round(minute/2);
-        if(step!==skyStep){skyStep=step;applySky({minute,scene,hemisphere,key,fill,dayBackground});renderer.shadowMap.needsUpdate=true;schedule();}
-        if(simulation.getState().night!==isDark(minute))simulation.setNight(isDark(minute));
-        setPageNight(isDark(minute));
+        const minute=world.minute(),step=Math.round(minute*10);
+        if(step!==skyStep){skyStep=step;applySky({minute,scene,hemisphere,key,fill,dayBackground});fitShadow();renderer.shadowMap.needsUpdate=true;schedule();}
+        const dark=isDark(minute);
+        if(simulation.getState().night!==dark)simulation.setNight(dark);
+        setPageNight(dark);
       };
       followClock();
-      if(debug)Object.assign(window,{__simulation:()=>simulation.getState(),__simulationApi:simulation});
       const offClock=world.subscribe(kind=>{if(kind!=='wrap')followClock();});abort.signal.addEventListener('abort',offClock,{once:true});
+      // The sun's steps come from the engine's tick (every 50 ms of simulation time): the clock's own events come every
+      // 250 ms, 16 s of world time in a 20-minute day, too far apart for 6 s steps.
+      const offSun=onTick(()=>{if(Math.round(world.minute()*10)!==skyStep)followClock();});abort.signal.addEventListener('abort',offSun,{once:true});
       status.dataset.state = 'ready';
       status.textContent = L('โมเดลพร้อมแสดง','Model ready');
       for (const button of viewButtons) button.disabled = false;
@@ -605,7 +707,6 @@ try {
        const meetingRoom=simulation.rooms.find(r=>r.id==='f4_meeting_2'),meetingRoot=model.getObjectByName(`Floor_${meetingRoom.floor}`);
        const meetingTarget=meetingRoot.localToWorld(new THREE.Vector3(meetingRoom.center[0],.8,meetingRoom.center[2]));
        sceneTransition=createSceneTransition({model,schedule,onFinish:()=>{renderer.shadowMap.needsUpdate=true;},onProgress:()=>{renderer.shadowMap.needsUpdate=true;}});
-       if(debug)window.__transition=sceneTransition;
        const buildingBounds=new THREE.Box3().setFromObject(model),buildingCenter=buildingBounds.getCenter(new THREE.Vector3());
        // zoomFrame: the zoom buttons' animation (below), stopped by any flight: with reduced motion a stop lands at
        // once, and its leftover frames then moved the camera off it.
@@ -628,11 +729,11 @@ try {
         const c=contextPose();controls.maxDistance=maxZoomOut(Math.hypot(c.eye[0]-c.target[0],c.eye[1]-c.target[1],c.eye[2]-c.target[2]));
        }
        // The parking access demo adds its own lot, cars and UI to this scene (src/parking).
-       const parkingModule=await import('osd/parking/index.js');
+       const parkingModule=await parkingCode;
        // A flight's floors settled at once on a stop's scene: one cut short (see cancelFlight), or taken over.
        function settle(id){sceneTransition.finish();applyDestination(id);lastDestination=id;}
        // The story's camera moves; one that takes over a flight to the car park (Play tapped on the way) settles it there.
-       parking=parkingModule.createParking({scene,schedule,camera,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms=1600)=>{cancelAnimationFrame(zoomFrame);if(docking){docking=false;settle('parking');}navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
+       parking=parkingModule.createParking({scene,schedule,camera,renderer,afterRender,capture:camera=>securityPreview.capture(camera),fly:(pose,ms)=>{cancelAnimationFrame(zoomFrame);if(docking){docking=false;settle('parking');}navigation++;return flight.flyPath([{to:pose,duration:ms,onUpdate(){schedule();}}]);}});
        parking.lot.root.visible=renderKit.ground.visible;
        if(debug)window.__parking=parking;
        parking.setNight(simulation.getState().night);simulation.subscribe(()=>parking.setNight(simulation.getState().night));
@@ -720,8 +821,8 @@ try {
        // Warm-up: a stop's first visit stalled 0.3–0.7 s, compiling and linking shader variants on the spot: the flight's
        // floor change cuts geometry with one more clipping plane (scene-transition.js), and the night's lights change
        // the number of lights. Compile every material each way at load, draw one tiny off-screen frame each way
-       // (shadows included), and upload every texture, before anyone clicks. The `warm: 0` option skips it (tests that do not
-       // measure smoothness; it takes over a second of each page load).
+       // (shadows included), and upload every texture, before anyone clicks. The `warm: 0` option skips it (the screenshots, which do
+       // not measure smoothness; it takes over a second of each page load).
        if(options.warm==='0')document.documentElement.dataset.warm='done';
        else{
         const hidden=[];
@@ -802,9 +903,7 @@ try {
        const onView=target=>Boolean(target.closest?.('#viewport'))&&!target.closest('#view-orbit, #parking-layer');
        // A drag counts all along (one longer than 20 s had the orbit start under the finger).
        for(const type of ['pointerdown','pointermove','wheel','keydown'])document.addEventListener(type,event=>{if(!onView(event.target)||(type==='pointermove'&&!event.buttons))return;lastInput=performance.now();stopOrbit();},{capture:true,signal:abort.signal});
-       // Tests: idle from now on, without waiting 20 s (a landing the watch below has yet to see no longer counts).
-       if(debug)window.__idleNow=()=>{lastInput=-Infinity;if(!flight.running)flightWasRunning=false;};
-       const orbitAllowed=()=>{const st=showcase.getState();if(!orbitEnabled||disposed||document.hidden||isPaused()||flight.running||st.traveling||parking?.story.running)return false;return performance.now()-lastInput>(st.touring?IDLE_TOUR_MS:IDLE_FREE_MS);};
+       const orbitAllowed=()=>{const st=showcase.getState();if(!orbitEnabled||'manual' in options||disposed||document.hidden||isPaused()||flight.running||st.traveling||parking?.story.running)return false;return performance.now()-lastInput>(st.touring?IDLE_TOUR_MS:IDLE_FREE_MS);};
        let flightWasRunning=false;
        const orbitWatch=setInterval(()=>{
         // Idle counts from the moment a flight lands: a tour stop's, and the visitor's own (a dock tap, outside the
@@ -825,8 +924,8 @@ try {
       }
       if(!isShowcase){
        // The exploration page shows the car park too: lot, parked cars and traffic, without the showcase UI.
-       const {createParkingScene}=await import('osd/parking/index.js');
-       parking=createParkingScene({scene,schedule,camera});
+       const {createParkingScene}=await parkingCode;
+       parking=createParkingScene({scene,schedule,camera,renderer});
        // The rooms follow the building's daily schedule here too (the showcase does it in building-insights.js).
        const followRooms=createRoomSchedule(simulation);followRooms(world.minute(),{all:true});
        const offRooms=world.subscribe(kind=>{if(kind==='tick')followRooms(world.minute());else if(kind==='jump'||kind==='set')followRooms(world.minute(),{all:true});});

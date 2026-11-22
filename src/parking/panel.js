@@ -1,7 +1,8 @@
 // The staff console shown in the side panel: overview, requests, gate, vehicles and reports.
 import {t, tx, fmtTime, fmtDate, fmtShortDate, fmtDateTime, getLang} from './i18n.js';
 import {esc, icon, patch, fakeQr, download} from './dom.js';
-import {PROVINCES, normalizePlate, GATE_REASONS as REASONS} from './sim.js';
+import {PROVINCES, normalizePlate, GATE_REASONS as REASONS, openReasonOf, emailed} from './sim.js';
+import {later} from './clock.js';
 
 const TABS = [['overview', 'chart'], ['requests', 'inbox'], ['gate', 'gate'], ['vehicles', 'car'], ['reports', 'doc']];
 const KIND_KEY = {entry: 'ev.entry', exit: 'ev.exit', unknown: 'ev.unknown', denied: 'ev.denied', manual: 'ev.manual', exitNoEntry: 'ev.exitNoEntry'};
@@ -23,7 +24,7 @@ export function createPanel({root, sim, actions}) {
   function tabs() {
     const pending = sim.state.requests.filter(q => q.status === 'pending').length;
     const alerts = sim.state.alerts.filter(a => a.status === 'open').length;
-    return `<nav class="pk-tabs" role="tablist">${TABS.map(([id, ic]) => `<button role="tab" data-tab="${id}" aria-selected="${ui.tab === id}"${cue(`tab:${id}`)}>${icon(ic)}<span>${t(`tab.${id}`)}</span>${id === 'requests' && pending ? `<i class="pk-badge">${pending}</i>` : ''}${id === 'gate' && alerts ? `<i class="pk-badge bad">${alerts}</i>` : ''}</button>`).join('')}</nav>`;
+    return `<nav class="pk-tabs" role="tablist">${TABS.map(([id, ic]) => `<button role="tab" data-tab="${id}" aria-selected="${ui.tab === id}">${icon(ic)}<span>${t(`tab.${id}`)}</span>${id === 'requests' && pending ? `<i class="pk-badge">${pending}</i>` : ''}${id === 'gate' && alerts ? `<i class="pk-badge bad">${alerts}</i>` : ''}</button>`).join('')}</nav>`;
   }
 
   // Overview -------------------------------------------------------------
@@ -64,7 +65,7 @@ export function createPanel({root, sim, actions}) {
     const list = sim.state.requests.filter(r => (ui.reqFilter === 'all' || r.status === ui.reqFilter) && (!q || r.visitor.name.toLowerCase().includes(q) || normalizePlate(r.plate).includes(np))).sort((a, b) => b.createdAt - a.createdAt);
     const chips = ['pending', 'approved', 'rejected', 'all'].map(f => `<button data-req-filter="${f}" aria-pressed="${ui.reqFilter === f}">${f === 'all' ? t('all') : t(`req.status.${f}`)}</button>`).join('');
     return `<div class="pk-toolbar"><div class="pk-chips">${chips}</div><input type="search" data-focus="req-search" placeholder="${t('search')}" value="${esc(ui.reqSearch)}"></div>
-    <div class="pk-list">${list.length ? list.map(r => `<button class="pk-row${ui.newIds.has(r.id) ? ' is-new' : ''}" data-key="${esc(r.id)}" data-request="${r.id}"${cue(`request:${r.id}`)}><span class="pk-row-main"><strong><span class="pk-name">${esc(r.visitor.name)}</span>${ui.newIds.has(r.id) ? ` <i class="pk-new">${t('req.new')}</i>` : ''}</strong><small><span class="pk-name">${esc(r.visitor.company)}</span> · ${fmtShortDate(r.arrival)}${r.departure !== r.arrival ? `–${fmtShortDate(r.departure)}` : ''}</small></span>${plate(r.plate, r.province)}${pill(t(`req.status.${r.status}`), statusTone[r.status])}</button>`).join('') : `<p class="pk-empty">${t('none')}</p>`}</div>`;
+    <div class="pk-list">${list.length ? list.map(r => `<button class="pk-row${ui.newIds.has(r.id) ? ' is-new' : ''}" data-key="${esc(r.id)}" data-request="${r.id}"><span class="pk-row-main"><strong><span class="pk-name">${esc(r.visitor.name)}</span>${ui.newIds.has(r.id) ? ` <i class="pk-new">${t('req.new')}</i>` : ''}</strong><small><span class="pk-name">${esc(r.visitor.company)}</span> · ${fmtShortDate(r.arrival)}${r.departure !== r.arrival ? `–${fmtShortDate(r.departure)}` : ''}</small></span>${plate(r.plate, r.province)}${pill(t(`req.status.${r.status}`), statusTone[r.status])}</button>`).join('') : `<p class="pk-empty">${t('none')}</p>`}</div>`;
   }
   function requestDetail(r) {
     const flags = sim.flagsFor(r);
@@ -73,14 +74,14 @@ export function createPanel({root, sim, actions}) {
     const actionsHtml = r.status === 'pending'
       ? (ui.rejecting
         ? `<div class="pk-reject"><label>${t('req.reject.reason')}<textarea data-focus="reject-text" rows="3">${esc(ui.rejectText)}</textarea></label><div class="pk-actions"><button class="pk-btn" data-act="reject-cancel">${t('cancel')}</button><button class="pk-btn danger" data-act="reject-confirm"${ui.rejectText.trim() ? '' : ' disabled'}>${t('req.reject')}</button></div></div>`
-        : `<p class="pk-hint">${t('req.approve.confirm')}</p><div class="pk-actions"><button class="pk-btn" data-act="reject"${cue('reject')}>${icon('x')}${t('req.reject')}</button><button class="pk-btn primary" data-act="approve"${cue('approve')}>${icon('check')}${t('req.approve')}</button></div>`)
+        : `<p class="pk-hint">${t('req.approve.confirm')}</p><div class="pk-actions"><button class="pk-btn" data-act="reject">${icon('x')}${t('req.reject')}</button><button class="pk-btn primary" data-act="approve"${cue('approve')}>${icon('check')}${t('req.approve')}</button></div>`)
       : r.status === 'approved' ? `<div class="pk-actions"><button class="pk-btn danger ghost" data-act="revoke">${t('req.revoke')}</button></div>` : '';
     return `<button class="pk-back" data-act="back">${icon('next', 'flip')}${t('req.back')}</button>
     <div class="pk-detail-head"><div><h3>${esc(r.visitor.name)}</h3><small>${t('req.receipt')} ${esc(r.ref)}</small></div>${pill(t(`req.status.${r.status}`), statusTone[r.status])}</div>
     <div class="pk-plate-big">${esc(r.plate)}<small>${esc(r.province)}</small></div>
     ${flags.length && r.status === 'pending' ? `<div class="pk-flags">${flags.map(f => pill(t(f), f === 'req.flag.today' ? 'info' : 'warn')).join('')}</div>` : ''}
     ${r.status === 'pending' ? `<div class="pk-atom">${icon('shield')}<div><strong>${t('req.atom')}</strong><span>${existing.length ? t('req.atom.found') : t('req.atom.none')}</span></div></div>` : ''}
-    ${r.status === 'approved' ? `<div class="pk-atom ok">${icon(r.syncing ? 'sync' : 'check')}<div><strong>${r.syncing ? t('req.registering') : t('req.registered')}</strong><span>${r.history.some(h => h.key === 'h.email') ? t('req.emailSent') : '…'}</span></div></div>` : ''}
+    ${r.status === 'approved' ? `<div class="pk-atom ok">${icon(r.syncing ? 'sync' : 'check')}<div><strong>${r.syncing ? t('req.registering') : t('req.registered')}</strong><span>${emailed(r) ? t('req.emailSent') : '…'}</span></div></div>` : ''}
     ${actionsHtml}
     <div class="dashboard-section">
       ${field(t('req.dates'), `${fmtDate(r.arrival)}${r.departure !== r.arrival ? ` – ${fmtDate(r.departure)}` : ''}`)}
@@ -93,7 +94,7 @@ export function createPanel({root, sim, actions}) {
       ${r.notes ? field(t('req.notes'), esc(r.notes)) : ''}
       ${r.reason ? field(t('req.reject.reason'), esc(r.reason)) : ''}
     </div>
-    ${r.status === 'approved' && r.qr ? `<div class="dashboard-section pk-qr-row">${fakeQr(r.qr)}<div><strong>${t('req.qr')}</strong><small>${esc(r.qr)}</small></div></div>` : ''}
+    ${r.status === 'approved' ? `<div class="dashboard-section pk-qr-row">${fakeQr(r.ref)}<div><strong>${t('req.qr')}</strong><small>${esc(r.ref)}</small></div></div>` : ''}
     <div class="dashboard-section"><h3>${t('req.history')}</h3>${[...r.history].reverse().map(h => `<div class="event-row"><time>${fmtDateTime(h.at)}</time><p>${t(h.key)}${h.by ? ` · ${t(h.by)}` : ''}</p></div>`).join('')}</div>`;
   }
 
@@ -106,15 +107,15 @@ export function createPanel({root, sim, actions}) {
     <div class="pk-gate-status ${g}"><div class="pk-gate-icon">${icon('gate')}</div><div><span class="metric-label">${t('gate.status')}</span><strong>${t(`gate.${g}`)}</strong><small><i class="pk-dot"></i>${t('gate.online')}</small></div>${pill(t(`gate.${g}`), tone)}</div>
     <div class="pk-cams">${['in', 'out'].map(k => `<figure>${ui.snapshots[k] ? `<img src="${ui.snapshots[k]}" alt="">` : `<div class="pk-cam-empty">${icon('camera')}</div>`}<figcaption>${t(k === 'in' ? 'gate.camIn' : 'gate.camOut')}</figcaption></figure>`).join('')}</div>
     <div class="dashboard-section"><h3>${t('gate.manual')}</h3><p class="pk-hint">${t('gate.manual.note')}</p><div class="pk-manual"><select data-focus="manual-reason" aria-label="${t('gate.reason')}">${REASONS.map(r => `<option value="${r}"${ui.manualReason === r ? ' selected' : ''}>${t(r)}</option>`).join('')}</select><button class="pk-btn primary" data-act="manual-open"${g !== 'closed' || open.length || actions.storyRunning?.() ? ' disabled' : ''}>${t('gate.openOnce')}</button></div>${open.length ? `<p class="pk-hint">${t('gate.manual.alertFirst')}</p>` : ''}</div>
-    <div class="dashboard-section"><h3>${t('gate.sim')}</h3><div class="pk-sim-grid">${[['registered', 'car'], ['visitor', 'user'], ['unknown', 'alert'], ['exit', 'arrowOut']].map(([k, ic]) => `<button class="pk-btn" data-sim="${k}"${cue(`sim:${k}`)}${actions.storyRunning?.() ? ' disabled' : ''}>${icon(ic)}${t(`gate.sim.${k}`)}</button>`).join('')}</div></div>
+    <div class="dashboard-section"><h3>${t('gate.sim')}</h3><div class="pk-sim-grid">${[['registered', 'car'], ['visitor', 'user'], ['unknown', 'alert'], ['exit', 'arrowOut']].map(([k, ic]) => `<button class="pk-btn" data-sim="${k}"${actions.storyRunning?.() ? ' disabled' : ''}>${icon(ic)}${t(`gate.sim.${k}`)}</button>`).join('')}</div></div>
     <div class="dashboard-section"><h3>${t('gate.log')}</h3>${sim.state.events.slice(0, 14).map(eventRow).join('')}</div>`;
   }
   function alertCard(a) {
-    const reason = a.openReason || REASONS[1];
+    const reason = openReasonOf(a);
     return `<div class="pk-alert-card" data-alert="${a.id}"><div class="pk-alert-head">${icon('alert')}<div><strong>${t('alert.title')}</strong><small>${fmtTime(a.at, true)} · ${t('gate.camIn')}</small></div></div>
     ${a.snapshot ? `<img src="${a.snapshot}" alt="">` : ''}<div class="pk-plate-big small">${esc(a.plate)}<small>${esc(a.province)}</small></div><p>${t('alert.body')}</p>
     <label class="pk-inline">${t('alert.openReason')}<select data-alert-reason="${a.id}">${REASONS.map(r => `<option value="${r}"${reason === r ? ' selected' : ''}>${t(r)}</option>`).join('')}</select></label>
-    <div class="pk-actions"><button class="pk-btn danger" data-alert-deny="${a.id}"${cue('deny')}>${icon('x')}${t('alert.deny')}</button><button class="pk-btn primary" data-alert-open="${a.id}"${cue('open')}>${icon('check')}${t('alert.open')}</button></div><small class="pk-hint">${t('alert.notify')}</small></div>`;
+    <div class="pk-actions"><button class="pk-btn danger" data-alert-deny="${a.id}"${cue('deny')}>${icon('x')}${t('alert.deny')}</button><button class="pk-btn primary" data-alert-open="${a.id}">${icon('check')}${t('alert.open')}</button></div><small class="pk-hint">${t('alert.notify')}</small></div>`;
   }
 
   // Vehicles -------------------------------------------------------------
@@ -177,7 +178,7 @@ export function createPanel({root, sim, actions}) {
       else { ui.tab = 'vehicles'; ui.vehFilter = 'all'; ui.vehSearch = ''; }
       render(); root.scrollTop = 0; return;
     }
-    if (d.alertOpen) { actions.resolveAlert(d.alertOpen, 'open', sim.state.alerts.find(a => a.id === d.alertOpen)?.openReason || REASONS[1]); return; }
+    if (d.alertOpen) { actions.resolveAlert(d.alertOpen, 'open', openReasonOf(sim.state.alerts.find(a => a.id === d.alertOpen))); return; }
     if (d.alertDeny) { actions.resolveAlert(d.alertDeny, 'deny'); return; }
     // Not while the story plays: a car sent then got into its steps (the visitor's car denied in the stray's place).
     if (d.sim) { if (!actions.storyRunning?.()) actions.simulate(d.sim); return; }
@@ -190,7 +191,7 @@ export function createPanel({root, sim, actions}) {
       case 'reject-cancel': ui.rejecting = false; render(); break;
       case 'reject-confirm': sim.reject(ui.selected, ui.rejectText.trim()); ui.rejecting = false; break;
       // Says whether an email goes: only once the ticket has been emailed (as in the real app).
-      case 'revoke': if (confirm(t(sim.state.requests.find(q => q.id === ui.selected)?.history.some(h => h.key === 'h.email') ? 'req.revoke.confirm' : 'req.revoke.confirmNoMail'))) sim.revoke(ui.selected); break;
+      case 'revoke': if (confirm(t(emailed(sim.state.requests.find(q => q.id === ui.selected)) ? 'req.revoke.confirm' : 'req.revoke.confirmNoMail'))) sim.revoke(ui.selected); break;
       case 'manual-open': actions.manualOpen(ui.manualReason); break;
       case 'import': { const n = sim.importCsv(); actions.toast?.(n ? t('veh.import.done', {n}) : t('veh.import.none')); break; }
       case 'csv-events': download(`osd-parking-events-${getLang()}.csv`, [['time', 'kind', 'plate', 'province', 'type', 'camera', 'by', 'reason'], ...sim.state.events.map(e => [fmtDateTime(e.at), t(KIND_KEY[e.kind]), e.plate, e.province, typeLabel(e.type), e.camera, e.by ? t(e.by) : '', e.reason ? t(e.reason) : ''])]); break;
@@ -226,8 +227,9 @@ export function createPanel({root, sim, actions}) {
     show(tab, {request = null} = {}) { ui.tab = tab; ui.selected = request; ui.rejecting = false; render(); root.scrollTop = 0; },
     markNew(id) { ui.newIds.add(id); schedule(); },
     setCue(name) { ui.cue = name; render(); },
-    flash(id) { ui.flash = id; schedule(); setTimeout(() => { if (ui.flash === id) { ui.flash = null; schedule(); } }, 2400); },
+    flash(id) { ui.flash = id; schedule(); later(() => { if (ui.flash === id) { ui.flash = null; schedule(); } }, 2400); },
     setSnapshot(which, url) { ui.snapshots[which] = url; if (ui.tab === 'gate') schedule(); },
+    hasSnapshot: which => Boolean(ui.snapshots[which]),
     // Alert reasons go too: ids start again after a reset, and a new alert showed an old one's reason.
     reset() { Object.assign(ui, {tab: 'overview', reqFilter: 'pending', reqSearch: '', selected: null, rejecting: false, vehFilter: 'all', vehSearch: '', cue: null, flash: null, snapshots: {in: '', out: ''}}); ui.newIds.clear(); render(); },
   };

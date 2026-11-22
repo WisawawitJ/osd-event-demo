@@ -1,7 +1,7 @@
 // This module is deliberately local: device state never leaves this page.
 // spotLights / shadowSpots: the night room light pool and how many of it cast shadows.
 import {L} from 'osd/parking/i18n.js';
-import {realNow as demoNow} from 'osd/parking/clock.js';
+import {realNow, ramp} from 'osd/parking/clock.js';
 
 // Texts follow the saved TH/EN choice. The device map names rooms in Thai; English names are kept here by room id.
 const ROOM_EN = {
@@ -19,7 +19,7 @@ const deviceName = {light: () => L('ไฟ', 'Light'), climate: () => L('แอ�
 const nightText = night => night ? L('กลางคืน · เปิดอยู่', 'Night · on') : L('กลางคืน', 'Night');
 
 export async function createSimulation({ THREE, scene, model, floorRoots, renderer, camera, schedule,
-  onSelectFloor = () => {}, onNightChange = () => {}, onNightRequest = null, spotLights = 8, shadowSpots = 2 }) {
+  onSelectFloor, onNightChange, onNightRequest, spotLights, shadowSpots }) {
   const response = await fetch("./model/device-map.json");
   if (!response.ok) throw new Error('Simulation map unavailable');
   const map = await response.json();
@@ -33,7 +33,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     light: room.capabilities?.light !== false, climate: false,
     doors: Object.fromEntries((room.doorIds || []).map(id => [id, false]))
   }]));
-  const floors = new Map(floorRoots.map((root, index) => [String(root.userData.floor || root.name.match(/Floor_(\d+)/)?.[1] || index + 1), root]));
+  const floors = new Map(floorRoots.map((root, index) => [String(index + 1), root]));
   const fixtures = new Map(rooms.map(room => [room.id, []]));
   const hinges = new Map();
   const originals = new Map();
@@ -98,55 +98,47 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   // A fixed pool bounds lighting/shadow cost even when the map grows.
   const SPOT_INTENSITY = 135;
   // Every room's light fades on and off (~0.35 s, as the meeting room's light cone does) instead of switching in one
-  // frame: its fittings' glow and its spot light follow `lightLevel` (0 off … 1 on), which runs toward the switch.
-  const lightLevel = new Map(rooms.map(room => [room.id, states.get(room.id).light ? 1 : 0]));
+  // frame: its fittings' glow and its spot light follow its level (0 off … 1 on), which runs toward the switch on the
+  // demo's clock (clock.js ramp: the same at the same moment however many frames are drawn; paused, it holds).
   const LIGHT_FADE_MS = 350;
-  let lightFrame = 0, lightLast = 0, dealLast = 0;
-  function paintLights() {
+  const lightLevel = new Map(rooms.map(room => [room.id, ramp(LIGHT_FADE_MS, states.get(room.id).light ? 1 : 0)]));
+  let lightFrame = 0;
+  function paintLights(now = realNow(), redraw = true) {
     for (const room of rooms) {
-      const level = lightLevel.get(room.id);
+      const level = lightLevel.get(room.id).value(now);
       for (const object of fixtures.get(room.id)) {
         if (object.userData.deviceKind !== 'light') continue;
         for (const material of [].concat(object.material)) if (material.emissive) { material.emissive.set(0xffdc9b); material.emissiveIntensity = (night ? 2.7 : .6) * level; }
       }
     }
-    lights.forEach((light, i) => { const d = dealt[i]; light.intensity = d.at ? SPOT_INTENSITY * lightLevel.get(d.at.room.id) * d.presence : 0; });
-    schedule();
+    lights.forEach((light, i) => { const d = dealt[i]; light.intensity = d.at ? SPOT_INTENSITY * lightLevel.get(d.at.room.id).value(now) * d.presence.value(now) : 0; });
+    if (redraw) schedule();
   }
   function relight() { updateLighting(); renderer.shadowMap.needsUpdate = true; schedule(); }
-  // On demo time: paused, the lights' fades and moves hold where they are.
-  function lightStep() {
-    const time = demoNow();
-    lightFrame = 0;
-    const fade = Math.max(0, time - (lightLast || time)) / LIGHT_FADE_MS; lightLast = time;
+  // Brings the lights to `now`: a spot whose fade out (before a move) has ended moves to its new room then, and fades in
+  // from that moment. Returns whether anything is still on its way.
+  function animateLights(now) {
     let moving = false;
-    const dd = Math.max(0, time - (dealLast || time)) / DEAL_MS; dealLast = time;
-    // Paused (no demo time passed): nothing to repaint; keep watching for Resume.
-    if (fade === 0 && dd === 0 && lightLast && !disposed) { lightFrame = requestAnimationFrame(lightStep); return; }
     lights.forEach((light, i) => {
       const d = dealt[i];
-      if (d.next !== undefined) {
-        d.presence = Math.max(0, d.presence - dd);
-        if (d.presence === 0) { place(light, d, d.next); d.next = undefined; }
-        moving = true; return;
-      }
-      const to = d.at ? 1 : 0;
-      if (d.presence !== to) { d.presence = to > d.presence ? Math.min(to, d.presence + dd) : Math.max(to, d.presence - dd); if (d.presence !== to) moving = true; }
+      if (d.next !== undefined && d.presence.target === 0 && d.presence.done(now)) { const at = d.presence.endsAt; place(light, d, d.next); d.next = undefined; d.presence.set(d.at ? 1 : 0, at); }
+      if (d.next !== undefined || !d.presence.done(now)) moving = true;
     });
-    for (const room of rooms) {
-      const to = states.get(room.id).light ? 1 : 0, from = lightLevel.get(room.id);
-      if (from === to) continue;
-      lightLevel.set(room.id, to > from ? Math.min(to, from + fade) : Math.max(to, from - fade));
-      if (lightLevel.get(room.id) !== to) moving = true;
-    }
-    paintLights();
-    if (moving && !disposed) lightFrame = requestAnimationFrame(lightStep); else lightLast = dealLast = 0;
+    for (const level of lightLevel.values()) if (!level.done(now)) moving = true;
+    return moving;
+  }
+  function lightStep() {
+    lightFrame = 0;
+    const now = realNow(), moving = animateLights(now);
+    paintLights(now);
+    if (moving && !disposed) lightFrame = requestAnimationFrame(lightStep);
   }
   function fadeLights() {
     if (disposed) return;
+    for (const room of rooms) lightLevel.get(room.id).set(states.get(room.id).light ? 1 : 0);
     if (document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      for (const room of rooms) lightLevel.set(room.id, states.get(room.id).light ? 1 : 0);
-      lights.forEach((light, i) => { const d = dealt[i]; if (d.next !== undefined) { place(light, d, d.next); d.next = undefined; } d.presence = d.at ? 1 : 0; });
+      for (const room of rooms) lightLevel.get(room.id).jump(states.get(room.id).light ? 1 : 0);
+      lights.forEach((light, i) => { const d = dealt[i]; if (d.next !== undefined) { place(light, d, d.next); d.next = undefined; } d.presence.jump(d.at ? 1 : 0); });
       paintLights(); return;
     }
     if (!lightFrame) lightFrame = requestAnimationFrame(lightStep);
@@ -167,7 +159,7 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     scene.add(light, light.target);
     return light;
   });
-  const DEAL_MS = 220, dealt = lights.map(() => ({ presence: 0, at: null, next: undefined }));
+  const DEAL_MS = 220, dealt = lights.map(() => ({ presence: ramp(DEAL_MS, 0), at: null, next: undefined }));
   let dealtOnce = false;
   const worldPoint = new THREE.Vector3();
   function isVisible(object) {
@@ -207,9 +199,10 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       const emitter = candidates[index] || null, d = dealt[index];
       light.visible = night;
       const same = d.at === emitter || (d.at && emitter && d.at.room === emitter.room && d.at.position.every((v, k) => v === emitter.position[k]));
-      if (same) { d.next = undefined; return; }
+      if (same) { if (d.next !== undefined) { d.next = undefined; d.presence.set(d.at ? 1 : 0); } return; }
       d.next = emitter;
-      if (d.presence === 0 || !dealtOnce || !night) { place(light, d, emitter); d.next = undefined; d.presence = dealtOnce && night ? 0 : emitter ? 1 : 0; }
+      if (d.presence.value() === 0 || !dealtOnce || !night) { place(light, d, emitter); d.next = undefined; d.presence.jump(dealtOnce && night ? 0 : emitter ? 1 : 0); d.presence.set(d.at ? 1 : 0); }
+      else d.presence.set(0); // fades out where it is, then moves (animateLights)
     });
     dealtOnce = true;
     paintLights(); fadeLights();
@@ -235,12 +228,12 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
     if (Math.abs(hinge.rotation.y - angle) < 1e-4) { swinging.delete(hinge); return; }
     if (disposed || matchMedia('(prefers-reduced-motion: reduce)').matches) { hinge.rotation.y = angle; return; }
     // On demo time: a swing stands still while the demo is paused, like everything else.
-    swinging.set(hinge, {from: hinge.rotation.y, to: angle, start: demoNow()});
+    swinging.set(hinge, {from: hinge.rotation.y, to: angle, start: realNow()});
     if (!swingFrame) swingFrame = requestAnimationFrame(swingStep);
   }
   function swingStep() {
     swingFrame = 0;
-    const time = demoNow();
+    const time = realNow();
     let moved = false;
     for (const [hinge, s] of swinging) {
       const t = Math.min(1, (time - s.start) / 600), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2, angle = s.from + (s.to - s.from) * e;
@@ -325,14 +318,12 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
   listen(roomSelect, 'change', () => {
     selectedId = roomSelect.value;
     feedback.textContent = '';
-    renderControls(); relight();
+    renderControls();
     onSelectFloor(byId.get(selectedId).floor);
     updateModel();
   });
-  // With a clock to follow (onNightRequest), the button asks it for night or day; night then follows the clock.
-  listen(nightButton, 'click', () => {
-    if (onNightRequest) onNightRequest(!night); else setNight(!night);
-  });
+  // The button asks the clock for night or day (onNightRequest); night then follows the clock.
+  listen(nightButton, 'click', () => onNightRequest(!night));
   function setNight(value) {
     night = Boolean(value);
     nightButton.setAttribute('aria-pressed', String(night));
@@ -424,8 +415,10 @@ export async function createSimulation({ THREE, scene, model, floorRoots, render
       renderControls();
       updateModel();
     },
+    // Before every draw: the lights as they are at this moment (the benchmark and the screenshots draw between frames).
+    beforeDraw() { const now = realNow(); animateLights(now); paintLights(now, false); },
     getState() {
-      return { mode: 'simulation', night, selectedRoom: selectedId, view: { ...view },
+      return { night, view: { ...view },
         rooms: Object.fromEntries([...states].map(([id, state]) => [id, { ...state, doors: { ...state.doors } }])) };
     },
     dispose() {

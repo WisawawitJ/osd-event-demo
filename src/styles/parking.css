@@ -277,7 +277,6 @@
 .pk-feed-img.live { background: transparent; }
 .pk-feed:has(.pk-feed-img.live) { background: transparent; animation: none; }
 .pk-feed:has(.pk-feed-img.live) > .pk-feed-head, .pk-feed:has(.pk-feed-img.live) > .pk-feed-result { background: #0f1720; }
-.pk-feed-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pk-feed-box { position: absolute; border: 2px solid #38d36b; border-radius: 3px; box-shadow: 0 0 0 1px #0007; }
 .pk-feed-box.reading { border-style: dashed; border-color: #ffd34d; animation: pk-blink .7s steps(2) infinite; }
 .pk-feed-result { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 11px 11px; }

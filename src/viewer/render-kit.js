@@ -1,5 +1,6 @@
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {Reflector} from 'osd/node_modules/three/examples/jsm/objects/Reflector.js';
+import {options} from 'osd/parking/options.js';
 
 // Locally generated studio sky: no remote HDRI/texture dependencies.
 export function createRenderKit(renderer, scene) {
@@ -14,11 +15,12 @@ export function createRenderKit(renderer, scene) {
  const h=holes.getContext('2d');h.fillStyle='white';h.fillRect(0,0,64,64);h.fillStyle='black';
  for(const [x,y] of [[16,16],[48,48]]){h.beginPath();h.arc(x,y,13,0,Math.PI*2);h.fill();}
  const perforation=new THREE.CanvasTexture(holes);perforation.wrapS=perforation.wrapT=THREE.RepeatWrapping;perforation.repeat.set(5,5);perforation.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),4);
- const reflections=[],STILL_MS=100,FADE_MS=250;let reflectionsPaused=false,liveView=true;
+ // Screenshots (the `manual` option) take the water as it settles at once: the fade is on real time, which they do not wait out.
+ const reflections=[],STILL_MS=100,FADE_MS='manual' in options?0:250;let reflectionsPaused=false,liveView=true;
  // The mirror's share of the water colour (reflectionMix) fades over FADE_MS when the camera sets off or stops,
  // instead of snapping between the reflection and the plain water colour (the whole pond flashed).
  let mixFrom=1,mixTo=1,mixAt=0;
- const mixNow=()=>mixFrom+(mixTo-mixFrom)*Math.min(1,(performance.now()-mixAt)/FADE_MS);
+ const mixNow=()=>mixFrom+(mixTo-mixFrom)*(FADE_MS?Math.min(1,(performance.now()-mixAt)/FADE_MS):1);
  // Live while the camera is still on a ground-floor view (where the pond is close enough to be worth the mirror's
  // second pass over the scene); elsewhere the water keeps its stand-in. The water itself is always drawn: hidden
  // outside the ground floor, it appeared and vanished at once as a flight changed floors.
@@ -114,7 +116,7 @@ export function createRenderKit(renderer, scene) {
   // Patches: smooth value noise across the ground, three octaves, as a brightness from 0.76 to 1.12, worked out per pixel
   // from the ground position the fog passes on (main.js), so they need no vertex data of their own. (On the test GPU,
   // with the start-up warm-up skipped (the `warm: 0` option), the ground draws as background until its shader is next rebuilt;
-  // with the warm-up, as the booth runs, it draws: see the check 'the ground is grass'.)
+  // with the warm-up, as the booth runs, it draws.)
   const material=new THREE.MeshStandardMaterial({map:texture,roughness:1});
   material.onBeforeCompile=shader=>{
    shader.fragmentShader=shader.fragmentShader.replace('void main() {',`float groundHash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}

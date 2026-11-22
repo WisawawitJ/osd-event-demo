@@ -9,14 +9,15 @@ import {createParkingWorld} from 'osd/parking/world.js';
 import {createPhone} from 'osd/parking/phone.js';
 
 // The lot as traffic sees it: a group the cars are added to, and the arm, which turns a quarter in about 0.8 s.
-export function standInLot() {
+function standInLot() {
   let angle = 0, target = 0;
   return {
     root: new THREE.Group(),
     // The sign's count, for tests.
-    free: null, setBays() {}, drawSign(free) { this.free = free; }, setNight() {},
+    free: null, setBays() {}, drawSign(free) { this.free = free; },
     setBoom(open) { target = open ? Math.PI / 2 * .96 : 0; },
     get boomMoving() { return angle !== target; },
+    get armAngle() { return angle; },
     update(dt) {
       if (angle === target) return false;
       angle = target > angle ? Math.min(target, angle + dt * 2) : Math.max(target, angle - dt * 2);
@@ -38,16 +39,25 @@ export function overlaps(lot) {
   return hits;
 }
 
-export function carPark({seed: s = 1, time} = {}) {
+// A fresh run: the dice seeded, the world clock moved on to `time` ('HH:MM').
+function begin(s, time) {
   seed(s);
   if (time) { const [h, m] = time.split(':').map(Number); world.jumpTo(h * 60 + m); }
+}
+// Simulation time on by `ms`, in whole ticks.
+const run = ms => advance(Math.ceil(ms / TICK) * TICK);
+
+// `quiet`: no through-traffic on the street.
+export function carPark({seed: s = 1, time, quiet = false} = {}) {
+  begin(s, time);
   const sim = createParkingSim(), lot = standInLot();
   const traffic = createTraffic({lot, sim, schedule() {}, hooks: {
     snapshot: () => '',
     // As the page's: the camera reads the plate (0.9 s), then shows the verdict a moment.
-    async readPlate(which, agent, verdict) { await sleep(900); await sleep(verdict.allow ? 500 : 300); },
+    async readPlate(which, agent, verdict, recognised) { await sleep(900); recognised(); await sleep(verdict.allow ? 500 : 300); },
   }});
   traffic.syncParked();
+  if (quiet) traffic.passBy = () => false;
   const cars = () => lot.root.children.filter(c => c.name.startsWith('Demo_car_') && c.visible);
   const car = plate => lot.root.children.find(c => c.name === `Demo_car_${plate}`);
   const key = v => sim.key(v.plate, v.province);
@@ -55,12 +65,14 @@ export function carPark({seed: s = 1, time} = {}) {
   const idle = (type = 'staff') => sim.state.vehicles.filter(v => v.type === type && v.enabled && v.sync === 'synced' && !sim.state.presence.has(key(v)) && !traffic.isAround(key(v)));
   return {
     sim, traffic, lot, cars, car, key, idle,
+    // In its bay, done driving; when its entry was logged.
+    parked: v => sim.state.presence.has(key(v)) && !traffic.isAround(key(v)),
+    entryAt: v => sim.state.events.find(e => e.kind === 'entry' && sim.key(e.plate, e.province) === key(v))?.at,
     now: demoNow,
-    run: ms => advance(Math.ceil(ms / TICK) * TICK),
-    until: runUntil,
+    run, until: runUntil,
     overlaps: () => overlaps(lot),
     // Counters that must all be back at 0 once nothing moves.
-    settled() { const s = traffic.inspect(); return !traffic.busy && !traffic.leaving && !s.entryPending && !s.gateHolders && !s.inbound && !s.outWest && !s.outEast && !s.backingOut && !s.crossing && !s.p1In && !s.outbound && sim.state.gate === 'closed'; },
+    settled() { const s = traffic.inspect(); return !traffic.busy && !traffic.leaving && !s.entryPending && !s.gateHolders && !s.inbound && !s.outWest && !s.outEast && !s.backingOut && !s.crossing && !s.p1In && !s.p1Waiting && !s.p1OnLane && !s.outbound && sim.state.gate === 'closed'; },
     dispose() { traffic.dispose(); },
   };
 }
@@ -68,8 +80,7 @@ export function carPark({seed: s = 1, time} = {}) {
 // The whole parking world without a page: records, traffic, the story, the background life and their rules, with a
 // stand-in car park and a phone that draws nothing. `ui` gets what the page would (events, captions, toasts…).
 export function parking({seed: s = 1, time, onScreen = true, ui = {}} = {}) {
-  seed(s);
-  if (time) { const [h, m] = time.split(':').map(Number); world.jumpTo(h * 60 + m); }
+  begin(s, time);
   const sim = createParkingSim(), lot = standInLot();
   const phone = createPhone({root: null, sim, actions: {}});
   const w = createParkingWorld({lot, sim, phone, onScreen: () => onScreen, ui});
@@ -77,7 +88,6 @@ export function parking({seed: s = 1, time, onScreen = true, ui = {}} = {}) {
   return {
     ...w, phone, key, now: demoNow,
     car: plate => lot.root.children.find(c => c.name === `Demo_car_${plate}`),
-    run: ms => advance(Math.ceil(ms / TICK) * TICK),
-    until: runUntil,
+    run, until: runUntil,
   };
 }

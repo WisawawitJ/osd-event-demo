@@ -1,7 +1,7 @@
 // The camera's rules (view-math.js): height steps, panning far out, the hard limits, zoom planes, keys.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {heightStep, easedPanStep, settlePivot, screenPlaneZoom, viewKey, maxZoomOut, PAN_FREE, PAN_LIMIT, PAN_TOP, CAMERA_FLOOR, MAX_POLAR} from 'osd/viewer/view-math.js';
+import {heightStep, easedPanStep, settlePivot, screenPlaneZoom, viewKey, maxZoomOut, PAN_LIMIT, PAN_TOP, CAMERA_FLOOR, MAX_POLAR} from 'osd/viewer/view-math.js';
 
 const view = (camera, target = {x: 0, y: 0, z: 0}) => ({camera, target, minDistance: .4, maxDistance: 130, maxPolarAngle: MAX_POLAR});
 
@@ -35,7 +35,6 @@ test('panning is free near the site, slows far out, stops at the limit; coming b
   let t = {x: 89, y: 0, z: 0};
   for (let i = 0; i < 200; i++) { const s = easedPanStep(t, {x: 0, z: 3}); t = {x: t.x + s.x, y: 0, z: t.z + s.z}; }
   assert.ok(Math.hypot(t.x, t.z) <= PAN_LIMIT + 1e-6, 'a pan round the site does not creep out');
-  void PAN_FREE;
 });
 
 test('a pivot taken under the ground slides back along the line of sight: the camera, and so the picture, stays', () => {

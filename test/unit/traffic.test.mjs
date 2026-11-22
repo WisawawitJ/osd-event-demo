@@ -2,36 +2,33 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {carPark} from './world.mjs';
-import {GATE, STREET} from '../../src/parking/layout.js';
+import {GATE, STREET} from 'osd/parking/layout.js';
 
-const parked = (cp, v) => cp.sim.state.presence.has(cp.key(v)) && !cp.traffic.isAround(cp.key(v));
-const entryAt = (cp, v) => cp.sim.state.events.find(e => e.kind === 'entry' && cp.sim.key(e.plate, e.province) === cp.key(v))?.at;
 
 test('a staff car drives in from the near lane, through the barrier, and parks', async () => {
   const cp = carPark({time: '06:00'});
   const v = cp.idle()[0];
   cp.traffic.arrive({plate: v.plate, province: v.province, color: 1, fromX: -40});
-  assert.ok(await cp.until(() => parked(cp, v), 60000), 'parked within a minute');
+  assert.ok(await cp.until(() => cp.parked(v), 60000), 'parked within a minute');
+  assert.ok(!cp.traffic.inspect().mouthStops.includes(v.plate), 'rolled straight into its clear aisle, without stopping at the mouth');
   assert.ok(await cp.until(() => cp.settled(), 20000), 'the gate quiet again, every counter back at 0');
   cp.dispose();
 });
 
 test('a far-lane car nearly at its turn goes in before a near-lane car further back', async () => {
   // A near-lane car took its turn as it appeared, 50 m out, ahead of a far-lane car already at its turn.
-  const cp = carPark({time: '06:00'});
-  cp.traffic.passBy = () => false;
+  const cp = carPark({time: '06:00', quiet: true});
   const [far, near] = cp.idle();
   cp.traffic.arrive({plate: far.plate, province: far.province, color: 1, west: true});
   assert.ok(await cp.until(() => (cp.car(far.plate)?.position.x ?? 99) < -0.9, 60000), 'the far-lane car 16 m from its turn');
   cp.traffic.arrive({plate: near.plate, province: near.province, color: 2, fromX: -70});
-  assert.ok(await cp.until(() => parked(cp, far) && parked(cp, near), 90000), 'both parked');
-  assert.ok(entryAt(cp, far) < entryAt(cp, near), 'the far-lane car went in first');
+  assert.ok(await cp.until(() => cp.parked(far) && cp.parked(near), 90000), 'both parked');
+  assert.ok(cp.entryAt(far) < cp.entryAt(near), 'the far-lane car went in first');
   cp.dispose();
 });
 
 test('a queued car sets off as the arm rises for the car ahead, not once it is past', async () => {
-  const cp = carPark({time: '06:00'});
-  cp.traffic.passBy = () => false;
+  const cp = carPark({time: '06:00', quiet: true});
   const b = cp.idle()[0];
   cp.traffic.arrive({plate: '1กก 1111', province: 'กรุงเทพมหานคร', color: 1, fromX: -40});
   await cp.run(300);
@@ -65,13 +62,12 @@ test('a car leaving, a VIP behind it and two queued cars with far-lane traffic a
   cp.traffic.arrive({plate: c3.plate, province: c3.province, color: 7, fromX: -70});
   await cp.until(() => cp.traffic.inspect().westExitHold, 60000);
   farTraffic = false;
-  assert.ok(await cp.until(() => !cp.traffic.isAround(cp.key(lv)) && [vip, c2, c3].every(v => parked(cp, v)), 120000), `all through (counters ${JSON.stringify(cp.traffic.inspect())})`);
+  assert.ok(await cp.until(() => !cp.traffic.isAround(cp.key(lv)) && [vip, c2, c3].every(v => cp.parked(v)), 120000), `all through (counters ${JSON.stringify(cp.traffic.inspect())})`);
   cp.dispose();
 });
 
 test('a car leaving an aisle frees it once on the exit lane, not at the barrier', async () => {
-  const cp = carPark({time: '06:00'});
-  cp.traffic.passBy = () => false;
+  const cp = carPark({time: '06:00', quiet: true});
   const v = cp.idle()[0], bay = cp.sim.state.stalls.find(s => s.row === 'B' && !s.occupant);
   cp.sim.recordEntry({plate: v.plate, province: v.province, type: 'staff', stallId: bay.id, color: 2});
   cp.traffic.appear(cp.key(v));

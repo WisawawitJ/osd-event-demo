@@ -1,7 +1,7 @@
 // Headless Chromium driven over the DevTools protocol, with no npm dependencies.
 // It starts its own static server on a free port; WebGL renders on the NVIDIA GPU when present, else in software.
 import {spawn} from 'node:child_process';
-import {existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync} from 'node:fs';
 import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
@@ -38,9 +38,9 @@ function freePort() {
   return new Promise((ok, fail) => { const s = createServer(); s.once('error', fail); s.listen(0, '127.0.0.1', () => { const {port} = s.address(); s.close(() => ok(port)); }); });
 }
 
-async function startServer() {
+async function startServer(site = root) {
   const port = await freePort();
-  const child = spawn(process.execPath, [join(root, 'scripts/serve.mjs'), String(port)], {stdio: 'ignore'});
+  const child = spawn(process.execPath, [join(root, 'scripts/serve.mjs'), String(port), site], {stdio: 'ignore'});
   running.add(child);
   const stop = () => { child.kill(); running.delete(child); };
   for (let i = 0; i < 50; i++) { try { await fetch(`http://127.0.0.1:${port}/`); return {url: `http://127.0.0.1:${port}/`, stop}; } catch {} await sleep(100); }
@@ -82,7 +82,7 @@ async function startBrowser(mode, profileRoot) {
       else if (m.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(m.params.type)) logs.push(`[${m.params.type}] ${m.params.args.map(a => a.value ?? a.description).join(' ')}`);
       else if (m.method === 'Runtime.exceptionThrown') logs.push(`[exception] ${m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text}`);
     });
-    // A call that gets no answer (a hung page or GPU process) fails the check instead of hanging the whole run.
+    // A call that gets no answer (a hung page or GPU process) fails instead of hanging the whole run.
     // A browser that died fails every call at once (each waited out the 90 s).
     let gone = null;
     const die = reason => { gone = new Error(reason); for (const {fail} of pending.values()) fail(gone); pending.clear(); };
@@ -91,8 +91,8 @@ async function startBrowser(mode, profileRoot) {
     ws.addEventListener('message', e => { if (JSON.parse(e.data).method === 'Inspector.targetCrashed') die('the page crashed'); });
     const send = (method, params = {}) => new Promise((ok, fail) => {
       if (gone) return fail(gone);
-      // No answer in 90 s: the page is hung (a script in an endless loop), and as good as gone. Each later call waited
-      // the 90 s too, for every check left to this browser; gone, they go to the others.
+      // No answer in 90 s: the page is hung (a script in an endless loop), and as good as gone (each later call waited
+      // the 90 s too).
       const i = ++id, timer = setTimeout(() => { pending.delete(i); const error = new Error(`DevTools ${method} got no answer in 90 s`); fail(error); die(error.message); }, 90000);
       pending.set(i, {ok: m => { clearTimeout(timer); ok(m); }, fail: error => { clearTimeout(timer); fail(error); }});
       ws.send(JSON.stringify({id: i, method, params}));
@@ -105,7 +105,7 @@ async function startBrowser(mode, profileRoot) {
   } catch (error) { close(); throw error; } // a browser that started but does not answer is not left running
 }
 
-export const DEFAULT_GPU = existsSync('/dev/nvidia0') && existsSync(NVIDIA_EGL) ? 'nvidia' : 'software';
+const DEFAULT_GPU = existsSync('/dev/nvidia0') && existsSync(NVIDIA_EGL) ? 'nvidia' : 'software';
 // The iGPU's device nodes (vendor 8086), and whether any process of the browser using `profile` has one open.
 const IGPU = (() => { try { return readdirSync('/sys/class/drm').filter(n => /^(card|renderD)\d+$/.test(n) && readFileSync(`/sys/class/drm/${n}/device/vendor`, 'utf8').trim() === '0x8086').map(n => `/dev/dri/${n}`); } catch { return []; } })();
 function usesIgpu(profile) {
@@ -119,9 +119,10 @@ function usesIgpu(profile) {
 }
 
 // Opens a browser and server. `gpu` is a GPU_MODES key: DEFAULT_GPU unless GPU= says otherwise (see GPU_MODES).
-export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(root, 'test/out')} = {}) {
+// `site`: the folder to serve (default this checkout).
+export async function open({gpu = process.env.GPU || DEFAULT_GPU, site = root} = {}) {
   if (!GPU_MODES[gpu]) throw new Error(`GPU=${gpu}: use nvidia or software (default here: ${DEFAULT_GPU}), or vulkan / egl to opt in to other hardware (egl is the Intel iGPU: don't)`);
-  const profileRoot = join(process.env.TEST_TMP || tmpdir(), 'osd-demo-test');
+  const profileRoot = join(tmpdir(), 'osd-demo-test');
   mkdirSync(profileRoot, {recursive: true});
   // Profiles left by runners that are gone (killed outright, with no exit handler), and their browsers: each runs in
   // its own process group, so it outlives its runner, drawing the demo on the GPU. A profile's runner is in its name;
@@ -137,7 +138,7 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
     }
     for (const name of stale) try { rmSync(join(profileRoot, name), {recursive: true, force: true}); } catch {}
   }
-  const server = await startServer();
+  const server = await startServer(site);
   let browser = null, renderer = '';
   // A browser that fails to start or answer leaves nothing running behind the error.
   try {
@@ -152,18 +153,17 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
   } catch (error) { browser?.close(); server.stop(); throw error; }
   const {send, logs} = browser;
   const gone = () => browser.gone;
-  let shot = 0, optionsScript = null;
+  const stepped = () => page.eval('typeof window.__engine === "object"').catch(() => false);
+  let optionsScript = null;
   const page = {
     renderer, logs, url: server.url, sleep,
-    // Its browser died: the runner stops giving this page checks (each failed at once, and one dead browser failed the
-    // rest of the run).
+    // Its browser died (scripts/shots.mjs then opens a new one).
     get gone() { return gone(); },
     cdp: send, // raw DevTools protocol, e.g. for profiling
 
-    // Pages open with the world clock at real speed (`day=0`, from 09:00) unless the path sets `day` itself: checks of
-    // one scene then see the morning they expect, and only the day-cycle checks run the time-lapse. In software
-    // rendering they also draw the 3D view at half resolution (`render=0.5`), the bulk of the CPU's work.
-    // The console log is the runner's to clear, per check: cleared here, errors on a check's earlier pages went unseen.
+    // Pages open with the world clock at real speed (`day=0`, from 09:00) unless the path sets `day` itself. In
+    // software rendering they also draw the 3D view at half resolution (`render=0.5`), the bulk of the CPU's work.
+    // The console log (`logs`) is the caller's to read and clear.
     async goto(path) {
       let url = path.replace(/^\//, '');
       const add = (name, value) => { if (new RegExp(`[?&]${name}=`).test(url)) return; const [before, hash = ''] = url.split('#'); url = `${before}${before.includes('?') ? '&' : '?'}${name}=${value}${hash ? '#' + hash : ''}`; };
@@ -192,16 +192,46 @@ export async function open({gpu = process.env.GPU || DEFAULT_GPU, shots = join(r
       while (Date.now() < end) { try { if (await page.eval(expression)) return; error = null; } catch (e) { if (gone()) throw e; error = e; } await sleep(100); }
       throw new Error(`timed out waiting for ${what}${error ? ` (last error: ${error.message.split('\n')[0]})` : ''}`);
     },
+    // Stepping (pages opened with the `manual` and `debug` options: window.__engine in src/viewer/main.js). On a version
+    // of the demo with no stepping hook they wait in real time instead.
+    // reach(cond, what, ms): steps simulation time until the expression `cond` holds (at most `ms` of it), camera
+    // flights waited out; throws with `what` if it never does.
+    async reach(cond, what, ms = 1800000) {
+      if (!await stepped()) return page.until(cond, {timeout: 60000, what});
+      for (let left = ms; ;) {
+        const r = await page.eval(`__engine.run(() => (${cond}), ${left})`);
+        if (r.held) return;
+        if (r.done) throw new Error(`never reached: ${what}`);
+        left = r.left;
+      }
+    },
+    // step(ms, {hold}): `ms` of simulation time on, then two frames drawn (CSS animations end at once and the water
+    // settles at once on stepped pages, as the screenshots open them). With no stepping, real time passes, and `hold`
+    // (default) moves the pointer over the 3D view first so the camera's idle orbit stays off.
+    async step(ms, {hold = true} = {}) {
+      const frames = () => page.eval('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))').catch(() => {});
+      if (await stepped()) {
+        for (let left = ms; left > 0;) { const r = await page.eval(`__engine.run(undefined, ${left})`); if (r.done) break; left = r.left; }
+        // The frames asked for on the way drawn, then the picture's own frame (drawn until the GPU agrees with itself,
+        // then held: see __engine.settle), the page's DOM settled with it.
+        await frames();
+        if (await page.eval('typeof __engine.settle === "function"')) await page.eval('__engine.settle()');
+        await frames();
+        return;
+      }
+      if (hold) await page.eval(`document.querySelector('#viewport')?.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,buttons:1}))`).catch(() => {});
+      await sleep(ms + 350);
+      await frames();
+    },
+    // ready(cond): real time while the page loads (the showcase's car park too), then stepped until `cond`. (Stepped
+    // during the load, a run took as many ticks as the load took, and its cars and plates came out different.)
+    async ready(cond) {
+      await page.until("document.querySelector('#status')?.dataset.state === 'ready' && (location.hash === '#explore' || !!window.__parking)", {timeout: 90000, what: 'the page loaded'});
+      if (await stepped()) await page.reach(cond, 'the page ready', 120000);
+      else await page.until(cond, {timeout: 60000, what: 'the page ready'});
+    },
     // Like a real tap: pointer events first (the booth's idle timer listens for them), then the click.
     async click(selector) { const r = await page.eval(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const o={bubbles:true,cancelable:true,pointerId:1,pointerType:'mouse',isPrimary:true};e.dispatchEvent(new PointerEvent('pointerdown',{...o,buttons:1}));e.dispatchEvent(new PointerEvent('pointerup',o));e.click();return true})()`); if (!r) throw new Error(`no element ${selector}`); },
-    async shot(name) {
-      const r = await send('Page.captureScreenshot', {format: 'png'});
-      // The folder is made with its first screenshot (each run left an empty one).
-      mkdirSync(shots, {recursive: true});
-      const file = join(shots, `${String(++shot).padStart(2, '0')}-${name}.png`);
-      writeFileSync(file, Buffer.from(r.result.data, 'base64'));
-      return file;
-    },
   };
   return {page, close() { server.stop(); return browser.close(); }};
 }

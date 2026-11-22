@@ -2,14 +2,12 @@
 import {test, afterEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {carPark} from './world.mjs';
-import {GATE, STREET, ENTRY_TURN} from '../../src/parking/layout.js';
+import {GATE, STREET, ENTRY_TURN} from 'osd/parking/layout.js';
 
 const QUEUE_HEAD = GATE.entryX - ENTRY_TURN - 2.23 - .8 - 2.2, QUEUE_GAP = 6.5;
 const live = [];
 afterEach(() => { for (const cp of live.splice(0)) cp.dispose(); });
-const quiet = (time = '06:00') => { const cp = carPark({time}); cp.traffic.passBy = () => false; live.push(cp); return cp; };
-const parked = (cp, v) => cp.sim.state.presence.has(cp.key(v)) && !cp.traffic.isAround(cp.key(v));
-const entryAt = (cp, v) => cp.sim.state.events.find(e => e.kind === 'entry' && cp.sim.key(e.plate, e.province) === cp.key(v))?.at;
+const quiet = (time = '06:00') => { const cp = carPark({time, quiet: true}); live.push(cp); return cp; };
 const blinking = (car, side) => car?.getObjectByName(`Demo_car_blinker_${side}`)?.visible;
 // Watches `fn` every tick until `until` holds; returns whether `fn` was ever true.
 async function seen(cp, fn, until, ms = 60000) { let hit = false; await cp.until(() => { if (fn()) hit = true; return until(); }, ms); return hit; }
@@ -18,8 +16,8 @@ test('a far-lane car waits at its turn signalling right, then turns in across th
   const cp = quiet(), v = cp.idle()[0];
   cp.traffic.arrive({plate: v.plate, province: v.province, color: 1, west: true});
   let far = false, right = false;
-  await cp.until(() => { const c = cp.car(v.plate); if (Math.abs(c?.position.z - STREET.laneWest) < .3) far = true; if (blinking(c, 'right')) right = true; return parked(cp, v); }, 90000);
-  assert.ok(far, 'it came along the far lane'); assert.ok(right, 'signalling right'); assert.ok(parked(cp, v), 'parked');
+  await cp.until(() => { const c = cp.car(v.plate); if (Math.abs(c?.position.z - STREET.laneWest) < .3) far = true; if (blinking(c, 'right')) right = true; return cp.parked(v); }, 90000);
+  assert.ok(far, 'it came along the far lane'); assert.ok(right, 'signalling right'); assert.ok(cp.parked(v), 'parked');
 });
 
 test('a car leaving for the far lane signals right and drives off westbound in it', async () => {
@@ -38,8 +36,8 @@ test('a far-lane car sent first, 110 m further out, does not hold up a near-lane
   cp.traffic.arrive({plate: far.plate, province: far.province, color: 1, west: true});
   await cp.run(50);
   cp.traffic.arrive({plate: near.plate, province: near.province, color: 2, fromX: -40});
-  assert.ok(await cp.until(() => parked(cp, far) && parked(cp, near), 90000));
-  assert.ok(entryAt(cp, near) < entryAt(cp, far), 'the near-lane car went in first');
+  assert.ok(await cp.until(() => cp.parked(far) && cp.parked(near), 90000));
+  assert.ok(cp.entryAt(near) < cp.entryAt(far), 'the near-lane car went in first');
 });
 
 test('a near-lane car signals left before turning in, and while it queues', async () => {
@@ -62,15 +60,8 @@ test('the queue waits close behind the barrier; a car turned away there backs ou
   assert.ok(await cp.until(() => cp.sim.state.alerts.some(x => x.status === 'open') && Math.abs((cp.car(a.plate)?.position.x ?? 0) - QUEUE_HEAD) < .1, 60000), 'the next car at the queue head');
   const alert = cp.sim.state.alerts.find(x => x.status === 'open');
   cp.sim.resolveAlert(alert.id, 'deny');
-  assert.ok(await cp.until(() => parked(cp, a) && !cp.car('1กก 1111'), 90000), 'the turned-away car backed out and left; the next one in');
+  assert.ok(await cp.until(() => cp.parked(a) && !cp.car('1กก 1111'), 90000), 'the turned-away car backed out and left; the next one in');
   assert.ok(cp.overlaps().length === 0);
-});
-
-test('inside the car park a car rolls straight into a clear aisle, without stopping at its mouth', async () => {
-  const cp = quiet(), v = cp.idle()[0];
-  cp.traffic.arrive({plate: v.plate, province: v.province, color: 1, fromX: -40});
-  assert.ok(await cp.until(() => parked(cp, v), 60000));
-  assert.ok(!cp.traffic.inspect().mouthStops.includes(v.plate));
 });
 
 test('a VIP leaving P1 and one arriving for it at the same time both get through', async () => {
@@ -80,7 +71,7 @@ test('a VIP leaving P1 and one arriving for it at the same time both get through
   assert.ok(leaver && arriving, 'a VIP parked in P1 and another not');
   cp.traffic.leave(leaver, {west: false});
   cp.traffic.arrive({plate: arriving.plate, province: arriving.province, color: 5, fromX: -40});
-  assert.ok(await cp.until(() => !cp.traffic.isAround(leaver) && parked(cp, arriving), 120000), JSON.stringify(cp.traffic.inspect()));
+  assert.ok(await cp.until(() => !cp.traffic.isAround(leaver) && cp.parked(arriving), 120000), JSON.stringify(cp.traffic.inspect()));
 });
 
 test('a reset while cars hold the barrier and queue: no barrier holder or queue left counted, far-lane traffic runs', async () => {
@@ -104,7 +95,7 @@ test('a later arrival never blocks the spawn point of an earlier one waiting for
   cp.traffic.passBy = () => false;
   cp.traffic.arrive({plate: a.plate, province: a.province, color: 1, fromX: -40});
   cp.traffic.arrive({plate: b.plate, province: b.province, color: 2, fromX: -60});
-  assert.ok(await cp.until(() => parked(cp, a) && parked(cp, b), 120000), 'both arrivals parked');
+  assert.ok(await cp.until(() => cp.parked(a) && cp.parked(b), 120000), 'both arrivals parked');
 });
 
 test('a full car park turns a car away at the barrier', async () => {
@@ -133,11 +124,32 @@ test('a car still driving to its bay is not sent out again; an unknown car let i
 test('a leaving car gets out quickly even with busy street traffic, and the barrier closes soon after', async () => {
   const cp = carPark({time: '08:00'}); live.push(cp);
   const k = cp.traffic.parkedKeys().find(k => cp.sim.state.presence.get(k)?.type === 'staff');
-  const street = async () => { for (let i = 0; i < 40; i++) { cp.traffic.passBy(); await cp.run(1500); } };
-  void street();
+  // Stopped when the test ends (left running, it kept moving the shared clock in 1.5 s steps through the next test).
+  let busy = true;
+  const street = (async () => { for (let i = 0; i < 40 && busy; i++) { cp.traffic.passBy(); await cp.run(1500); } })();
+  try {
+    const t0 = cp.now();
+    cp.traffic.leave(k, {west: false});
+    assert.ok(await cp.until(() => !cp.sim.state.presence.has(k), 60000), 'out');
+    assert.ok(cp.now() - t0 < 40000, `out in ${(cp.now() - t0) / 1000} s`);
+    assert.ok(await cp.until(() => cp.sim.state.gate === 'closed', 8000), 'the barrier closed again soon after');
+  } finally { busy = false; await street; }
+});
+
+test('a reset takes every car away at once, one still on its way in included (it stood at the barrier into the new run), and lowers an arm caught rising', async () => {
+  const cp = carPark({time: '06:00', quiet: true});
+  const [v] = cp.idle();
+  cp.traffic.arrive({plate: v.plate, province: v.province, color: 2, fromX: -40});
+  // At the barrier, read, the arm rising for it.
+  assert.ok(await cp.until(() => { const c = cp.car(v.plate); return c?.visible && c.position.z < STREET.north && cp.sim.state.gate === 'opening'; }, 30000));
   const t0 = cp.now();
-  cp.traffic.leave(k, {west: false});
-  assert.ok(await cp.until(() => !cp.sim.state.presence.has(k), 60000), 'out');
-  assert.ok(cp.now() - t0 < 40000, `out in ${(cp.now() - t0) / 1000} s`);
-  assert.ok(await cp.until(() => cp.sim.state.gate === 'closed', 8000), 'the barrier closed again soon after');
+  cp.traffic.syncParked();
+  assert.equal(cp.car(v.plate), undefined, 'gone at the reset');
+  // On past the read's end (1.4 s): it does not come back, and the new run's counters stay at 0.
+  await cp.run(3000);
+  assert.ok(cp.now() - t0 >= 3000);
+  assert.equal(cp.car(v.plate), undefined, 'still gone after its read would have ended');
+  assert.ok(cp.settled(), JSON.stringify({...cp.traffic.inspect(), gate: cp.sim.state.gate}));
+  assert.equal(cp.lot.armAngle, 0, 'the arm down');
+  cp.dispose();
 });

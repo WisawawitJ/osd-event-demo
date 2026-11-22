@@ -2,11 +2,9 @@
 // No page and no rendering here (the camera, when given, only says which bays are out of view), so it runs in Node
 // tests on the engine's clock as it does in the browser.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
-import {bkk} from './i18n.js';
-import {STORY} from './sim.js';
-import {later, cancelLater, world, minuteOf, rng} from './clock.js';
+import {STORY, STORY_START, DAY_START} from './sim.js';
+import {later, cancelLater, world, minuteOf, rng, demoNow} from './clock.js';
 
-export const STORY_START = bkk(2026, 11, 24, 9, 0);
 // The story's own cars: its visitor and its unknown car (neither can come from the Gate tab's test buttons).
 export const storyCar = a => a.plate === STORY.plate || a.plate === STORY.unknown.plate;
 export const UNKNOWN_PLATES = [['4ศย 5150', 'ปทุมธานี'], ['ผต 8812', 'กรุงเทพมหานคร'], ['3ฆง 6047', 'ชลบุรี'], ['ฌธ 2290', 'นครปฐม']];
@@ -14,11 +12,15 @@ export const pickOne = list => list[Math.floor(rng() * list.length)];
 export const lotOnScreen = lot => lot.root.visible && globalThis.document?.visibilityState !== 'hidden';
 // In the car park, by plate (presence is kept by plate, with one vehicle's id: a second listing of the same plate, after
 // importing the sample list twice say, looked idle, drove in again, and left its first bay taken for good).
-export const parkedPlate = (sim, v) => sim.state.presence.has(sim.key(v.plate, v.province));
+const parkedPlate = (sim, v) => sim.state.presence.has(sim.key(v.plate, v.province));
+// A listed car that may drive up now: in use, known to the barrier, and neither parked nor on its way in or out.
+export const available = (sim, traffic, v) => v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isAround(sim.key(v.plate, v.province));
 
-// How many cars the car park holds at each time of day (minute, cars): nearly empty at night, the morning rush from
-// 07:00, a dip at lunch, the evening rush out from 16:30. The seeded morning (09:00) has 27.
-const OCCUPANCY = [[0, 2], [390, 2], [420, 5], [480, 17], [540, 27], [600, 34], [720, 35], [750, 30], [810, 34], [990, 35], [1050, 24], [1110, 9], [1170, 5], [1260, 3], [1440, 2]];
+// How many cars the car park holds at each time of day (minute, cars): nearly empty at night, the morning rush in from
+// 05:45, a dip at lunch, the evening rush out from 16:00. The seeded morning (09:00) has 27. The rushes are long and
+// gentle, at most 8 cars an hour (a car every 7 s through the barrier in a 20-minute day, which takes one every 5 s):
+// at 12 an hour (07:00–08:00), the barrier only just kept up.
+const OCCUPANCY = [[0, 2], [345, 2], [420, 11], [480, 19], [540, 27], [600, 34], [720, 35], [765, 30], [825, 34], [960, 35], [1050, 24], [1140, 12], [1230, 5], [1320, 3], [1440, 2]];
 export function occupancyAt(minute) {
   for (let i = 1; i < OCCUPANCY.length; i++) {
     const [a, x] = OCCUPANCY[i - 1], [b, y] = OCCUPANCY[i];
@@ -26,7 +28,7 @@ export function occupancyAt(minute) {
   }
   return OCCUPANCY[0][1];
 }
-export const daytime = minute => minute >= 390 && minute < 1140;
+const daytime = minute => minute >= 390 && minute < 1140;
 // Through-traffic on the street follows the hour too: closest together in the rushes (07:00–08:45, 16:45–18:30),
 // a car now and then at night (22:00–05:30). The delay (ms of demo time) until the next one is offered.
 export function streetGap(minute) {
@@ -37,7 +39,7 @@ export function streetGap(minute) {
 export function idleCars(sim, traffic, {staffOnly = false} = {}) {
   const m = world.minute();
   const vip = !staffOnly && m >= 420 && m < 660;
-  return sim.state.vehicles.filter(v => (v.type === 'staff' || (vip && v.type === 'vip')) && v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isAround(sim.key(v.plate, v.province)));
+  return sim.state.vehicles.filter(v => (v.type === 'staff' || (vip && v.type === 'vip')) && available(sim, traffic, v));
 }
 // About a third of the cars coming in arrive along the far lane and turn right across the near one (the story's own
 // cars keep the near lane, where its camera shots expect them). `busy`: a queue at the barrier (or cars already lining
@@ -54,12 +56,12 @@ export function leavingCandidates(sim, traffic, {staffOnly = false, guests = fal
 }
 
 // Background life of the car park, shared by the showcase and the explore page: cars come and go so that the car
-// park follows OCCUPANCY at the world clock's hour. On screen they drive through the barrier, as fast as its lanes
-// allow (two arriving and two leaving at a time); the rest of a gap the barrier cannot close (a rush in time-lapse,
+// park follows OCCUPANCY at the world clock's hour. On screen they drive through the barrier (as many on their way
+// at once as the car park is short or over, up to 6 arriving and 8 leaving); the rest of a gap the barrier cannot close (a rush in time-lapse,
 // a jump in time, or time spent off screen) is made up in the bays directly, logged at times spread over that gap.
 // Between rushes a car comes or goes now and then. `paused()` (the story playing) stops all of it.
 // `onScreen()`: the car park is in view (cars then drive through the barrier; out of view they are made up in the bays).
-export function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paused = () => false, watched = () => true, onScreen = () => lotOnScreen(lot), arrive, leave, unknown = null}) {
+export function startLotLife({sim, traffic, camera = null, staffOnly = false, paused = () => false, watched = () => true, onScreen, arrive, leave, unknown = null}) {
   // Cars made up in the bays appear or vanish on the spot, so while the car park is on screen only in bays the camera
   // cannot see: popping in and out of view (the building's covered bays, at rush hour on a short day) read as a flicker.
   const frustum = new THREE.Frustum(), matrix = new THREE.Matrix4(), bay = new THREE.Sphere(new THREE.Vector3(), 3.2);
@@ -75,9 +77,13 @@ export function startLotLife({sim, traffic, lot, camera = null, staffOnly = fals
   const gap = () => Math.round(occupancyAt(world.minute())) - expected();
   // Through the barrier a car takes some 30 s (simulation time) from being sent to being parked or gone, half an hour
   // of the time-lapse: the cars sent on screen aim at the hour it will be by then (aimed at the hour it was, the car
-  // park fell behind the rushes by most of an hour).
-  const LEAD_MS = 30000;
-  const aimed = () => Math.round(occupancyAt((world.minute() + world.rate * LEAD_MS / 60000) % 1440));
+  // park fell behind the rushes by most of an hour). That lead builds up over a minute from when the barrier takes over
+  // (the page opening, a jump in time, the car park back on screen, the story over): taken at once, the half hour
+  // ahead sent four cars to the barrier together, the first thing seen in a morning.
+  const LEAD_MS = 30000, LEAD_RAMP_MS = 60000;
+  let leadFrom = demoNow(), live = false;
+  const lead = () => LEAD_MS * Math.min(1, (demoNow() - leadFrom) / LEAD_RAMP_MS);
+  const aimed = () => Math.round(occupancyAt((world.minute() + world.rate * lead() / 60000) % 1440));
   function park(at, unseen) {
     const v = pickOne(idleCars(sim, traffic, {staffOnly})), stall = v && sim.freeStall(v.type, unseen);
     if (!stall) return;
@@ -112,13 +118,12 @@ export function startLotLife({sim, traffic, lot, camera = null, staffOnly = fals
   }
   // Visitors: someone with a pass for today drops in now and then between 09:30 and 15:30 (each at most once a day;
   // the story's visitor is the story's), stays 45 minutes to three hours of world time, then leaves by themselves.
-  const TODAY = bkk(2026, 11, 24);
   const stayOf = plate => (45 + [...plate].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 997, 7) % 136) * 60000;
   function visitorsDue() {
     const now = world.now();
-    const came = new Set(sim.state.events.filter(e => e.at >= TODAY && (e.kind === 'entry' || e.kind === 'manual') && e.type === 'guest').map(e => sim.key(e.plate, e.province)));
-    return sim.state.vehicles.filter(v => v.type === 'guest' && v.plate !== STORY.plate && v.enabled && v.sync === 'synced' && (!v.validFrom || v.validFrom <= now) && (!v.validTo || v.validTo >= now)
-      && !parkedPlate(sim, v) && !came.has(sim.key(v.plate, v.province)) && !traffic.isAround(sim.key(v.plate, v.province)));
+    const came = new Set(sim.state.events.filter(e => e.at >= DAY_START && (e.kind === 'entry' || e.kind === 'manual') && e.type === 'guest').map(e => sim.key(e.plate, e.province)));
+    return sim.state.vehicles.filter(v => v.type === 'guest' && v.plate !== STORY.plate && available(sim, traffic, v)
+      && (!v.validFrom || v.validFrom <= now) && (!v.validTo || v.validTo >= now) && !came.has(sim.key(v.plate, v.province)));
   }
   // `from`…`now`: the world time since the last look; on average a visitor arrives every 35 minutes of it.
   function visits(from, now) {
@@ -140,12 +145,18 @@ export function startLotLife({sim, traffic, lot, camera = null, staffOnly = fals
     if (stall) { sim.recordEntry({plate: v.plate, province: v.province, type: 'guest', stallId: stall.id, color: v.color}); traffic.appear(sim.key(v.plate, v.province)); }
   }
   let last = world.now(), timer = 0;
-  // Opened later than the seeded 09:00 (a page opened at 23:00): the car park is that hour's at once, its log spread
-  // over the hours since, not the morning's cars left to drive out through the barrier one by one.
-  if (last > STORY_START && !paused()) catchUp(0, STORY_START, last, {anywhere: true});
+  // The car park is the hour's at once (nothing is on screen yet). Opened later than the seeded 09:00 (a page opened at
+  // 23:00): its log spread over the hours since, not the morning's cars left to drive out through the barrier one by
+  // one. Earlier: the seeded morning starts from an empty car park, a car or two short of the hour's. Logged after the
+  // last record already there (from midnight, a car that came at 06:58 was logged leaving at 00:32).
+  const logged = sim.state.events.reduce((t, e) => (e.at <= last && e.at > t ? e.at : t), 0);
+  if (!paused()) catchUp(0, Math.max(last > STORY_START ? STORY_START : DAY_START, logged), last, {anywhere: true});
   function tick() {
     const now = world.now(), from = last;
     last = now;
+    const wasLive = live;
+    live = !paused() && onScreen();
+    if (live && !wasLive) leadFrom = demoNow();
     if (!paused()) {
       // Off screen everything is made up at once; on screen a few cars are left for the barrier to bring in or out.
       catchUp(!onScreen() ? 0 : watched() ? 6 : 2, from, now);
@@ -170,7 +181,10 @@ export function startLotLife({sim, traffic, lot, camera = null, staffOnly = fals
   // A jump in time: the car park is as it would be by then (the log spread over the skipped hours), on screen too.
   // The day's wrap at 03:00 moves the log back a day: the last look moves with it (left behind, the next catch-up
   // logged its cars a day ahead).
-  const off = world.subscribe((kind, p) => { if (kind === 'wrap') last += p; if (kind === 'jump' && !paused()) { catchUp(onScreen() && watched() ? 3 : 0, p.from, p.to, {anywhere: true}); last = world.now(); } });
+  const off = world.subscribe((kind, p) => { if (kind === 'wrap') last += p; if (kind === 'jump' && !paused()) { catchUp(onScreen() && watched() ? 3 : 0, p.from, p.to, {anywhere: true}); last = world.now(); }
+    // The lead builds up again after any move of the clock: a jump, or the story setting it (a story stopped within a
+    // tick, unseen by it, left the full lead, and four cars set off at once).
+    if (kind === 'jump' || kind === 'set') leadFrom = demoNow(); });
   timer = later(tick, 1500);
   return () => { cancelLater(timer); off(); };
 }

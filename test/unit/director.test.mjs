@@ -4,6 +4,7 @@ import {test, afterEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {world, sleep} from 'osd/parking/clock.js';
 import {createDirector, ORDER, IDLE_MS} from 'osd/viewer/director.js';
+import {STORY} from 'osd/parking/sim.js';
 import {parking} from './world.mjs';
 
 const live = [];
@@ -36,7 +37,7 @@ test('the tour visits every stop in order, plays the whole parking story at the 
   assert.ok(await w.until(() => !d.touring, 900000), 'the tour ended');
   assert.deepEqual(log.stops, ORDER);
   assert.deepEqual(log.scenarios, ['meeting', 'pond', 'energy']);
-  assert.ok(w.sim.state.events.some(e => e.plate === '7กข 4821' && e.kind === 'exit'), 'the story ran to its end on the way');
+  assert.ok(w.sim.state.events.some(e => e.plate === STORY.plate && e.kind === 'exit'), 'the story ran to its end on the way');
   assert.match(log.progress, /Tour complete/);
 });
 
@@ -76,7 +77,7 @@ test('Follow the day plays the car park\'s morning story once a day', async () =
   d.startFollowing();
   assert.ok(await w.until(() => w.story.running, 300000), 'the story at the morning car park');
   assert.ok(await w.until(() => !w.story.running, 600000), 'it ran its course');
-  const runs = () => w.sim.state.requests.filter(q => q.visitor.name === 'ชูใจ ใฝ่รู้').length;
+  const runs = () => w.sim.state.requests.filter(q => q.visitor.name === STORY.visitor.name).length;
   await w.run(30000);
   assert.ok(!w.story.running && runs() <= 1, 'not again the same day');
 });
@@ -89,7 +90,6 @@ test('Pause on the way to the car park holds its story until Resume', async () =
   await w.run(5000); // paused: no time passes anyway
   world.setPaused(false);
   assert.ok(await w.until(() => w.story.running, 30000), 'the story starts once resumed');
-  void d;
 });
 
 test('a jump in time or Night/Day stops a parking story played on its own', async () => {
@@ -101,12 +101,11 @@ test('a jump in time or Night/Day stops a parking story played on its own', asyn
 });
 
 test('kiosk off mid-flight stops the flight Follow started', async () => {
-  const {w, d, log, f} = showcase({time: '10:00'});
+  const {d, log, f} = showcase({time: '10:00'});
   d.setKiosk(true);
   assert.ok(f.traveling, 'Follow flies to its stop');
   d.setKiosk(false);
   assert.ok(log.cancelled > 0 && !d.following);
-  void w;
 });
 
 test('Follow: a flight cut short leaves the moment to be gone to again', async () => {
@@ -116,7 +115,6 @@ test('Follow: a flight cut short leaves the moment to be gone to again', async (
   await w.run(5000);
   assert.equal(log.stops.length, 0, 'cut short');
   assert.ok(await w.until(() => log.stops.length === 1, 20000), 'flown again at the next look');
-  void d;
 });
 
 test('a stop picked by hand ends the tour and Follow', async () => {

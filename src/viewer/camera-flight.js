@@ -19,12 +19,13 @@ function flightPose(from,to,progress,via,along){
  const distance=Math.hypot(...to.eye.map((v,i)=>v-from.eye[i]));
  return {eye:from.eye.map((v,i)=>v+(to.eye[i]-v)*e+(i===1?Math.sin(Math.PI*e)*Math.min(distance*.18,8):0)),target:from.target.map((v,i)=>v+(to.target[i]-v)*e),fov:from.fov+(to.fov-from.fov)*e};
 }
-export function createCameraFlight({read,write,request=fn=>requestAnimationFrame(fn),cancel=id=>cancelAnimationFrame(id),reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches,onState=()=>{}}){
+const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+export function createCameraFlight({read,write,onState=()=>{}}){
  let handle=0,resolveCurrent;
- function stop(){if(handle)cancel(handle);handle=0;if(resolveCurrent){resolveCurrent(false);resolveCurrent=null;onState(false);}}
+ function stop(){if(handle)cancelAnimationFrame(handle);handle=0;if(resolveCurrent){resolveCurrent(false);resolveCurrent=null;onState(false);}}
  function flyPath(steps){
   stop();if(!steps.length)return Promise.resolve(true);
-  if(reduced()||steps.every(s=>s.duration===0)){for(const s of steps){s.onStart?.();write(s.to);s.onUpdate?.(1);s.onEnd?.();}return Promise.resolve(true);}
+  if(reduced()){for(const s of steps){s.onStart?.();write(s.to);s.onUpdate?.(1);s.onEnd?.();}return Promise.resolve(true);}
   // The clock starts at the first frame drawn: the frame of the click can be long (a layout change, a resize), and
   // starting before it made the camera's first visible step a jump.
   let index=0,from=read(),start=null,along=null,measured=-1;onState(true);
@@ -36,13 +37,13 @@ export function createCameraFlight({read,write,request=fn=>requestAnimationFrame
      const s=steps[index],duration=s.duration??1800,t=duration?Math.min(1,(time-start)/duration):1;
      if(s.via&&measured!==index){along=measure(from.eye,s.via.eye,s.to.eye);measured=index;}
      write(t===1?s.to:flightPose(from,s.to,t,s.via,along));s.onUpdate?.(t);
-     if(t<1){handle=request(tick);return;}
+     if(t<1){handle=requestAnimationFrame(tick);return;}
      s.onEnd?.();from=read();start+=duration;index++;
      if(index<steps.length)steps[index].onStart?.();
     }
     handle=0;resolveCurrent=null;onState(false);resolve(true);
    }
-   handle=request(tick);
+   handle=requestAnimationFrame(tick);
   });
  }
  return {flyPath,stop,get running(){return Boolean(handle);}};

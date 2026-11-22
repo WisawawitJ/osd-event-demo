@@ -7,7 +7,6 @@ import {createParkingSim} from 'osd/parking/sim.js';
 seed(3);
 const visitor = (i = 0) => ({visitor: {name: `ทดสอบ ${i}`, phone: '080', email: `v${i}@example.com`, company: '—'}, contact: 'host.demo@osd.example', plate: `9ทส ${1000 + i}`, province: 'กรุงเทพมหานคร'});
 const request = (sim, i = 0) => sim.submitRequest({...visitor(i), arrival: sim.now(), departure: sim.now()});
-const run = ms => advance(ms);
 const mails = (sim, req) => sim.state.emails.filter(m => m.requestId === req.id).map(m => m.kind);
 
 test('approving: ATOM confirms the vehicle, then the ticket email goes out', async () => {
@@ -15,7 +14,7 @@ test('approving: ATOM confirms the vehicle, then the ticket email goes out', asy
   sim.approve(req.id);
   assert.equal(req.status, 'approved');
   assert.deepEqual(mails(sim, req), [], 'no email before ATOM confirms');
-  await run(2000);
+  await advance(2000);
   assert.deepEqual(req.history.map(h => h.key).slice(-3), ['h.approved', 'h.atom', 'h.email']);
   assert.deepEqual(mails(sim, req), ['approved']);
 });
@@ -23,7 +22,7 @@ test('approving: ATOM confirms the vehicle, then the ticket email goes out', asy
 test('revoking before the ticket email: the pending add is withdrawn and no email goes out', async () => {
   const sim = createParkingSim(), req = request(sim, 1);
   sim.approve(req.id); sim.revoke(req.id);
-  await run(2000);
+  await advance(2000);
   assert.equal(req.status, 'revoked');
   assert.deepEqual(mails(sim, req), [], 'the visitor was never told of the approval');
   assert.ok(!sim.state.vehicles.some(v => v.requestId === req.id), 'the vehicle add withdrawn');
@@ -31,7 +30,7 @@ test('revoking before the ticket email: the pending add is withdrawn and no emai
 
 test('revoking after the ticket email: the plate stays listed, disabled, and a revocation email follows', async () => {
   const sim = createParkingSim(), req = request(sim, 2);
-  sim.approve(req.id); await run(2000); sim.revoke(req.id);
+  sim.approve(req.id); await advance(2000); sim.revoke(req.id);
   assert.deepEqual(mails(sim, req), ['revoked', 'approved'], 'newest first');
   assert.equal(sim.state.vehicles.find(v => v.requestId === req.id)?.enabled, false);
 });

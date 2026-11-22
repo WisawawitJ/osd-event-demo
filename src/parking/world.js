@@ -2,21 +2,24 @@
 // that tie them together (who answers an unknown car, how long one waits, what the story's own cars do once it stops).
 // The page (index.js) adds the 3D car park, the console, the phone and the pop-ups as `ui`; Node tests give it a
 // stand-in car park and no UI, and step the engine's clock.
-import {createParkingSim} from './sim.js';
+import {createParkingSim, STORY_START} from './sim.js';
 import {createTraffic} from './traffic.js';
 import {createStory} from './story.js';
 import {later, cancelLater, sleep, world, demoNow, rng} from './clock.js';
-import {STORY_START, storyCar, UNKNOWN_PLATES, pickOne, lotOnScreen, parkedPlate, streetGap, idleCars, fromFarLane, leavingCandidates, startLotLife} from './life.js';
+import {storyCar, UNKNOWN_PLATES, pickOne, lotOnScreen, available, streetGap, idleCars, fromFarLane, leavingCandidates, startLotLife} from './life.js';
 
 const noop = () => {};
 // What the story needs from the UI when there is none.
-const NO_PANEL = {show: noop, setCue: noop, reset: noop, render: noop, markNew: noop, flash: noop, setSnapshot: noop};
-const NO_OVERLAYS = {setCue: noop, caption: noop, reset: noop, refresh: noop, showAlert: noop, showFeed: noop, updateFeed: noop, hideFeed: noop, toast: noop};
+const NO_PANEL = {show: noop, setCue: noop, reset: noop, flash: noop};
+const NO_OVERLAYS = {setCue: noop, reset: noop};
 
-// `lot`: the car park traffic drives in (3D, or a stand-in). `ui` (all optional):
-// - panel, overlays, phone: the console, the pop-ups and the visitor's phone (the story drives them);
-// - fly(pose, ms): the camera; tap(): the cued button's tap; toast(icon, key, vars, tone): a short message;
-// - plateRead(which, agent, verdict): the plate camera starts reading (the page shows its feed); plateDone();
+// `lot`: the car park traffic drives in (3D, or a stand-in). `phone`: the visitor's phone (the story drives it).
+// `ui` (all optional):
+// - panel, overlays: the console and the pop-ups (the story drives them);
+// - fly(pose, ms): the camera; tap(): the cued button's tap; caption(caption, hintKey): the story's caption;
+// - toast(icon, key, vars, tone, queued): a short message (`queued`: the car waits behind others);
+// - snapshot(which): a plate camera's picture; plateRead(which, agent, verdict, confidence): the plate camera starts
+//   reading (the page shows its feed); plateDone(which);
 // - leftGate(which): a car is through the barrier; full(plate): turned away, the car park full;
 // - event(kind, payload): every records change, after the world's own rules have run;
 // - storyChanged(): the story started, stopped or moved on;
@@ -25,15 +28,17 @@ const NO_OVERLAYS = {setCue: noop, caption: noop, reset: noop, refresh: noop, sh
 // `staffOnly`: the explore page's car park: staff cars come and go, no VIPs, visitors or unknown cars.
 export function createParkingWorld({lot, sim = createParkingSim(), camera = null, ui = {}, onScreen = () => lotOnScreen(lot), watched = () => true, phone, staffOnly = false}) {
   const panel = ui.panel ?? NO_PANEL, overlays = ui.overlays ?? NO_OVERLAYS, schedule = ui.schedule ?? noop;
-  const toast = (icon, key, vars, tone) => ui.toast?.(icon, key, vars, tone);
+  const toast = (...args) => ui.toast?.(...args);
   let quietAmbient = false;
 
   const traffic = createTraffic({lot, sim, schedule, hooks: {
     snapshot: ui.snapshot ?? (() => ''),
-    async readPlate(which, agent, verdict) {
+    // `recognised`: the plate is read (the barrier goes on); the card then shows the verdict a moment.
+    async readPlate(which, agent, verdict, recognised) {
       ui.plateRead?.(which, agent, verdict, .9 + rng() * .09);
       await sleep(900);
       ui.plateDone?.(which);
+      recognised();
       await sleep(verdict.allow ? 500 : 300);
     },
     onFull(plate) { ui.full?.(plate); },
@@ -73,7 +78,7 @@ export function createParkingWorld({lot, sim = createParkingSim(), camera = null
         return;
       }
       const pool = kind === 'visitor'
-        ? sim.state.vehicles.filter(v => v.type === 'guest' && v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isAround(sim.key(v.plate, v.province)) && v.validFrom <= sim.now() && v.validTo >= sim.now())
+        ? sim.state.vehicles.filter(v => v.type === 'guest' && available(sim, traffic, v) && v.validFrom <= sim.now() && v.validTo >= sim.now())
         : idleCars(sim, traffic, {staffOnly: staffOnly || !quiet}); // the Staff car button sends a staff car, never a VIP
       // The newest approved visitor drives up first, so a request made on the phone can be followed to the gate.
       const v = kind === 'visitor' ? pool[pool.length - 1] : pickOne(pool);
@@ -94,7 +99,7 @@ export function createParkingWorld({lot, sim = createParkingSim(), camera = null
   // The story: its steps drive the console, the phone, the camera and the cars.
   let hintKey = null, caption = null;
   story = createStory({
-    sim, panel, phone, overlays, traffic, actions,
+    sim, panel, phone, traffic, actions,
     fly: (name, ms) => ui.fly?.(name, ms),
     cue(name) { panel.setCue(name); overlays.setCue(name); },
     // A hint is a text key, put in the language on show each time (it stayed in the old one after a switch).
@@ -104,7 +109,6 @@ export function createParkingWorld({lot, sim = createParkingSim(), camera = null
     // The story starts from the seeded 09:00 car park, so the clock goes to 09:00 first (the seed would otherwise
     // leave out whatever lies after an earlier time).
     async resetWorld() {
-      quietAmbient = true;
       sim.setNow(STORY_START);
       sim.reset(); traffic.syncParked(); panel.reset(); phone?.reset(); overlays.reset();
       await sleep(50);
@@ -126,7 +130,7 @@ export function createParkingWorld({lot, sim = createParkingSim(), camera = null
   // Background life: cars follow the hour. Unknown cars only while the car park is the stop on show (`watched`),
   // where their alert can be answered. The parked cars are placed first: a late start's catch-up takes cars away.
   traffic.syncParked();
-  const stopLife = startLotLife({sim, traffic, lot, camera, staffOnly, paused: () => quietAmbient, watched, onScreen,
+  const stopLife = startLotLife({sim, traffic, camera, staffOnly, paused: () => quietAmbient, watched, onScreen,
     arrive: () => actions.simulate('registered', {quiet: true}), leave: () => actions.simulate('exit', {quiet: true}),
     unknown: staffOnly ? null : () => { if (watched()) actions.simulate('unknown', {quiet: true}); }});
   // Through-traffic whenever the street is in view (overview and car park), not only at the parking stop.

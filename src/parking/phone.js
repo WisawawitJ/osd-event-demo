@@ -5,7 +5,7 @@ import {PROVINCES} from './sim.js';
 import {later, cancelLater, sleep} from './clock.js';
 
 const blankForm = () => ({name: '', phone: '', email: '', company: '', contact: '', plate: '', province: '', arrival: '2026-11-24', departure: '2026-11-24', notes: '', consent: false, faceConsent: false, face: false, photo: 'idle'});
-const dateValue = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d, -7); };
+const dateValue = s => bkk(...s.split('-').map(Number));
 // The form offers today and the next 30 days, shown in the chosen language.
 const DATE_OPTIONS = Array.from({length: 31}, (_, i) => { const ms = bkk(2026, 11, 24 + i); const d = new Date(ms + 7 * 3600e3); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`; });
 
@@ -45,7 +45,7 @@ export function createPhone({root, sim, actions}) {
       <div class="ph-two plate">${field('plate', t('req.plate'), {placeholder: '7กข 4821', help: t('ph.plateHelp')})}<label class="ph-field"><span>${t('req.province')} *</span><select name="province" data-focus="ph-province"><option value=""></option>${PROVINCES.map(([th]) => `<option${f.province === th ? ' selected' : ''}>${th}</option>`).join('')}</select></label></div>
     </div>
     <div class="ph-card"><span class="ph-card-title">${t('ph.facePhoto')}</span>
-      <label class="ph-check"><input type="checkbox" name="faceConsent"${f.faceConsent ? ' checked' : ''}${cue('faceConsent')}><span>${t('ph.faceConsent')}</span></label>
+      <label class="ph-check"><input type="checkbox" name="faceConsent"${f.faceConsent ? ' checked' : ''}><span>${t('ph.faceConsent')}</span></label>
       ${f.faceConsent ? `<div class="ph-face-row">${f.face ? faceArt : `<button type="button" class="ph-photo-btn small" data-ph="face">${icon('user')}${t('ph.facePhoto')}</button>`}</div>` : ''}
     </div>
     <label class="ph-check"><input type="checkbox" name="consent"${f.consent ? ' checked' : ''}><span>${t('ph.consent')}</span></label>
@@ -69,7 +69,7 @@ export function createPhone({root, sim, actions}) {
     const subject = t(`ph.mail.${mail.kind}`);
     const head = `<div class="ph-mail-head"><span class="ph-avatar">P</span><div><strong>OSD Parking</strong><small>no-reply@osd.example · ${fmtTime(mail.at)}</small></div></div><h4>${subject}</h4><p class="ph-to">${esc(r.visitor.email)}, cc ${esc(r.contact)}</p>`;
     if (mail.kind === 'approved') {
-      return `${head}<div class="ph-ticket"><div class="ph-ticket-top"><span>${t('ph.ticket')}</span><b>OSD</b></div><div class="ph-ticket-plate">${esc(r.plate)}<small>${esc(r.province)}</small></div><div class="ph-ticket-rows"><div><span>${t('req.dates')}</span><b>${fmtDate(r.arrival)}${r.departure !== r.arrival ? ` – ${fmtDate(r.departure)}` : ''}</b></div><div><span>${t('req.visitor')}</span><b>${esc(r.visitor.name)}</b></div><div><span>${t('parking.floor')}</span><b>P2 · A</b></div></div><p class="ph-ticket-how">${t('ph.ticket.how')}</p><div class="ph-ticket-qr">${fakeQr(r.qr || r.ref)}<span>${t('ph.ticket.qr')}</span></div><button type="button" class="ph-cal" data-ph="calendar">${icon('calendar')}${t('ph.ticket.cal')}</button><p class="ph-cc-note">${t('ph.ccNote', {contact: esc(r.contact)})}</p></div>`;
+      return `${head}<div class="ph-ticket"><div class="ph-ticket-top"><span>${t('ph.ticket')}</span><b>OSD</b></div><div class="ph-ticket-plate">${esc(r.plate)}<small>${esc(r.province)}</small></div><div class="ph-ticket-rows"><div><span>${t('req.dates')}</span><b>${fmtDate(r.arrival)}${r.departure !== r.arrival ? ` – ${fmtDate(r.departure)}` : ''}</b></div><div><span>${t('req.visitor')}</span><b>${esc(r.visitor.name)}</b></div><div><span>${t('parking.floor')}</span><b>P2 · A</b></div></div><p class="ph-ticket-how">${t('ph.ticket.how')}</p><div class="ph-ticket-qr">${fakeQr(r.ref)}<span>${t('ph.ticket.qr')}</span></div><button type="button" class="ph-cal" data-ph="calendar">${icon('calendar')}${t('ph.ticket.cal')}</button><p class="ph-cc-note">${t('ph.ccNote', {contact: esc(r.contact)})}</p></div>`;
     }
     return `${head}<p class="ph-mail-body">${mail.kind === 'rejected' ? esc(r.reason || '') : t('ph.mail.revokedBody')}</p><button type="button" class="ph-link" data-ph="new">${t('ph.newRequest')}</button>`;
   }

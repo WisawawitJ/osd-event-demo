@@ -2,5 +2,4 @@ reference/
 dev/
 node_modules/
 .DS_Store
-test/out/
 shots/

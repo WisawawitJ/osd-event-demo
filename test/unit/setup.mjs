@@ -2,7 +2,6 @@
 // ("osd/…" paths) for Node. Loaded with `node --import ./test/unit/setup.mjs`.
 import {registerHooks} from 'node:module';
 
-globalThis.location ??= {search: ''};
 // A canvas that draws nothing (cars paint their plates on one): any call or property on its 2D context gives the same
 // stand-in back (gradients, patterns), and measureText a width.
 const context = new Proxy(function () {}, {get: (_, k) => (k === 'measureText' ? () => ({width: 0}) : k === Symbol.toPrimitive ? () => 0 : context), apply: () => context, set: () => true});

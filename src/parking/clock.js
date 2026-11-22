@@ -19,16 +19,21 @@ export const SPEED = Number.isFinite(requested) && requested > 0 ? Math.min(requ
 export const TICK = 50; // ms of simulation time per step
 
 // --- Seeded randomness -------------------------------------------------------------------------------------------
-let seedState = 0;
-// mulberry32: small, fast and good enough for a demo's dice.
-export function rng() {
-  seedState = (seedState + 0x6D2B79F5) | 0;
-  let t = seedState;
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+// mulberry32: small, fast and good enough for a demo's dice. A generator of its own for a fixed seed (the records'
+// sample data), or the engine's `rng`, seeded once per run (`seed`).
+export function mulberry32(state) {
+  state |= 0;
+  return () => {
+    state = (state + 0x6D2B79F5) | 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
-export function seed(n) { seedState = n | 0; }
+let dice = mulberry32(0);
+export const rng = () => dice();
+export function seed(n) { dice = mulberry32(n); }
 seed(Number(options.seed) || Math.floor(Math.random() * 2 ** 31));
 
 // --- Simulation time and timers --------------------------------------------------------------------------------
@@ -58,6 +63,24 @@ export const demoNow = () => simNow;
 // Real milliseconds that stop while paused: for presentation animations that keep their real pace under the `speed` option
 // (the meeting room's airflow, door swings, a scenario's timing).
 export const realNow = () => simNow / SPEED;
+// A level (a light's brightness, an effect's fade) that runs toward its target at 1 per `ms` of realNow from where it
+// stood when the target was set: a function of the clock, so it reads the same however many frames are drawn on the
+// way (stepped a frame at a time, with each step capped, a fade went further or less far depending on the frame rate).
+export function ramp(ms, initial = 1) {
+  let from = initial, to = initial, at = 0;
+  const value = (now = realNow()) => { const d = Math.max(0, now - at) / ms; return to > from ? Math.min(to, from + d) : Math.max(to, from - d); };
+  return {
+    value,
+    // Toward `target` from now (or from `now`, a moment already past, as when a fade out ended).
+    set(target, now = realNow()) { if (target === to && value(now) === to) return; from = value(now); to = target; at = now; },
+    // At once.
+    jump(level) { from = to = level; },
+    get target() { return to; },
+    done: (now = realNow()) => value(now) === to,
+    // When it got (or gets) to its target.
+    get endsAt() { return at + Math.abs(to - from) * ms; },
+  };
+}
 // Runs `fn` after `ms` of simulation time. Cancel with cancelLater.
 export function later(fn, ms) { const t = {due: simNow + Math.max(0, ms || 0), order: order++, fn, live: true}; push(t); return t; }
 export const cancelLater = t => { if (t) t.live = false; };
@@ -83,18 +106,19 @@ async function tickOnce(ms) {
   simNow = end;
   for (const fn of [...systems]) fn(ms / 1000);
 }
-// Advances simulation time by `ms`, in ticks of at most TICK, letting promise chains settle after each (`settle`:
-// the host's way to wait out its microtasks). Steps already running take the extra time on instead of starting a
-// second loop.
+// Advances simulation time by `ms`, in ticks of at most TICK, letting promise chains settle after each. Steps already
+// running take the extra time on instead of starting a second loop.
 // While paused nothing is owed and a run under way stops at its next tick (it ran on through Pause).
 let owed = 0, stepping = null, halted = false;
-export function advance(ms, settle = defaultSettle) {
+export function advance(ms) {
   if (halted) return stepping ?? Promise.resolve();
   owed += ms;
-  if (!stepping) stepping = (async () => {
-    try { while (owed > 1e-6 && !halted) { const d = Math.min(owed, TICK); owed -= d; await tickOnce(d); await settle(); } } finally { stepping = null; }
+  // Started only with time owed: with none (two frames at one timestamp, a step of 0), the loop ended at once, its
+  // `finally` cleared `stepping` before the assignment set it, and the clock stood still for good.
+  if (!stepping && owed > 1e-6) stepping = (async () => {
+    try { while (owed > 1e-6 && !halted) { const d = Math.min(owed, TICK); owed -= d; await tickOnce(d); await defaultSettle(); } } finally { stepping = null; }
   })();
-  return stepping;
+  return stepping ?? Promise.resolve();
 }
 function halt(on) { halted = on; if (on) owed = 0; }
 // Node: a macrotask boundary (every microtask has run); the browser: a message-channel task (as fast, no 4 ms clamp).
@@ -179,14 +203,19 @@ export const isPaused = () => world.paused;
 // Each animation frame steps the engine by the real time since the last (× SPEED), unless paused. A stall longer
 // than half a second (a background tab, the debugger) is dropped rather than caught up. The world clock's 'tick'
 // goes out about four times a second of real time.
+// The `manual` option (screenshots): the driver steps nothing; only the page's debug hook does (main.js,
+// window.__engine), so a state is reached at the same simulation time on every run and in every version.
+const manual = 'manual' in options;
 if (typeof requestAnimationFrame === 'function') {
   let last = null, lastTick = 0;
   const frame = time => {
     // Behind (a busy page): at most one frame's worth is owed; the rest is dropped, so the simulation slows down
     // rather than running on in a backlog.
-    if (last !== null && !world.paused && owed < 500 * SPEED) advance(Math.min(500, Math.max(0, time - last)) * SPEED);
+    if (!manual && last !== null && !world.paused && owed < 500 * SPEED) advance(Math.min(500, Math.max(0, time - last)) * SPEED);
     last = time;
-    if (time - lastTick >= 250) { lastTick = time; world.tick(); }
+    // (Stepped pages tick from the stepping hook: ticked on real time, a room's schedule switched its lights at a
+    // different moment of the stepped run each time.)
+    if (!manual && time - lastTick >= 250) { lastTick = time; world.tick(); }
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

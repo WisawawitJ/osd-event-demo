@@ -1,7 +1,7 @@
 import {createBuildingInsights} from 'osd/viewer/building-insights.js';
 import {createTourEffects} from 'osd/viewer/tour-effects.js';
 import {t as pt, onLang, getLang, L} from 'osd/parking/i18n.js';
-import {SPEED, world, later, cancelLater, realNow, isPaused} from 'osd/parking/clock.js';
+import {world, realNow, later} from 'osd/parking/clock.js';
 import {options} from 'osd/parking/options.js';
 import {createDirector,PICK_SPOT} from 'osd/viewer/director.js';
 import {morph} from 'osd/parking/dom.js';
@@ -57,15 +57,14 @@ export function translatePage({initial=false}={}){
  for(const el of document.querySelectorAll('[data-i18n-title]'))el.title=pageString(el.dataset.i18nTitle);
  if(initial)for(const el of document.querySelectorAll('[data-i18n-init]'))el.textContent=pageString(el.dataset.i18nInit);
 }
-// The tour visits the car park right after the overview; the dock keeps it last.
-const order=['overview','parking','meeting','pond','energy'],meetingId='f4_meeting_2';
+const meetingId='f4_meeting_2';
 const initial=()=>({occupied:true,temp:25.6,target:24,pondAlert:false,water:82,solar:8.4,load:12.6,energy:37.8,scenario:null});
 export function createShowcase({model,simulation,navigate,cancelFlight,schedule,onUserOrbit,parking=null}){
  const abort=new AbortController(),signal=abort.signal,effects=createTourEffects({model,schedule,meetingRoom:simulation.rooms.find(r=>r.id===meetingId)});
  const $=s=>document.querySelector(s),content=$('#dashboard-content'),play=$('#tour-play');
- let tourGeneration=0,insights=null,flightStopped=false,resetAfterFlight=false;
+ let insights=null,flightStopped=false,resetAfterFlight=false;
  // landed: the camera reached the current stop's view (a flight cut short leaves it false until a stop or Reset view lands).
- let traveling=false,pendingDestination=null,landed=false;
+ let traveling=false,landed=false;
  let destination='overview',state=initial(),scenarioFrame=0,scenarioStart=0,disposed=false,sequence=0,lastTick=0;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
  const listen=(el,event,fn,options)=>el.addEventListener(event,fn,{...options,signal});
@@ -118,7 +117,8 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
   if(!on)parking.stopStory(); // leaving: the story drives the camera, so it stops at once; the layout follows
   if(layoutChange||parking.active===on)return;
   const apply=()=>{if(parking.active!==layoutWanted){if(layoutWanted)parking.enter();else parking.exit();}};
-  if(!document.startViewTransition||reduced.matches||document.hidden){apply();return;}
+  // Screenshots (`manual`): at once, as a view transition runs on real time and was caught part way.
+  if(!document.startViewTransition||reduced.matches||document.hidden||'manual' in options){apply();return;}
   let done=false;const transition=layoutChange=document.startViewTransition(()=>{done=true;apply();});
   transition.ready.catch(()=>{});transition.updateCallbackDone.catch(()=>{});
   transition.finished.catch(()=>{}).finally(()=>{layoutChange=null;if(!disposed&&parking.active!==layoutWanted)setParkingLayout(layoutWanted);});
@@ -130,7 +130,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
   // The car park changes the page layout: switch it as the flight sets off, so the view is its final size while the
   // camera moves instead of jumping at the end.
   setParkingLayout(id==='parking');
-  traveling=true;landed=false;flightStopped=resetAfterFlight=false;pendingDestination=id;effects.select(null);render();
+  traveling=true;landed=false;flightStopped=resetAfterFlight=false;effects.select(null);render();
   document.querySelectorAll('[data-destination]').forEach(b=>{b.setAttribute('aria-busy',String(b.dataset.destination===id));b.setAttribute('aria-pressed',String(b.dataset.destination===id));});
   // The stop's title, panel and scene state arrive as the final approach begins, not after the camera settles.
   let committed=false;
@@ -148,7 +148,7 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
   // The parking story started on the way (its camera move ends this flight): the car park is the stop all the same
   // (committed first, so the dock shows it).
   if(!arrived&&!committed&&id==='parking'&&parking?.story.running)commit();
-  traveling=false;landed=Boolean(arrived);pendingDestination=null;document.querySelectorAll('[data-destination]').forEach(b=>{b.removeAttribute('aria-busy');b.setAttribute('aria-pressed',String(b.dataset.destination===(arrived||committed?id:destination)));});
+  traveling=false;landed=Boolean(arrived);document.querySelectorAll('[data-destination]').forEach(b=>{b.removeAttribute('aria-busy');b.setAttribute('aria-pressed',String(b.dataset.destination===(arrived||committed?id:destination)));});
   // Reset view pressed during the flight: it flies back to the stop on show once this flight has ended.
   if(resetAfterFlight){resetAfterFlight=false;queueMicrotask(resetView);}
   if(!arrived&&!committed){
@@ -228,11 +228,12 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
  listen($('#lang-toggle'),'click',()=>parking?.toggleLang());
  const offLang=onLang(applyLanguage);signal.addEventListener('abort',offLang,{once:true});applyLanguage();
  void select('overview',{instant:true});
- if(options.kiosk==='1')setTimeout(()=>director.setKiosk(true),600);
- else{const dest=options.dest;if(dest&&destinations[dest])setTimeout(async()=>{const arrived=await select(dest);if(arrived&&dest==='parking'&&options.story==='1')void parking?.playStory({auto:options.auto!=='0'});},300);}
+ // Options (rehearsals, screenshots): on the engine's clock, so a stepped page (`manual`) starts them at the same moment.
+ if(options.kiosk==='1')later(()=>director.setKiosk(true),600);
+ else{const dest=options.dest;if(dest&&destinations[dest])later(async()=>{const arrived=await select(dest);if(arrived&&dest==='parking'&&options.story==='1')void parking?.playStory({auto:options.auto!=='0'});},300);}
  // Back to the current stop's own camera pose (the view controls and the R key use this).
  // During a flight it stops the flight, then flies to the stop on show (the flight's own stop once its approach has
  // begun): it only stopped the camera mid-air, as the flight had not yet ended when it looked.
  function resetView(){if(disposed)return;if(traveling){resetAfterFlight=true;cancelFlight();return;}cancelFlight();landed=false;flightStopped=false;render();void navigate(destination).then(arrived=>{if(arrived&&!disposed&&!traveling){landed=true;render();}});}
- return {resetView,dispose(){disposed=true;sequence++;insights?.dispose();stopScenario();unsubscribe();simulation.setInteractionFilter(()=>true);abort.abort();effects.dispose();},getState(){return{insights:insights?.getState(),destination,traveling,pendingDestination,touring:director.touring,...state};}};
+ return {resetView,beforeDraw:()=>effects.beforeDraw(),dispose(){disposed=true;sequence++;insights?.dispose();stopScenario();unsubscribe();simulation.setInteractionFilter(()=>true);abort.abort();effects.dispose();},getState(){return{traveling,touring:director.touring};}};
 }

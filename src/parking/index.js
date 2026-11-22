@@ -3,7 +3,7 @@ import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {t, onLang, getLang, setLang} from './i18n.js';
 import {icon, esc} from './dom.js';
 import {createParkingSim} from './sim.js';
-import {later, world} from './clock.js';
+import {world} from './clock.js';
 import {createLot} from './lot3d.js';
 import {createPanel} from './panel.js';
 import {createPhone} from './phone.js';
@@ -24,7 +24,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   const $ = s => document.querySelector(s);
   const layer = $('#parking-layer'), panelRoot = $('#parking-panel'), phoneRoot = $('#pk-phone'), bar = $('#parking-bar');
   const sim = createParkingSim();
-  const lot = createLot({scene, stalls: sim.state.stalls, schedule});
+  const lot = createLot({scene, stalls: sim.state.stalls, schedule, renderer});
   let active = false;
 
   // Plate camera: snapshot plus where the plate sits in the frame, or null when the camera cannot read it: the plate
@@ -49,6 +49,8 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     return {x: x0 - pad, y: y0 - pad, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2};
   }
   const snap = which => capture(lot.cameras[which]);
+  // The car each plate camera is reading.
+  const reading = {in: null, out: null};
 
   // Live LPR feed: after each 3D frame, draw the gate camera into the pop-up's picture area of the same canvas
   // (a scissored viewport), and place the plate box from that camera. Costs one extra render while it shows.
@@ -69,7 +71,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     renderer.setViewport(liveViewport); renderer.setScissor(liveScissor); renderer.setScissorTest(scissorTest);
     overlays.setFeedBox(agent.car.parent ? plateBox(camera, agent) : null);
   }
-  afterRender?.add(drawLiveFeed);
+  afterRender.add(drawLiveFeed);
 
   // The console, the pop-ups and the phone call `actions`: the world's, plus the page's own (filled in below).
   const actions = {};
@@ -78,25 +80,32 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   const overlays = createOverlays({layer: $('#pk-overlays'), sim, actions});
   const say = (ic, key, vars, tone, queued) => overlays.toast(`${icon(ic)}<span>${esc(t(key, vars))}${queued ? ` · ${esc(t('gate.sim.queued'))}` : ''}</span>`, tone);
 
-  let currentHint = null, currentCaption = null;
-  const showCaption = () => overlays.caption(currentCaption ? {...currentCaption, hint: currentHint && t(currentHint)} : null);
   const parking = createParkingWorld({lot, sim, camera, phone, watched: () => active, ui: {
     panel, overlays, schedule, snapshot: snap,
     fly: (name, ms) => fly(PARKING_POSES[name], ms),
-    caption(c, hint) { currentCaption = c; currentHint = hint; showCaption(); },
+    caption(c, hint) { overlays.caption(c ? {...c, hint: hint && t(hint)} : null); },
     tap() { for (const el of document.querySelectorAll('[data-cue="true"]')) { el.classList.remove('pk-tapped'); void el.offsetWidth; el.classList.add('pk-tapped'); } },
     toast: say,
     // The plate camera reads: the pop-up shows the gate camera live (the 3D view draws it into its picture area).
     plateRead(which, agent, verdict, confidence) {
-      const shot = snap(which);
+      reading[which] = agent;
       live = {camera: lot.cameras[which], agent};
-      overlays.showFeed({which, snapshot: shot, live: Boolean(renderer && afterRender), phase: 'reading', plate: agent.plate, province: agent.province, verdict, confidence});
-      panel.setSnapshot(which, shot);
+      overlays.showFeed({which, phase: 'reading', plate: agent.plate, province: agent.province, verdict, confidence});
       schedule();
     },
-    plateDone() { overlays.updateFeed({phase: 'done'}); },
+    // Read: the Gate tab's picture from that camera is this capture, the car at the line with its plate in view, kept
+    // until the next car (as a plate camera shows its last capture). Taken as the read began, the car was still rolling
+    // up, half out of the picture; retaken after each car had gone, it showed an empty road or the arm mid-swing.
+    // Not of a car no longer there (a reset during the read removes every car at once: its capture landed in the new
+    // run, of a car from the old one), nor with the car park hidden (another floor shown during the read: the camera saw
+    // only grass); the last capture stays then.
+    plateDone(which) {
+      if (reading[which]?.car.parent === lot.root && lot.root.visible) panel.setSnapshot(which, snap(which));
+      reading[which] = null;
+      overlays.updateFeed({phase: 'done'});
+    },
     full(plate) { say('alert', 'gate.full', {plate}); },
-    leftGate(which) { later(() => panel.setSnapshot(which, snap(which)), 700); overlays.hideFeed(3200); },
+    leftGate() { overlays.hideFeed(3200); },
     event(kind, payload) {
       if (kind === 'request' && payload?.status === 'pending' && payload.history.length === 1) {
         panel.markNew(payload.id);
@@ -120,7 +129,8 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     interact: el => { if (story.running && el?.closest?.('[data-cue="true"]')) return; onInteract(); },
     feedChanged: () => schedule(),
     toast: text => overlays.toast(esc(text)),
-    gateShown() { for (const which of ['in', 'out']) panel.setSnapshot(which, snap(which)); },
+    // A camera with no car read yet shows what it sees now; one that has read a car keeps that capture.
+    gateShown() { for (const which of ['in', 'out']) if (!panel.hasSnapshot(which)) panel.setSnapshot(which, snap(which)); },
   });
   // A presenter working the console or the alert during the story: a cue on auto-advance waits for them.
   for (const el of [panelRoot, $('#pk-overlays')]) for (const type of ['pointerdown', 'keydown']) el.addEventListener(type, () => { if (story.running) story.touched(); }, {capture: true});
@@ -215,18 +225,18 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     setNight(night) { lot.setNight(night); traffic.setNight(night); },
     toggleLang() { setLang(getLang() === 'en' ? 'th' : 'en'); },
     setInteractHandler(fn) { interactHandler = fn; },
-    dispose() { afterRender?.delete(drawLiveFeed); parking.dispose(); lot.dispose(); disposeCars(); },
+    dispose() { afterRender.delete(drawLiveFeed); parking.dispose(); lot.dispose(); disposeCars(); },
   };
 }
 
 // The car park without any UI, for the free-exploration page (#explore): the lot, parked cars, through-traffic, and
 // staff cars coming and going through the barrier (the parking world, staff only).
-export function createParkingScene({scene, schedule, camera = null}) {
+export function createParkingScene({scene, schedule, camera = null, renderer = null}) {
   const sim = createParkingSim();
-  const lot = createLot({scene, stalls: sim.state.stalls, schedule});
+  const lot = createLot({scene, stalls: sim.state.stalls, schedule, renderer});
   const w = createParkingWorld({lot, sim, camera, staffOnly: true, ui: {schedule}});
   return {
-    lot, sim, traffic: w.traffic,
+    lot,
     setNight(night) { lot.setNight(night); w.traffic.setNight(night); },
     dispose() { w.dispose(); lot.dispose(); disposeCars(); },
   };

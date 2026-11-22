@@ -14,14 +14,14 @@ export function createSceneTransition({model,schedule,onFinish=()=>{},onProgress
  // time): three.js sets up a new material's shader on its first draw, and the few hundred fresh copies a floor change
  // made each time took a ~30 ms frame in the middle of the flight. One copy per material and cut (leaving, arriving or
  // none), as objects that share a material may be on either side.
- const copies=new Map(),planeCount=new WeakMap(),made=new WeakSet();
+ const copies=new Map(),planeCount=new WeakMap();
  // The meshes showing a copy lent by prepare() (below), with their real material. A change that begins meanwhile (a
  // flight while the loading screen compiles) gives them back first: working from the copies, it kept them for good.
  let lent=null;
  function giveBack(){if(!lent)return;for(const [o,material] of lent)o.material=material;lent=null;}
  function copyOf(base,kind,planes){
   let byKind=copies.get(base);if(!byKind)copies.set(base,byKind={});
-  let m=byKind[kind];if(m)m.copy(base);else{m=byKind[kind]=base.clone();made.add(m);}
+  let m=byKind[kind];if(m)m.copy(base);else m=byKind[kind]=base.clone();
   m.clipShadows=true; // shadows follow the cut (drawn without it, the whole building's shadow fell at once)
   // A shader material's copy shares the original's uniforms: copying them drops a render target's texture (the pond's
   // reflection went black mid-flight) and would freeze values the app keeps changing (the reflection's mix).
@@ -99,6 +99,5 @@ export function createSceneTransition({model,schedule,onFinish=()=>{},onProgress
  function progress(t){const p=Math.max(0,Math.min(1,t)),e=p*p*(3-2*p);for(const planes of entries){for(const plane of planes){plane.current.normal.lerpVectors(plane.from.normal,plane.to.normal,e).normalize();plane.current.constant=THREE.MathUtils.lerp(plane.from.constant,plane.to.constant,e);}}for(const sweep of sweeps)sweep.plane.constant=THREE.MathUtils.lerp(sweep.from,sweep.to,e);onProgress();schedule();}
  // `settled: false` when another change follows at once (mid-flight): no onFinish (it redraws the sun's shadows).
  function finish({settled=true}={}){restoreMaterials();for(const [o,visible] of targetVisibility)o.visible=visible;targetVisibility.clear();if(settled)onFinish();schedule();}
- // isCopy: tests check that no mesh keeps a copy once a change is over.
- return {begin,progress,finish,prepare,isCopy:m=>made.has(m),dispose(){finish();for(const byKind of copies.values())for(const m of Object.values(byKind))m.dispose();copies.clear();}};
+ return {begin,progress,finish,prepare,dispose(){finish();for(const byKind of copies.values())for(const m of Object.values(byKind))m.dispose();copies.clear();}};
 }

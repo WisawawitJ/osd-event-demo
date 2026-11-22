@@ -6,12 +6,10 @@ import {world, demoNow} from 'osd/parking/clock.js';
 import {parking} from './world.mjs';
 
 const noop = () => {};
-// A console that records what the story shows: the cued button, the tab, captions.
+// A console that records the button the story cues.
 function recordingUi() {
-  const seen = {cue: null, tab: null, caption: null, flights: []};
-  const panel = {show: (tab) => { seen.tab = tab; }, setCue: n => { seen.cue = n; }, reset: noop, render: noop, markNew: noop, flash: noop, setSnapshot: noop};
-  const overlays = {setCue: noop, caption: noop, reset: noop, refresh: noop, showAlert: noop, showFeed: noop, updateFeed: noop, hideFeed: noop, toast: noop};
-  return {seen, ui: {panel, overlays, caption: c => { seen.caption = c; }, fly: name => seen.flights.push(name)}};
+  const seen = {cue: null};
+  return {seen, ui: {panel: {show: noop, setCue: n => { seen.cue = n; }, reset: noop, flash: noop}}};
 }
 // Each test's world is disposed after it, passed or failed (a story left running held the world clock for the next).
 const live = [];
@@ -29,7 +27,6 @@ test('the story plays end to end on auto-advance: request, approval, the visitor
   assert.equal(request(w)?.status, 'approved');
   assert.deepEqual(['entry', 'exit'].filter(k => events(w, STORY.plate).includes(k)), ['entry', 'exit'], 'the visitor in and out');
   assert.ok(events(w, STORY.unknown.plate).includes('denied'), 'the unknown car denied');
-  w.dispose();
 });
 
 test('rejected at step 4, the story still finishes: the visitor is turned away at the barrier, nothing left open', async () => {
@@ -41,7 +38,6 @@ test('rejected at step 4, the story still finishes: the visitor is turned away a
   const visitor = events(w, STORY.plate);
   assert.ok(!visitor.includes('entry') && visitor.includes('denied'), `turned away, never in (${visitor})`);
   assert.equal(w.sim.state.alerts.filter(a => a.status === 'open').length, 0);
-  w.dispose();
 });
 
 test('guided: Next moves it on, and at a cue does the action for the presenter', async () => {
@@ -53,7 +49,6 @@ test('guided: Next moves it on, and at a cue does the action for the presenter',
   await w.run(200);
   assert.equal(request(w).status, 'approved');
   w.story.stop(); await w.run(100); assert.equal(out.result, 'stopped');
-  w.dispose();
 });
 
 test('unticking Auto-advance at the Approve cue leaves the approval to the presenter', async () => {
@@ -65,7 +60,6 @@ test('unticking Auto-advance at the Approve cue leaves the approval to the prese
   assert.ok(w.story.waitingForNext);
   w.story.next(); await w.run(200);
   assert.equal(request(w).status, 'approved');
-  w.dispose();
 });
 
 test('a console tap waits a cue out (6 s after the last), but only one during that cue', async () => {
@@ -81,7 +75,6 @@ test('a console tap waits a cue out (6 s after the last), but only one during th
   await w.run(5000);
   assert.ok(alertOpen(), 'still waiting 5 s after a touch during the cue');
   assert.ok(await w.until(() => !alertOpen(), 20000));
-  w.dispose();
 });
 
 test('Pause stops the phone typing; Auto-advance off while paused unpauses (the bar has Next, no Resume)', async () => {
@@ -93,7 +86,6 @@ test('Pause stops the phone typing; Auto-advance off while paused unpauses (the 
   assert.equal(a, b, 'no typing while paused');
   w.story.setAuto(false);
   assert.equal(w.story.paused, false);
-  w.dispose();
 });
 
 test('left at step 7, the story\'s unknown car is a background one: turned away after 8 s, not 45', async () => {
@@ -103,7 +95,6 @@ test('left at step 7, the story\'s unknown car is a background one: turned away 
   w.story.stop();
   await w.run(10000);
   assert.equal(alert().status, 'denied');
-  w.dispose();
 });
 
 test('left before its unknown car reaches the barrier: that car comes as a background one', async () => {
@@ -114,7 +105,6 @@ test('left before its unknown car reaches the barrier: that car comes as a backg
   assert.ok(await w.until(() => alert(), 60000), 'its car at the barrier');
   assert.equal(alert().ambient, true);
   assert.ok(await w.until(() => alert().status === 'denied', 10000), 'turned away within 8 s');
-  w.dispose();
 });
 
 test('the story holds the world clock at real speed and gives it back', async () => {
@@ -125,7 +115,6 @@ test('the story holds the world clock at real speed and gives it back', async ()
   w.story.stop();
   const c = world.now(); await w.run(1000); const d = world.now();
   assert.ok(d - c > 20000, `time-lapse again after (${d - c} ms in 1 s)`);
-  w.dispose();
 });
 
 test('a story whose visitor cleared a field before Send still sends its request', async () => {
@@ -135,7 +124,6 @@ test('a story whose visitor cleared a field before Send still sends its request'
   w.story.next();
   assert.ok(await w.until(() => w.story.index === 1 && w.story.waitingForNext, 60000));
   assert.ok(request(w), 'the request was sent');
-  w.dispose();
 });
 
 test('pausing the demo stops everything: no simulation time passes, nothing moves', async () => {
@@ -148,26 +136,23 @@ test('pausing the demo stops everything: no simulation time passes, nothing move
   world.setPaused(false);
   await w.run(1000);
   assert.ok(demoNow() > t);
-  w.dispose();
 });
 
 test('a free-play photo read under way when the story starts does not put its plate in the story\'s form', async () => {
   const {w} = start();
   w.phone.readPhoto(); // free play: a sample plate in ~1.5 s
-  const out = play(w), plates = new Set();
+  play(w); const plates = new Set();
   await w.until(() => { const p = w.phone.form.plate; if (p) plates.add(p); return Boolean(request(w)); }, 120000);
   assert.equal(request(w).plate, STORY.plate);
   assert.deepEqual([...plates], [STORY.plate], 'only the story plate ever in its form');
-  void out;
 });
 
 test('a photo read pressed during the story\'s own read does not stall it, and the story plate wins', async () => {
-  const {w, seen} = start(); play(w);
+  const {w} = start(); play(w);
   assert.ok(await w.until(() => w.phone.form.photo === 'reading', 120000), 'the story\'s read');
   w.phone.readPhoto();
   assert.ok(await w.until(() => Boolean(request(w)), 60000), 'the story went on and sent its request');
   assert.equal(request(w).plate, STORY.plate);
-  void seen;
 });
 
 test('leaving the story during its photo read: what the visitor types next stays', async () => {

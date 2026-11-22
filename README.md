@@ -15,15 +15,17 @@ camera images and ATOM, Keycloak and LINE responses are all made up. The page sa
 npm start            # or: node scripts/serve.mjs 8080
 ```
 
-Open <http://localhost:8080/>. You need Node 18 or newer and no `npm install`. The server listens on localhost only.
+Open <http://localhost:8080/>. You need Node 18 or newer to serve it (22.15 or newer for `npm test`, shots and bench) and no `npm install`. The server listens on localhost only.
 The page takes no settings from its address: for the booth, tick **Kiosk mode** (bottom left). `/#explore` is the
-original free-exploration page, with the car park, its cars and street traffic (no parking UI, no model download).
+original free-exploration page, with the car park, staff cars coming and going and street traffic (no parking UI, no
+model download).
 
 ## Testing
 
 ```sh
 npm test                 # every test, in Node: about 6 s, no browser
-npm run shots [words]    # screenshots of every UI state, with a contact sheet (shots/<time>/index.html)
+npm run shots [words]    # screenshots of every UI state: shots/<commit>/index.html (<commit>+wip with changes)
+npm run shots -- --base main [words]   # and what changed since main: shots/compare/<main>..<commit>/index.html
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
 
@@ -40,11 +42,18 @@ npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, d
   (every car through the barrier; the car count checked against the hour every half hour, every pair of cars for
   touching) about a second. `SEEDS=1,2,3 npm test` runs that day with other dice.
 
-How things look is not tested automatically: run the screenshot script and look. It drives headless Chromium over
+How things look is not tested automatically: run the screenshot script and look. With `--base <ref>` (a commit,
+branch or tag) it also photographs that version, from a temporary checkout, and writes a comparison page: before,
+after and the changed pixels for each state, the most changed first, unchanged ones hidden, a click to swipe between
+the two. A commit's shots are kept and reused; `+wip` ones are taken again. Words pick states (`parking 1920 en`: the
+car park states at 1920 wide in English; see `scripts/shots.mjs`). The states (`scripts/shots-states.mjs`) look the
+same on every run: pages open with the `manual` option, so simulation time moves only when the script steps it
+(`window.__engine` in `src/viewer/main.js`), camera flights are waited out, the dice are seeded and CSS animations
+end at once; two runs of one version differ by a few pixels of GPU noise at most. It drives headless Chromium over
 the DevTools protocol (`test/browser.mjs`: `/usr/lib/chromium/chromium`, or `CHROMIUM=`), one browser, on the NVIDIA
 GPU or in software, **never the Intel iGPU** (it froze this laptop twice; `GPU=nvidia|software|vulkan|egl` forces one).
 The page itself takes no settings from its address; the screenshot script hands it test settings (`time`, `dest`,
-`story`, `auto`, `kiosk`, `speed`, `debug` …) as `window.__demoOptions` before it loads (`src/parking/options.js`).
+`story`, `auto`, `kiosk`, `speed`, `debug`, `manual`, `seed` …) as `window.__demoOptions` before it loads (`src/parking/options.js`).
 
 ## Brand
 
@@ -82,12 +91,14 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   water around 15:00) and the solar panels follow a daily schedule. A switch flipped by hand stays until the schedule next
   changes that room. Readings set by hand (Simulate low water, a meeting) stay until the schedule changes that
   reading itself; temperature and solar, which the schedule moves all the time, stay for an hour of world time.
-- **Car park:** cars come and go to match the hour: a morning rush in from 07:00, a dip at lunch, an evening rush out
-  from 16:30, two or three cars overnight. Visitors with a pass for the day (ten are booked) drop in between 09:30
+- **Car park:** cars come and go to match the hour: a long, gentle morning rush in from 05:45, a dip at lunch, an
+  evening rush out from 16:00, two or three cars overnight. Visitors with a pass for the day (ten are booked) drop in between 09:30
   and 15:30, each at most once, stay 45 minutes to three hours, and drive out by themselves. On screen every car drives
-  through the barrier, which keeps up with the rushes of a 20-minute day (about a car every 5 s each way): cars set off
+  through the barrier, which keeps up with the rushes of a 20-minute day (at most a car every 7 s each way; it can take
+  one every 5 s): cars set off
   for the hour it will be when they get through (half an hour of the time-lapse ahead), as many at once as the car park
-  is short or over. What the barrier cannot bring in or out (a shorter day, a jump in time) is made up in the bays
+  is short or over. That look ahead builds up over a minute from when the barrier takes over (the page opening, a jump
+  in time, the car park back on screen, the story over), so the first cars come one after another, not four at once. What the barrier cannot bring in or out (a shorter day, a jump in time) is made up in the bays
   (with log entries over that time), as it is while the car park is off screen, but only in bays out of the camera's
   view, so no car pops in or out where you can see it (a jump in time changes them all).
 - **Timeline** (under the 3D view): the live time. Drag the slider, or press a moment, to move the world on to that
@@ -154,9 +165,9 @@ The visitor's phone form can be filled in by hand. The car photo reads a sample 
 Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street (the first just clear of a car backing out of the entry, the rest a car and 2 m apart), and leaving cars wait in their bay until the one ahead is out.
 Cars also come and go by themselves, following the hour (see above). The car park is set back from the street: a
 short two-way entrance road links the barrier to the street at a T-junction, so a car waiting at the barrier stands
-wholly off the street, and through-traffic drives down the middle of each lane. Lane arrows follow one rule for
-traffic that keeps left: a pair side by side on every two-way stretch (the entrance road, the driveway, each aisle's mouth).
-The main road's centre line is yellow, as on Thai roads; the driveway and the entrance road have none. Through-traffic drives both lanes of the
+wholly off the street, and through-traffic drives down the middle of each lane. No arrows are painted on the ground
+(the model's own in P1's aisle are left out too): they read as noise from the demo's views. The main road's centre line
+is yellow, as on Thai roads; the driveway and the entrance road have none. Through-traffic drives both lanes of the
 street whenever it is in view; it keeps to one speed per lane and gives way to cars turning in or pulling out.
 About a third of the cars coming in arrive along the far lane: the near lane has right of way, so they wait at the
 turn, signalling right, for a gap in it and a clear gate mouth, then turn in across it. About a third of the cars
@@ -165,12 +176,14 @@ on its way into the entry. Cars signal from 30 m before their turn off the stree
 the exit barrier or an aisle's mouth, and before every other turn (amber lenses at the four corners). Cars go in in the order they get to the entry,
 whichever lane they come along: a near-lane car is there a stopping distance before its place in the queue, a far-lane
 car at its turn (not when it appears, 50 m out, or is sent). The queue moves up as the cars ahead go in, and the next
-car drives up to the stop line while the car ahead is being let in; the arm stays up between cars let in one after
-another (a car not let in lowers it). Going out, cars from different aisles pull out at the same time, each giving
-way where its aisle meets the exit lane, and the camera reads a plate as the car rolls up to the stop line. The barrier's one
+car sets off for the stop line as it sees the car ahead drive off. Going in and out, the camera reads a plate as the car
+rolls up to the stop line and the arm rises as soon as it is read. The arm comes down after every car (unless a car in
+the other lane is passing under it: one arm spans both). Going out, cars from different aisles pull out at the same time,
+each giving way where its aisle meets the exit lane. The barrier's one
 arm serves both lanes, and each lane takes its own turn at it: a car going in does not wait for one going out. The arm
 is up while any car passes under it and stays down while an unknown car waits for staff (cars going out wait too). A
-car bound for P1 drives in along the exit lane, so it waits at the barrier while a car is driving out. No car drives
+car bound for P1 drives in along the exit lane's end: from its plate read on, cars leaving P2 stop short of its way
+until it has turned off into P1's aisle, and it waits at the barrier only for those already past that point. No car drives
 through another: on the street a car keeps its distance to the one ahead, every car brakes for a car on its path, and an
 aisle takes cars in or out, not both at once (an arriving car rolls straight into a clear aisle, and stops at its mouth
 only when a car is coming out or along the exit lane; a car coming out frees its aisle once it has turned onto the exit
@@ -191,8 +204,11 @@ lane, not at the exit barrier) (a check watches every pair of cars in a busy car
     frame (the mirror's target has another colour space), half the pond view's CPU time;
   - the building and the static car-park parts compose their matrices once, not every frame; only floors (exploded view),
     door hinges and cars update theirs.
-- Shadows behave as if baked: the sun's shadow map is drawn once per view change or sun step (every 2 world minutes, about
-  once a second), never because the camera moved. At night
+- Shadows behave as if baked: the sun's shadow map (4096 texels square on a desktop, about 2 cm a texel, so the
+  barrier's arm and the posts keep theirs; fitted around the whole site, the car park's west end included, in the sun's
+  view at each sun step) is drawn once per view change, sun step (every 6 s of world time, about
+  ten a second in a 20-minute day, so shadows move smoothly; about 1 ms each) or move of the barrier's arm, never because
+  the camera moved. At night
   the 6 room lights (1 with shadows) are the selected room and its neighbours (dealt again as soon as another room is
   selected), so moving the camera never swaps lights or shadows. Every room's light fades on and off (~0.35 s), and a
   light moving to another room (a flight changing floors) fades out, moves and fades in.
@@ -213,7 +229,7 @@ lane, not at the exit barrier) (a check watches every pair of cars in a busy car
   instead of swapping shaders.
 - The live plate-camera pop-up is one extra render into a scissored corner of the same canvas, only while it shows.
 - The view redraws only when something on screen changes: moving cars redraw it only while the car park is shown.
-- Car movement runs in real time at any frame rate. Set `fps` (a test setting) to see the frame rate, or run `npm run bench`.
+- Car movement runs in real time at any frame rate. `npm run bench` measures the frame rate (the `fps` option, from the test driver, shows a meter).
 
 ## What is real and what is imagined
 
@@ -251,8 +267,8 @@ src/styles/              app.css (from the reference), parking.css, night.css (d
 model/                   building model and data, extracted from the reference
 vendor/three/            three.js r186 as shipped in the reference
 scripts/serve.mjs        dependency-free static server
-scripts/shots.mjs        screenshots of every UI state, with a contact sheet
-test/unit/               the tests, in Node (setup, a car park and showcase without a page, the tests)
+scripts/shots.mjs        screenshots per version and the before/after comparison; shots-states.mjs: the states
+test/unit/               the tests, in Node (setup.mjs; world.mjs: the car park and parking world without a page)
 test/                    browser.mjs (headless Chromium driver for the screenshots), bench.mjs
 reference/               the original standalone HTML (not committed)
 ```

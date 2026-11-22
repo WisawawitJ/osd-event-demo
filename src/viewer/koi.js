@@ -109,9 +109,11 @@ export function createKoi({model, camera, schedule}) {
     frame = requestAnimationFrame(tick);
     if (now - last < 1000 / FPS - 2) return;
     last = now;
-    time.value = demoNow() / 1000; // simulation time: they stop when the demo is paused
     if (inView()) schedule();
   };
+  // Their swim is read from the clock as they are drawn (simulation time: they stop when the demo is paused), so a frame
+  // shows them where they are at that moment, not where they were at the last of their own (throttled) frames.
+  for (const object of fish) object.onBeforeRender = () => { time.value = demoNow() / 1000; };
   frame = requestAnimationFrame(tick);
-  return {get time() { return time.value; }, dispose() { cancelAnimationFrame(frame); for (const object of fish) object.material.dispose(); }};
+  return {dispose() { cancelAnimationFrame(frame); for (const object of fish) object.material.dispose(); }};
 }

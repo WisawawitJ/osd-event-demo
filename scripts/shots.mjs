@@ -1,365 +1,142 @@
-// Screenshots of every UI state, for reviewing the demo by eye: `node scripts/shots.mjs [words]`.
-// Saves PNGs to shots/<time>/ with an index.html contact sheet (grouped, captioned with state, size and language).
-// Words limit the run to shots that match all of them, e.g. `node scripts/shots.mjs parking 1920x1080 en`. Names look
-// like 1920x1080-en-day-parking-tab-requests: th/en pick the language, day/night the time, digits the size (`1920`
-// alone matches the portrait 1080x1920 too), any other word part of the state (parking, story-04, phone, explore).
+// Screenshots of every UI state, per version of the demo, and what changed between two versions.
+//
+//   npm run shots [words]                   this checkout → shots/<version>/index.html (a contact sheet)
+//   npm run shots -- --base <ref> [words]   the same states of <ref> as well (a commit, branch or tag, from a
+//                                           temporary checkout), then shots/compare/<ref>..<version>/index.html:
+//                                           before, after and the changed pixels, the most changed first
+//
+// <version> is the commit (`a1b2c3d`), with `+wip` when the checkout has changes not committed. A commit's shots are
+// kept and reused (a state photographed once is not photographed again); `+wip` ones are taken again on every run.
+// Words limit the run to states that match all of them, e.g. `npm run shots -- --base main parking 1920 en`: th/en
+// pick the language, day/night the time, digits the size (`1920` matches the portrait 1080x1920 too), any other word
+// part of the state's name (parking, story-04, phone, explore). The states are in scripts/shots-states.mjs.
+//
+// The same state looks the same in every run: the pages open with the `manual` option, so simulation time moves only
+// when this script steps it (window.__engine, main.js), and camera flights are waited out rather than raced; the
+// dice are seeded. Versions older than that are stepped by real time instead, so their cars and clocks differ.
+// The NVIDIA GPU now and then draws a frame a shade differently (software rendering never does): each picture's frame
+// is drawn until two draws agree (__engine.settle), so two runs of one version differ by a few dozen pixels at most;
+// `GPU=software` gives exact pictures, about eight times slower. `SHOTS_DIGEST=1` also saves each state's scene
+// (every object's visibility, place, materials and lights) as <name>.scene.json, to find what differs between runs.
 // One headless browser at a time, on the test harness's default GPU (test/browser.mjs; never the Intel iGPU).
-// The booth size (1920×1080) gets every state in Thai and English; the other sizes get each stop, the explore page,
-// the visitor's phone and story steps 1, 4, 6 and 7.
-import {mkdirSync, writeFileSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {existsSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {join, resolve, relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {open} from '../test/browser.mjs';
+import {buildSessions, GROUPS, LANGS, SIZES, sizeName} from './shots-states.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const words = process.argv.slice(2).map(w => w.toLowerCase());
-const started = Date.now();
-const pad = n => String(n).padStart(2, '0');
-const now = new Date(), stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-const OUT = join(root, 'shots', stamp);
+const SHOTS = join(root, 'shots');
+const git = (...args) => execFileSync('git', ['-C', root, ...args], {encoding: 'utf8'}).trim();
 
-// Screen sizes: the booth first (it gets the full set).
-const BOOTH = [1920, 1080];
-const SIZES = [BOOTH, [1080, 1920], [1366, 768], [768, 1024], [390, 844]];
-const LANGS = ['th', 'en'];
-const sizeName = ([w, h]) => `${w}x${h}`;
+// Arguments.
+const args = process.argv.slice(2);
+const baseAt = args.indexOf('--base');
+const baseRef = baseAt >= 0 ? args[baseAt + 1] : null;
+if (baseAt >= 0 && !baseRef) { console.error('--base needs a commit, branch or tag'); process.exit(2); }
+const words = args.filter((a, i) => baseAt < 0 || (i !== baseAt && i !== baseAt + 1)).map(w => w.toLowerCase());
 
-// Page states to wait for before each screenshot.
-const LOADED = "document.querySelector('#status')?.dataset.state === 'ready'";
-const UP = `${LOADED} && !!window.__parking`;
-const STILL = "!document.querySelector('[data-destination][aria-busy=true]') && !document.querySelector('#viewport').classList.contains('flying')";
-const IDLE = `${UP} && ${STILL}`;
-const PARKING = `${IDLE} && __parking.active`;
-const NIGHT = `document.documentElement.dataset.night === 'true'`;
-const DAY = `document.documentElement.dataset.night === 'false'`;
-const VISITOR = 'ชูใจ ใฝ่รู้', UNKNOWN_PLATE = '2ฒษ 9077';
-const STORY_REQUEST = `__parking.sim.state.requests.find(q=>q.visitor.name===${JSON.stringify(VISITOR)})`;
-const STORY_ALERT_OPEN = `__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate===${JSON.stringify(UNKNOWN_PLATE)})`;
-const waiting = i => `__parking.story.running && __parking.story.index===${i} && __parking.story.waitingForNext`;
-const TIMES = {day: '10:00', night: '20:00'};
-const url = (params, hash = '') => `?debug=1&warm=0&${params}${hash}`;
-
-const GROUPS = {
-  stops: 'Showcase stops',
-  explore: 'Explore page',
-  modes: 'Tour, kiosk and timeline',
-  console: 'Parking console',
-  phone: 'Visitor phone',
-  gate: 'Gate alerts and cameras',
-  story: 'Parking story, guided (Next by Next)',
-  rejected: 'Parking story, request rejected at step 4',
-  auto: 'Parking story, auto-advance',
-};
-
-// A session is one page load: `steps` run in order, and each step with a `state` is photographed once it has run.
-// `p` is the page from test/browser.mjs.
-const sessions = [];
-const session = (size, lang, tod, path, ready, steps) => sessions.push({size, lang, tod, path, ready, steps});
-const step = (group, state, label, run = async () => {}) => ({group, state, label, run});
-const move = run => ({run}); // a step that only gets the page somewhere, photographed by none
-
-async function settle(p, ms = 400, {hold = true} = {}) {
-  // A pointer move over the 3D view counts as use: the camera's idle orbit (after 20 s) stays off, so every stop is
-  // seen from its own pose. (It is not a tap: nothing stops, pauses or is picked.) Not in the tour or the kiosk, whose
-  // orbit is part of what they look like.
-  if (hold) await p.eval(`document.querySelector('#viewport')?.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,buttons:1}))`).catch(() => {});
-  await p.sleep(ms);
-  await p.eval('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))').catch(() => {});
-}
-const at = (p, cond, what, timeout = 30000) => p.until(cond, {timeout, what});
-const dock = id => async p => {
-  await p.click(`[data-destination="${id}"]`);
-  await at(p, `document.body.dataset.tourDestination===${JSON.stringify(id)} && ${STILL}${id === 'parking' ? ' && __parking.active' : ''}`, `landed at ${id}`);
-  await settle(p, id === 'overview' ? 400 : 900); // the stop's effects fade in; the car park's layout change animates
-};
-
-// Showcase: every stop (and the explore page) by day and by night.
-function stops(size, lang, tod, {extras = false} = {}) {
-  const steps = [step('stops', 'stop-overview', 'Overview', async p => settle(p, 600))];
-  for (const [id, label] of [['meeting', 'Meeting room'], ['pond', 'Fish pond'], ['energy', 'Energy (rooftop)'], ['parking', 'Car park']]) steps.push(step('stops', `stop-${id}`, label, dock(id)));
-  if (extras) {
-    steps.push(step('modes', 'timeline-paused', 'Timeline paused (car park)', async p => {
-      await p.click('#day-pause');
-      await at(p, `document.querySelector('#day-pause').getAttribute('aria-pressed')==='true'`, 'paused');
-      await settle(p);
-    }));
-  }
-  session(size, lang, tod, url(`speed=30&time=${TIMES[tod]}`), `${IDLE} && ${tod === 'night' ? NIGHT : DAY}`, steps);
-}
-function explore(size, lang, tod, {extras = false} = {}) {
-  const steps = [step('explore', 'explore', 'Explore page', async p => settle(p, 800))];
-  if (extras) {
-    steps.push(step('explore', 'explore-details', 'Explore page, simulation details open', async p => { await p.eval(`(()=>{const d=document.querySelector('.simulation-details');if(d)d.open=true})()`); await settle(p); }));
-    steps.push(step('explore', 'explore-stairs', 'Explore page, stairs view', async p => { await p.click('#stairs'); await settle(p, 1500); }));
-  }
-  // `explore=1` (read by nothing) keeps the URL apart from the showcase's: a hash-only change does not reload.
-  session(size, lang, tod, url(`explore=1&speed=30&time=${TIMES[tod]}`, '#explore'), `${LOADED} && ${tod === 'night' ? NIGHT : DAY}`, steps);
-}
-
-// The parking console in free play: tabs, a request, the visitor's phone and an unknown car at the gate.
-// At speed 5: an unknown car waits 45 s of demo time for an answer (9 s here), long enough to photograph.
-function parkingFree(size, lang, tod, {full = true, night = false} = {}) {
-  const tab = (id, label) => step('console', `parking-tab-${id}`, label, async p => { await p.click(`[data-tab="${id}"]`); await settle(p, 500); });
-  const phoneOpen = step('phone', 'parking-phone-form', 'Phone open: the request form', async p => {
-    if (!await p.eval('document.body.classList.contains("phone-open")')) await p.click('[data-bar="phone"]');
-    await at(p, `!!document.querySelector('#pk-phone .ph-frame')`, 'the phone');
-    await settle(p, 500);
-  });
-  const alert = step('gate', 'parking-unknown-car-alert', 'Unknown car at the barrier: alert pop-up, camera card, Gate tab', async p => {
-    await p.eval(`void __parking.traffic.arrive({plate:'1กก 1111',province:'กรุงเทพมหานคร',color:5,fromX:-40})`);
-    await at(p, `__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='1กก 1111') && document.querySelector('[data-pop="open"]') && document.querySelector('.pk-feed:not([hidden])')`, 'the alert and its pop-up');
-    await settle(p, 500);
-  });
-  let steps;
-  if (night) steps = [tab('gate', 'Gate tab'), alert, move(async p => { await p.click('[data-pop="deny"]'); }), phoneOpen];
-  else if (!full) steps = [phoneOpen];
-  else {
-    steps = [
-      step('console', 'parking-tab-overview', 'Overview tab', async p => settle(p, 500)),
-      tab('requests', 'Requests tab'),
-      step('console', 'parking-request-detail', 'Request detail (pending: Approve / Reject)', async p => {
-        await p.click('[data-req-filter="all"]');
-        const id = await p.eval(`(__parking.sim.state.requests.find(q=>q.status==='pending')||__parking.sim.state.requests[0])?.id`);
-        if (!id) throw new Error('no request to open');
-        await p.click(`[data-request="${id}"]`);
-        await at(p, `!!document.querySelector('.pk-detail-head')`, 'the request detail');
-        await settle(p);
-      }),
-      step('console', 'parking-request-reject-form', 'Request detail: Reject with a reason', async p => {
-        if (!await p.eval(`!!document.querySelector('[data-act="reject"]')`)) throw new Error('the request is not pending');
-        await p.click('[data-act="reject"]');
-        await at(p, `!!document.querySelector('.pk-reject textarea')`, 'the reject form');
-        await settle(p);
-      }),
-      step('console', 'parking-request-detail-approved', 'Request detail (approved: QR, Revoke)', async p => {
-        await p.click('[data-act="reject-cancel"]').catch(() => {});
-        await p.click('[data-act="back"]');
-        await p.click('[data-req-filter="approved"]');
-        const id = await p.eval(`__parking.sim.state.requests.find(q=>q.status==='approved')?.id`);
-        if (!id) throw new Error('no approved request');
-        await p.click(`[data-request="${id}"]`);
-        await at(p, `!!document.querySelector('.pk-detail-head')`, 'the request detail');
-        await settle(p);
-      }),
-      move(async p => { await p.click('[data-act="back"]'); }),
-      tab('vehicles', 'Vehicles tab'),
-      tab('gate', 'Gate tab'),
-      tab('reports', 'Reports tab'),
-      alert,
-      move(async p => { await p.click('[data-pop="deny"]'); await at(p, `!__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='1กก 1111')`, 'the alert answered'); }),
-      step('gate', 'parking-camera-card', 'Plate camera card (a registered car at the barrier)', async p => {
-        await p.click('[data-tab="gate"]');
-        await at(p, `!document.querySelector('.pk-feed:not([hidden])') && __parking.sim.state.gate==='closed'`, 'the barrier quiet', 30000);
-        await p.click('[data-sim="registered"]');
-        await at(p, `!!document.querySelector('.pk-feed:not([hidden])')`, 'the camera card', 30000);
-        await settle(p, 300);
-      }),
-      phoneOpen,
-      step('phone', 'parking-phone-form-error', 'Phone: Send with fields missing', async p => { await p.click('[data-ph="submit"]'); await at(p, `!!document.querySelector('#pk-phone .ph-error')`, 'the error'); await settle(p, 300); }),
-      step('phone', 'parking-phone-form-filled', 'Phone: form filled in', async p => {
-        await p.eval(`(()=>{const q=n=>document.querySelector('#pk-phone [name='+n+']');
-          const set=(n,v)=>{const e=q(n);e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}))};
-          set('name','สมชาย ใจดี');set('email','somchai@example.com');set('contact','host.demo@osd.example');set('company','บริษัท ตัวอย่าง จำกัด');set('phone','081-234-5678');set('plate','3ขค 5150');
-          set('province','กรุงเทพมหานคร');const c=q('consent');c.checked=true;c.dispatchEvent(new Event('input',{bubbles:true}))})()`);
-        await settle(p, 300);
-      }),
-      step('phone', 'parking-phone-sent', 'Phone: request sent (confirmation)', async p => {
-        await p.click('[data-ph="submit"]');
-        await at(p, `document.querySelector('#pk-phone .ph-screen')?.dataset.screen==='sent' && !!document.querySelector('#pk-phone .ph-receipt')`, 'the confirmation');
-        await settle(p, 300);
-      }),
-      step('phone', 'parking-phone-mail-banner', 'Phone: email notification after approval', async p => {
-        await p.click('[data-tab="requests"]');
-        await p.click('[data-req-filter="all"]');
-        const id = await p.eval(`__parking.sim.state.requests.find(q=>q.visitor.name==='สมชาย ใจดี')?.id`);
-        await p.click(`[data-request="${id}"]`);
-        await p.click('[data-act="approve"]');
-        await at(p, `!!document.querySelector('#pk-phone .ph-banner')`, 'the email banner', 40000);
-        await settle(p, 300);
-      }),
-      step('phone', 'parking-phone-mail-ticket', 'Phone: email with the parking ticket', async p => {
-        await p.click('[data-ph="inbox"]');
-        await at(p, `!!document.querySelector('#pk-phone .ph-ticket')`, 'the ticket');
-        await settle(p, 300);
-      }),
-    ];
-  }
-  session(size, lang, tod, url(`dest=parking&speed=5&time=${TIMES[tod]}`), PARKING, steps);
-}
-
-// The guided story (Next by Next): each step once it has run and waits for Next; steps 4 and 7 also at their cue.
-// `only` limits the photographs to those states (the story still runs through the steps before them).
-const STORY_STATES = [
-  ['story-01', 'Step 1: the visitor fills in the form', waiting(0)],
-  ['story-02', 'Step 2: plate photo read, request sent', waiting(1)],
-  ['story-03', 'Step 3: the request in the console', waiting(2)],
-  ['story-04a-approve-cue', 'Step 4: Approve cue', `${waiting(3)} && ${STORY_REQUEST}?.status==='pending'`],
-  ['story-04b-approved', 'Step 4: approved, ticket emailed', `${waiting(3)} && ${STORY_REQUEST}?.status==='approved'`],
-  ['story-05', 'Step 5: the ticket email on the phone', waiting(4)],
-  ['story-06', 'Step 6: the visitor\'s car drives in', waiting(5)],
-  ['story-07a-alert-cue', 'Step 7: unknown car, Deny cue', `${waiting(6)} && ${STORY_ALERT_OPEN}`],
-  ['story-07b-denied', 'Step 7: unknown car denied', `${waiting(6)} && !${STORY_ALERT_OPEN}`],
-  ['story-08', 'Step 8: staff cars come and go', waiting(7)],
-  ['story-09', 'Step 9: reports and the audit log', waiting(8)],
-  ['story-10', 'Step 10: the visitor leaves', waiting(9)],
-];
-function storyGuided(size, lang, only = null) {
-  const steps = [];
-  STORY_STATES.forEach(([state, label, cond], i) => {
-    const run = async p => {
-      if (i > 0) await p.click('[data-bar="next"]');
-      await at(p, cond, label, 60000);
-      await settle(p, 500);
-    };
-    steps.push(!only || only.includes(state) ? step('story', state, label, run) : move(run));
-  });
-  session(size, lang, 'day', url('dest=parking&speed=30&story=1&auto=0'), 'window.__parking && __parking.story.running', steps);
-}
-function storyRejected(size, lang) {
-  const steps = [];
-  for (let i = 0; i < 3; i++) steps.push(move(async p => { if (i) await p.click('[data-bar="next"]'); await at(p, waiting(i), `step ${i + 1}`, 60000); }));
-  steps.push(
-    move(async p => { await p.click('[data-bar="next"]'); await at(p, `${waiting(3)} && !!document.querySelector('[data-act="reject"]')`, 'the approve cue', 60000); }),
-    step('rejected', 'story-rejected-04-reject-form', 'Step 4: the presenter rejects (reason form)', async p => {
-      await p.click('[data-act="reject"]');
-      await at(p, `!!document.querySelector('.pk-reject textarea')`, 'the reject form');
-      await settle(p);
-    }),
-    step('rejected', 'story-rejected-04-rejected', 'Step 4: rejected', async p => {
-      await p.click('[data-act="reject-confirm"]');
-      await at(p, `${waiting(3)} && ${STORY_REQUEST}?.status==='rejected'`, 'rejected, waiting for Next', 60000);
-      await settle(p, 500);
-    }),
-    step('rejected', 'story-rejected-05-mail', 'Step 5: the rejection email on the phone', async p => { await p.click('[data-bar="next"]'); await at(p, waiting(4), 'step 5', 60000); await settle(p, 500); }),
-    step('rejected', 'story-rejected-06-turned-away', 'Step 6: no pass, the car is turned away', async p => { await p.click('[data-bar="next"]'); await at(p, waiting(5), 'step 6', 60000); await settle(p, 500); }),
-  );
-  session(size, lang, 'day', url('dest=parking&speed=30&story=1&auto=0'), 'window.__parking && __parking.story.running', steps);
-}
-
-for (const lang of LANGS) {
-  // The booth: everything.
-  for (const tod of ['day', 'night']) { stops(BOOTH, lang, tod, {extras: tod === 'day'}); explore(BOOTH, lang, tod, {extras: tod === 'day'}); }
-  // The tour goes overview, car park (the whole story on auto-advance), meeting room, pond, energy.
-  session(BOOTH, lang, 'day', url('speed=10&time=10:00'), IDLE, [
-    step('modes', 'tour-parking-story', 'Tour running: the car park story', async p => {
-      await p.click('#tour-play');
-      await at(p, '__parking.story.running && __parking.story.index>=1', 'the tour\'s parking story', 60000);
-      await settle(p, 300, {hold: false});
-    }),
-    step('modes', 'tour-meeting', 'Tour running: at the meeting room', async p => {
-      await at(p, `document.body.dataset.tourDestination==='meeting' && ${STILL}`, 'the tour at the meeting room', 120000);
-      await settle(p, 600, {hold: false});
-    }),
-  ]);
-  session(BOOTH, lang, 'day', url('speed=30&kiosk=1&time=12:00'), `${UP} && document.body.classList.contains('kiosk-on')`, [
-    step('modes', 'kiosk-on', 'Kiosk on: following the day', async p => { await at(p, `document.querySelector('#day-play')?.getAttribute('aria-pressed')==='true' && ${STILL}`, 'the kiosk following the day'); await settle(p, 800, {hold: false}); }),
-  ]);
-  session(BOOTH, lang, 'day', url('speed=30&kiosk=1&time=07:35'), UP, [
-    step('modes', 'kiosk-morning-story', 'Kiosk on: the morning parking story plays itself', async p => { await at(p, '__parking.story.running && __parking.story.index>=1', 'the kiosk\'s story', 60000); await settle(p, 300, {hold: false}); }),
-  ]);
-  session(BOOTH, lang, 'day', url('speed=30&dest=pond&time=15:00'), `${IDLE} && document.body.dataset.tourDestination==='pond'`, [
-    step('stops', 'stop-pond-low-water', 'Fish pond at 15:00: low-water alert', async p => { await at(p, `!!document.querySelector('[data-incident="pond-low"]')`, 'the low-water alert'); await settle(p, 900); }),
-  ]);
-  parkingFree(BOOTH, lang, 'day');
-  parkingFree(BOOTH, lang, 'night', {night: true});
-  storyGuided(BOOTH, lang);
-  storyRejected(BOOTH, lang);
-  session(BOOTH, lang, 'day', url('dest=parking&speed=10&story=1'), 'window.__parking && __parking.story.running', [
-    step('auto', 'story-auto-paused', 'Auto-advance story, paused at step 2', async p => {
-      await at(p, '__parking.story.index>=1', 'step 2', 60000);
-      await p.click('[data-bar="pause"]');
-      await at(p, '__parking.story.paused', 'paused');
-      await settle(p, 500);
-    }),
-  ]);
-  // The other sizes: a representative subset.
-  for (const size of SIZES.slice(1)) {
-    stops(size, lang, 'day');
-    explore(size, lang, 'day');
-    parkingFree(size, lang, 'day', {full: false});
-    storyGuided(size, lang, ['story-01', 'story-04a-approve-cue', 'story-06', 'story-07a-alert-cue']);
-  }
-}
-
-// Names (the filter's words match these) and the plan.
+// The plan: every state the words pick, as page loads.
+const sessions = buildSessions();
 const shotName = (s, st) => `${sizeName(s.size)}-${s.lang}-${s.tod}-${st.state}`;
-// A word is a language (th, en), a time of day (day, night), a size or part of one (1920 matches 1920x1080 and
-// 1080x1920), or else part of the state's name (`en` matched "energy" and "sent").
+// A word is a language (th, en), a time of day (day, night), a size or part of one, or else part of the state's name
+// (`en` alone matched "energy" and "sent").
 const matches = (s, st, w) => LANGS.includes(w) ? s.lang === w : w === 'day' || w === 'night' ? s.tod === w : /^\d+(x\d*)?$/.test(w) ? sizeName(s.size).includes(w) : st.state.includes(w);
-for (const s of sessions) {
-  s.wanted = s.steps.map(st => Boolean(st.state) && words.every(w => matches(s, st, w)));
-  s.last = s.wanted.lastIndexOf(true);
-}
-const plan = sessions.filter(s => s.last >= 0);
-const total = plan.reduce((n, s) => n + s.wanted.filter(Boolean).length, 0);
-if (!total) { console.error(`no shot matches ${words.join(' ')}`); process.exit(1); }
-console.log(`${total} shots in ${plan.length} page loads → ${relative(process.cwd(), OUT) || OUT}`);
+const wanted = new Set(sessions.flatMap(s => s.steps.filter(st => st.state && words.every(w => matches(s, st, w))).map(st => shotName(s, st))));
+if (!wanted.size) { console.error(`no state matches ${words.join(' ')}`); process.exit(2); }
+const stateOrder = new Map();
+for (const s of sessions) for (const st of s.steps) if (st.state && !stateOrder.has(st.state)) stateOrder.set(st.state, stateOrder.size);
 
-const shots = [], failures = [];
-let opened = null, count = 0;
-async function browser() {
-  if (!opened || opened.page.gone) { await opened?.close(); opened = await open({shots: OUT}); console.log(`WebGL: ${opened.page.renderer}`); }
-  return opened.page;
-}
-mkdirSync(OUT, {recursive: true});
-for (const s of plan) {
-  const p = await browser();
-  const origin = new URL(p.url).origin;
-  const [width, height] = s.size;
-  await p.cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: width < 600});
-  await p.cdp('Storage.clearDataForOrigin', {origin, storageTypes: 'local_storage'}).catch(() => {});
-  // The language is chosen before the page's own scripts run (as a visitor's earlier choice would be).
-  const script = (await p.cdp('Page.addScriptToEvaluateOnNewDocument', {source: `try{localStorage.setItem('osd-demo-language',${JSON.stringify(s.lang)})}catch{}`})).result?.identifier;
-  p.logs.length = 0;
-  let i = 0;
-  try {
-    await p.goto(s.path);
-    await p.until(s.ready, {timeout: 60000, what: 'the page ready'});
-    for (; i <= s.last; i++) {
-      const st = s.steps[i];
-      await st.run(p);
-      if (!s.wanted[i]) continue;
-      const name = shotName(s, st), file = `${String(++count).padStart(3, '0')}-${name}.png`;
-      const r = await p.cdp('Page.captureScreenshot', {format: 'png'});
-      if (!r.result?.data) throw new Error(`no screenshot (${r.error?.message || 'empty'})`);
-      writeFileSync(join(OUT, file), Buffer.from(r.result.data, 'base64'));
-      shots.push({file, name, group: st.group, state: st.state, label: st.label, size: sizeName(s.size), lang: s.lang, tod: s.tod});
-      console.log(`✓ ${file}`);
+// --- Taking a version's shots ---------------------------------------------------------------------------------------
+// Photographs the wanted states not in `have` into `out` from the demo served out of `site`. Returns what it took.
+async function capture(site, out, have) {
+  const todo = new Set([...wanted].filter(n => !have.has(n)));
+  const plan = sessions.map(s => ({s, take: s.steps.map(st => Boolean(st.state) && todo.has(shotName(s, st)))})).map(x => ({...x, last: x.take.lastIndexOf(true)})).filter(x => x.last >= 0);
+  const total = plan.reduce((n, x) => n + x.take.filter(Boolean).length, 0);
+  const shots = [], failures = [], time = {load: 0, steps: 0, capture: 0};
+  if (!total) return {shots, failures};
+  console.log(`${total} states in ${plan.length} page loads → ${relative(root, out)}`);
+  mkdirSync(out, {recursive: true});
+  let opened = null;
+  const page = async () => {
+    if (!opened || opened.page.gone) { await opened?.close(); opened = await open({site}); console.log(`WebGL: ${opened.page.renderer}`); }
+    return opened.page;
+  };
+  for (const {s, take, last} of plan) {
+    const p = await page();
+    const [width, height] = s.size;
+    await p.cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: width < 600});
+    await p.cdp('Storage.clearDataForOrigin', {origin: new URL(p.url).origin, storageTypes: 'local_storage'}).catch(() => {});
+    // The language is chosen before the page's own scripts run (as a visitor's earlier choice would be). CSS
+    // animations and transitions end at once: on real time, a run caught them part way, a different part each time.
+    const source = `try{localStorage.setItem('osd-demo-language',${JSON.stringify(s.lang)})}catch{}
+      addEventListener('DOMContentLoaded',()=>document.head.append(Object.assign(document.createElement('style'),{textContent:'*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;caret-color:transparent!important}'})));`;
+    const script = (await p.cdp('Page.addScriptToEvaluateOnNewDocument', {source})).result?.identifier;
+    p.logs.length = 0;
+    let i = 0;
+    try {
+      let t = Date.now();
+      await p.goto(s.path);
+      await p.ready(s.ready);
+      time.load += Date.now() - t;
+      for (; i <= last; i++) {
+        const st = s.steps[i];
+        t = Date.now();
+        await st.run(p);
+        time.steps += Date.now() - t;
+        if (!take[i]) continue;
+        t = Date.now();
+        const name = shotName(s, st), r = await p.cdp('Page.captureScreenshot', {format: 'png', optimizeForSpeed: true});
+        const at = await p.eval('window.__engine?.now()').catch(() => null); // simulation time (ms), stepped pages
+        if (process.env.SHOTS_DIGEST) writeFileSync(join(out, `${name}.scene.json`), await p.eval(`JSON.stringify((()=>{const out=[];const seen=o=>{for(let p=o;p;p=p.parent)if(!p.visible)return false;return true};__scene.traverse(o=>{if(!o.isMesh&&!o.isLight)return;const m=[].concat(o.material||[]);const w=o.getWorldPosition(new o.position.constructor());out.push([o.name||o.type,seen(o),w.x.toFixed(2)+','+w.y.toFixed(2)+','+w.z.toFixed(2),m.map(x=>x&&(x.type+':'+(x.clippingPlanes||[]).length+':'+(x.clippingPlanes||[]).map(p=>p.constant.toFixed(2)).join('/')+':o'+(x.opacity??1).toFixed(3)+':e'+(x.emissiveIntensity??0).toFixed(3))).join(','),o.isLight?(o.intensity.toFixed(3)+':'+o.castShadow):''].join('|'))});return out.sort()})())`));
+        if (!r.result?.data) throw new Error(`no screenshot (${r.error?.message || 'empty'})`);
+        writeFileSync(join(out, `${name}.png`), Buffer.from(r.result.data, 'base64'));
+        shots.push({name, file: `${name}.png`, at, group: st.group, state: st.state, label: st.label, size: sizeName(s.size), lang: s.lang, tod: s.tod});
+        time.capture += Date.now() - t;
+        console.log(`✓ ${name}`);
+      }
+    } catch (error) {
+      // The rest of the page's states depend on this one: each is listed as not captured.
+      const message = error.message.split('\n')[0];
+      for (; i <= last; i++) if (take[i]) { const name = shotName(s, s.steps[i]); failures.push({name, error: message}); console.log(`✗ ${name}: ${message}`); }
+    } finally {
+      if (script) await p.cdp('Page.removeScriptToEvaluateOnNewDocument', {identifier: script}).catch(() => {});
+      await p.cdp('Page.navigate', {url: 'about:blank'}).catch(() => {});
     }
-  } catch (error) {
-    // The rest of the page's states depend on this one: each is listed as not captured.
-    for (; i <= s.last; i++) if (s.wanted[i]) { const name = shotName(s, s.steps[i]); failures.push({name, error: error.message.split('\n')[0]}); console.log(`✗ ${name}: ${error.message.split('\n')[0]}`); }
-  } finally {
-    if (script) await p.cdp('Page.removeScriptToEvaluateOnNewDocument', {identifier: script}).catch(() => {});
-    await p.cdp('Page.navigate', {url: 'about:blank'}).catch(() => {});
+    const errors = p.logs.filter(l => !/GL_INVALID_OPERATION|PCFSoftShadowMap|UniformsUtils|KHR_parallel_shader_compile/.test(l));
+    if (errors.length) console.log(`  console (${s.path}): ${errors.slice(0, 3).join(' | ').slice(0, 300)}`);
   }
-  const errors = p.logs.filter(l => !/GL_INVALID_OPERATION|PCFSoftShadowMap|UniformsUtils|KHR_parallel_shader_compile/.test(l));
-  if (errors.length) console.log(`  console (${s.path}): ${errors.slice(0, 3).join(' | ').slice(0, 300)}`);
+  await opened?.close();
+  console.log(`time: page loads ${(time.load / 1000).toFixed(0)} s, steps ${(time.steps / 1000).toFixed(0)} s, screenshots ${(time.capture / 1000).toFixed(0)} s`);
+  return {shots, failures};
 }
-await opened?.close();
-const seconds = (Date.now() - started) / 1000;
 
-// The contact sheet.
+// A version's folder: its manifest (what it holds) and contact sheet. A commit's shots are reused; `+wip` starts over.
+async function version(label, {commit, site, wip}) {
+  const out = join(SHOTS, label), manifestFile = join(out, 'manifest.json');
+  if (wip) rmSync(out, {recursive: true, force: true});
+  const manifest = existsSync(manifestFile) ? JSON.parse(readFileSync(manifestFile, 'utf8')) : {label, commit, shots: [], failures: []};
+  const have = new Set(manifest.shots.map(s => s.name));
+  const {shots, failures} = await capture(site, out, have);
+  const taken = new Set(shots.map(s => s.name));
+  manifest.shots = [...manifest.shots.filter(s => !taken.has(s.name)), ...shots];
+  manifest.failures = [...manifest.failures.filter(f => !taken.has(f.name) && !failures.some(g => g.name === f.name)), ...failures];
+  manifest.date = new Date().toISOString();
+  mkdirSync(out, {recursive: true});
+  writeFileSync(manifestFile, JSON.stringify(manifest, null, 1));
+  writeFileSync(join(out, 'index.html'), contactSheet(manifest));
+  return manifest;
+}
+
+// --- Pages --------------------------------------------------------------------------------------------------------
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 const LANG_NAME = {th: 'ไทย (TH)', en: 'English (EN)'};
 const sizeOrder = SIZES.map(sizeName);
-const stateOrder = new Map();
-for (const s of sessions) for (const st of s.steps) if (st.state && !stateOrder.has(st.state)) stateOrder.set(st.state, stateOrder.size);
-const sorted = [...shots].sort((a, b) => stateOrder.get(a.state) - stateOrder.get(b.state) || sizeOrder.indexOf(a.size) - sizeOrder.indexOf(b.size) || LANGS.indexOf(a.lang) - LANGS.indexOf(b.lang) || a.tod.localeCompare(b.tod));
-const chips = (key, values, label = v => v) => `<span class="chips" data-key="${key}">${values.map(v => `<label><input type="checkbox" value="${esc(v)}" checked>${esc(label(v))}</label>`).join('')}</span>`;
-const sections = Object.entries(GROUPS).map(([g, title]) => {
-  const items = sorted.filter(s => s.group === g);
-  if (!items.length) return '';
-  return `<section><h2>${esc(title)} <small>${items.length}</small></h2><div class="grid">${items.map(s => `
-  <figure data-size="${s.size}" data-lang="${s.lang}" data-tod="${s.tod}" data-name="${esc(s.name)}">
-    <a href="${esc(s.file)}" target="_blank"><img src="${esc(s.file)}" loading="lazy" alt="${esc(s.label)}"></a>
-    <figcaption><b>${esc(s.label)}</b><span>${s.size.replace('x', '×')} · ${esc(LANG_NAME[s.lang])} · ${s.tod}</span><code>${esc(s.file)}</code></figcaption>
-  </figure>`).join('')}</div></section>`;
-}).join('');
-writeFileSync(join(OUT, 'index.html'), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OSD demo screenshots</title><style>
-:root{--bg:#f4f5f2;--card:#fff;--ink:#1d2a30;--mute:#61707a;--line:#d9dedb;--accent:#0f7b6c;--bad:#b3261e}
-@media (prefers-color-scheme:dark){:root{--bg:#12181c;--card:#1b2328;--ink:#e3e9ec;--mute:#93a2ab;--line:#2c373e;--accent:#4fc1ad;--bad:#f2b8b5}}
+const byState = (a, b) => (stateOrder.get(a.state) ?? 1e9) - (stateOrder.get(b.state) ?? 1e9) || sizeOrder.indexOf(a.size) - sizeOrder.indexOf(b.size) || LANGS.indexOf(a.lang) - LANGS.indexOf(b.lang) || a.tod.localeCompare(b.tod);
+const STYLE = `:root{--bg:#f4f5f2;--card:#fff;--ink:#1d2a30;--mute:#61707a;--line:#d9dedb;--accent:#0f7b6c;--bad:#b3261e;--warn:#a15c00}
+@media (prefers-color-scheme:dark){:root{--bg:#12181c;--card:#1b2328;--ink:#e3e9ec;--mute:#93a2ab;--line:#2c373e;--accent:#4fc1ad;--bad:#f2b8b5;--warn:#f0b96b}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,"Noto Sans Thai",sans-serif}
 header{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
 h1{font-size:18px;margin:0 12px 0 0}header p{margin:0;color:var(--mute)}.chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -368,22 +145,143 @@ h1{font-size:18px;margin:0 12px 0 0}header p{margin:0;color:var(--mute)}.chips{d
 main{padding:8px 16px 40px}h2{font-size:16px;margin:26px 0 10px}h2 small{color:var(--mute);font-weight:400}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
 figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
-figure a{display:flex;align-items:center;justify-content:center;height:220px;background:#0b0f12}
-figure img{max-width:100%;max-height:220px;display:block}figcaption{padding:8px 10px;display:flex;flex-direction:column;gap:2px}
-figcaption span{color:var(--mute)}figcaption code{font-size:11px;color:var(--mute);word-break:break-all}
+.pics{display:grid;grid-template-columns:repeat(var(--n,1),1fr);gap:2px;background:#0b0f12}.pics a{display:flex;align-items:center;justify-content:center;height:200px;position:relative}
+.pics img{max-width:100%;max-height:200px;display:block}.pics a span{position:absolute;left:4px;top:4px;font-size:11px;background:#000a;color:#fff;padding:0 5px;border-radius:4px}
+figcaption{padding:8px 10px;display:flex;flex-direction:column;gap:2px}figcaption span{color:var(--mute)}figcaption code{font-size:11px;color:var(--mute);word-break:break-all}
+.pct{font-weight:600}.pct.same{color:var(--mute);font-weight:400}.pct.changed{color:var(--warn)}.pct.new,.pct.gone{color:var(--bad)}
 .failed{border:1px solid var(--bad);border-radius:8px;padding:8px 12px;margin-top:14px}.failed h2{color:var(--bad);margin:0 0 6px}.failed li{font-family:monospace;font-size:12px}
-.hide{display:none}
-</style></head><body>
-<header><h1>OSD demo screenshots</h1><p>${esc(stamp)} · ${shots.length} shots${failures.length ? ` · ${failures.length} not captured` : ''} · ${Math.round(seconds)} s${words.length ? ` · filter: ${esc(words.join(' '))}` : ''}</p>
-${chips('size', sizeOrder.filter(v => shots.some(s => s.size === v)), v => v.replace('x', '×'))}${chips('lang', LANGS.filter(v => shots.some(s => s.lang === v)), v => v.toUpperCase())}${chips('tod', ['day', 'night'].filter(v => shots.some(s => s.tod === v)))}
-<input type="search" placeholder="Filter by name…" aria-label="Filter by name"></header>
-<main>${failures.length ? `<div class="failed"><h2>Not captured</h2><ul>${failures.map(f => `<li>${esc(f.name)}: ${esc(f.error)}</li>`).join('')}</ul></div>` : ''}${sections}</main>
-<script>
-const apply=()=>{const on=k=>new Set([...document.querySelectorAll('.chips[data-key="'+k+'"] input:checked')].map(i=>i.value));const s=on('size'),l=on('lang'),t=on('tod'),q=document.querySelector('input[type=search]').value.toLowerCase().split(/\\s+/).filter(Boolean);
-for(const f of document.querySelectorAll('figure'))f.classList.toggle('hide',!(s.has(f.dataset.size)&&l.has(f.dataset.lang)&&t.has(f.dataset.tod)&&q.every(w=>f.dataset.name.includes(w))));
+.hide{display:none}dialog{max-width:96vw;max-height:96vh;padding:0;border:0;background:var(--card);color:var(--ink);border-radius:8px}
+dialog .bar{display:flex;gap:8px;align-items:center;padding:8px 10px;flex-wrap:wrap}dialog .bar button{padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
+dialog .bar button[aria-pressed=true]{background:var(--accent);color:#fff;border-color:var(--accent)}dialog .view{position:relative;line-height:0}dialog .view img{max-width:94vw;max-height:84vh;display:block}
+dialog .view .top{position:absolute;inset:0}dialog .view .top img{width:100%;height:100%}`;
+const filters = (items, extra = '') => `${['size', 'lang', 'tod'].map(key => {
+  const values = key === 'size' ? sizeOrder : key === 'lang' ? LANGS : ['day', 'night'];
+  const label = v => key === 'size' ? v.replace('x', '×') : key === 'lang' ? v.toUpperCase() : v;
+  return `<span class="chips" data-key="${key}">${values.filter(v => items.some(s => s[key] === v)).map(v => `<label><input type="checkbox" value="${esc(v)}" checked>${esc(label(v))}</label>`).join('')}</span>`;
+}).join('')}${extra}<input type="search" placeholder="Filter by name…" aria-label="Filter by name">`;
+const FILTER_SCRIPT = `const apply=()=>{const on=k=>new Set([...document.querySelectorAll('.chips[data-key="'+k+'"] input:checked')].map(i=>i.value));const s=on('size'),l=on('lang'),t=on('tod'),q=document.querySelector('input[type=search]').value.toLowerCase().split(/\\s+/).filter(Boolean);const same=document.querySelector('#show-same');
+for(const f of document.querySelectorAll('figure'))f.classList.toggle('hide',!(s.has(f.dataset.size)&&l.has(f.dataset.lang)&&t.has(f.dataset.tod)&&q.every(w=>f.dataset.name.includes(w))&&(!same||same.checked||f.dataset.kind!=='same')));
 for(const sec of document.querySelectorAll('section'))sec.classList.toggle('hide',!sec.querySelector('figure:not(.hide)'));};
-document.addEventListener('input',apply);
-</script></body></html>
-`);
-console.log(`\n${shots.length}/${total} shots in ${seconds.toFixed(0)} s${failures.length ? `, ${failures.length} not captured` : ''}\n${join(OUT, 'index.html')}`);
-process.exit(failures.length ? 1 : 0);
+document.addEventListener('input',apply);apply();`;
+const failed = list => list.length ? `<div class="failed"><h2>Not captured</h2><ul>${list.map(f => `<li>${esc(f.name)}: ${esc(f.error)}</li>`).join('')}</ul></div>` : '';
+const figureData = s => `data-size="${s.size}" data-lang="${s.lang}" data-tod="${s.tod}" data-name="${esc(s.name)}"`;
+const caption = s => `<b>${esc(s.label)}</b><span>${s.size.replace('x', '×')} · ${esc(LANG_NAME[s.lang])} · ${s.tod}</span>`;
+const page = (title, head, body, script = '') => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>${STYLE}</style></head><body>
+<header>${head}</header><main>${body}</main><script>${FILTER_SCRIPT}${script}</script></body></html>\n`;
+
+function contactSheet(m) {
+  const shots = [...m.shots].sort(byState);
+  const sections = Object.entries(GROUPS).map(([g, title]) => {
+    const items = shots.filter(s => s.group === g);
+    return items.length ? `<section><h2>${esc(title)} <small>${items.length}</small></h2><div class="grid">${items.map(s => `
+  <figure ${figureData(s)}><div class="pics"><a href="${esc(s.file)}" target="_blank"><img src="${esc(s.file)}" loading="lazy" alt="${esc(s.label)}"></a></div>
+    <figcaption>${caption(s)}<code>${esc(s.file)}</code></figcaption></figure>`).join('')}</div></section>` : '';
+  }).join('');
+  return page(`Screenshots ${m.label}`, `<h1>Screenshots · ${esc(m.label)}</h1><p>${shots.length} states${m.failures.length ? ` · ${m.failures.length} not captured` : ''} · ${esc(m.date ?? '')}</p>${filters(shots)}`, failed(m.failures) + sections);
+}
+
+// Before / after: the changed pixels worked out in the browser (a canvas), the most changed first.
+const DIFF_PAGE = `async (before, after) => {
+  const load = src => new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => fail(new Error('cannot load ' + src)); i.src = src; });
+  const [a, b] = await Promise.all([load(before), load(after)]);
+  if (a.width !== b.width || a.height !== b.height) return {changed: 1, pixels: Math.max(a.width * a.height, b.width * b.height)};
+  const w = a.width, h = a.height, c = new OffscreenCanvas(w, h), g = c.getContext('2d', {willReadFrequently: true});
+  g.drawImage(a, 0, 0); const pa = g.getImageData(0, 0, w, h).data;
+  g.drawImage(b, 0, 0); const pb = g.getImageData(0, 0, w, h).data;
+  const out = g.createImageData(w, h), o = out.data;
+  let n = 0;
+  for (let i = 0; i < pa.length; i += 4) {
+    const d = Math.max(Math.abs(pa[i] - pb[i]), Math.abs(pa[i + 1] - pb[i + 1]), Math.abs(pa[i + 2] - pb[i + 2]));
+    if (d > 24) { n++; o[i] = 230; o[i + 1] = 30; o[i + 2] = 60; o[i + 3] = 255; }
+    else { const y = (pb[i] * .3 + pb[i + 1] * .59 + pb[i + 2] * .11) * .3 + 178; o[i] = o[i + 1] = o[i + 2] = y; o[i + 3] = 255; }
+  }
+  if (!n) return {changed: 0, pixels: 0};
+  g.putImageData(out, 0, 0);
+  const blob = await c.convertToBlob({type: 'image/png'});
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let s = ''; for (let i = 0; i < bytes.length; i += 32768) s += String.fromCharCode(...bytes.subarray(i, i + 32768));
+  return {changed: n / (w * h), pixels: n, png: btoa(s)};
+}`;
+async function compare(before, after) {
+  const out = join(SHOTS, 'compare', `${before.label}..${after.label}`);
+  rmSync(out, {recursive: true, force: true}); mkdirSync(out, {recursive: true});
+  const rel = (m, s) => `../../${m.label}/${s.file}`;
+  const was = new Map(before.shots.filter(s => wanted.has(s.name)).map(s => [s.name, s]));
+  const now = new Map(after.shots.filter(s => wanted.has(s.name)).map(s => [s.name, s]));
+  const items = [];
+  console.log(`comparing ${was.size} before with ${now.size} after`);
+  const opened = await open();
+  try {
+    const p = opened.page;
+    await p.goto('shots/');
+    for (const name of new Set([...was.keys(), ...now.keys()])) {
+      const a = was.get(name), b = now.get(name), s = b ?? a;
+      const item = {...s, before: a && rel(before, a), after: b && rel(after, b), kind: !a ? 'new' : !b ? 'gone' : 'same', changed: 0};
+      if (a && b) {
+        const r = await p.eval(`(${DIFF_PAGE})(${JSON.stringify(`/shots/${before.label}/${a.file}`)}, ${JSON.stringify(`/shots/${after.label}/${b.file}`)})`);
+        item.changed = r.changed; item.pixels = r.pixels;
+        if (r.changed) { item.kind = 'changed'; item.diff = `${name}.diff.png`; if (r.png) writeFileSync(join(out, item.diff), Buffer.from(r.png, 'base64')); }
+      }
+      items.push(item);
+    }
+  } finally { await opened.close(); }
+  const rank = {gone: 0, new: 1, changed: 2, same: 3};
+  items.sort((x, y) => rank[x.kind] - rank[y.kind] || y.changed - x.changed || byState(x, y));
+  const count = k => items.filter(i => i.kind === k).length;
+  const pct = i => i.kind === 'new' ? 'new' : i.kind === 'gone' ? 'gone' : i.kind === 'same' ? 'no change' : i.changed < .001 ? `${i.pixels} pixels changed` : `${(i.changed * 100).toFixed(i.changed < .01 ? 2 : 1)}% of pixels changed`;
+  const pic = (src, tag) => src ? `<a href="${esc(src)}" data-${tag}="${esc(src)}"><img src="${esc(src)}" loading="lazy" alt=""><span>${tag}</span></a>` : `<a><span>${tag}: none</span></a>`;
+  const body = `${failed([...after.failures, ...before.failures.map(f => ({...f, name: `${f.name} (before)`}))].filter(f => wanted.has(f.name.replace(' (before)', ''))))}
+<section><div class="grid">${items.map(i => `
+  <figure ${figureData(i)} data-kind="${i.kind}" data-before="${esc(i.before ?? '')}" data-after="${esc(i.after ?? '')}" data-diff="${esc(i.diff ?? '')}">
+    <div class="pics" style="--n:${i.diff ? 3 : 2}">${pic(i.before, 'before')}${pic(i.after, 'after')}${i.diff ? pic(i.diff, 'diff') : ''}</div>
+    <figcaption><span class="pct ${i.kind}">${pct(i)}</span>${caption(i)}<code>${esc(i.name)}</code></figcaption></figure>`).join('')}</div></section>
+<dialog><div class="bar"><b></b><button data-mode="before">Before</button><button data-mode="after">After</button><button data-mode="diff">Changed pixels</button><button data-mode="swipe">Swipe</button><input type="range" min="0" max="100" value="50" aria-label="Swipe"><button data-close>Close (Esc)</button></div><div class="view"></div></dialog>`;
+  const script = `
+const dlg=document.querySelector('dialog'),view=dlg.querySelector('.view'),range=dlg.querySelector('input[type=range]');let cur=null;
+const show=mode=>{const f=cur.dataset,src=m=>f[m]||'';dlg.querySelectorAll('[data-mode]').forEach(b=>{b.disabled=!(b.dataset.mode==='swipe'?src('before')&&src('after'):src(b.dataset.mode));b.setAttribute('aria-pressed',String(b.dataset.mode===mode));});
+range.hidden=mode!=='swipe';
+view.innerHTML=mode==='swipe'?'<img src="'+src('before')+'"><div class="top" style="clip-path:inset(0 0 0 '+range.value+'%)"><img src="'+src('after')+'"></div>':'<img src="'+(src(mode)||src('after')||src('before'))+'">';dlg.dataset.mode=mode;};
+document.querySelectorAll('figure').forEach(f=>f.querySelector('.pics').addEventListener('click',e=>{e.preventDefault();cur=f;dlg.querySelector('b').textContent=f.querySelector('figcaption b').textContent+' · '+f.querySelector('.pct').textContent;dlg.showModal();show(e.target.closest('[data-diff]')?'diff':f.dataset.diff?'swipe':'after');}));
+dlg.addEventListener('click',e=>{const b=e.target.closest('[data-mode]');if(b)show(b.dataset.mode);if(e.target.closest('[data-close]'))dlg.close();});
+range.addEventListener('input',()=>{const t=view.querySelector('.top');if(t)t.style.clipPath='inset(0 0 0 '+range.value+'%)';});`;
+  const title = `${before.label} → ${after.label}`;
+  const unstepped = [before, after].filter(m => m.shots.length && m.shots.every(s => s.at == null)).map(m => m.label);
+  const note = unstepped.length ? `<p><b>${esc(unstepped.join(', '))}</b> ran on real time (older than the stepped screenshots): its cars, clocks and plates differ anyway.</p>` : '';
+  const head = `<h1>${esc(title)}</h1>${note}<p>${count('changed')} changed · ${count('same')} the same${count('new') ? ` · ${count('new')} new` : ''}${count('gone') ? ` · ${count('gone')} gone` : ''} · click a picture to swipe between them</p>${filters(items, '<span class="chips"><label><input type="checkbox" id="show-same">show unchanged</label></span>')}`;
+  writeFileSync(join(out, 'index.html'), page(title, head, body, script));
+  return join(out, 'index.html');
+}
+
+// --- Main ---------------------------------------------------------------------------------------------------------
+const started = Date.now();
+const short = ref => git('rev-parse', '--short', `${ref}^{commit}`);
+const head = short('HEAD'), wip = git('status', '--porcelain', '--', '.', ':!shots').length > 0;
+const afterLabel = wip ? `${head}+wip` : head;
+let before = null;
+const kept = label => existsSync(join(SHOTS, label, 'manifest.json')) ? JSON.parse(readFileSync(join(SHOTS, label, 'manifest.json'), 'utf8')) : null;
+const isCommit = ref => { try { short(ref); return true; } catch { return false; } };
+if (baseRef && !isCommit(baseRef)) {
+  // Not a commit: a folder of shots/ (a `+wip` run, or one kept under another name), compared as it is.
+  before = kept(baseRef);
+  if (!before) { console.error(`--base ${baseRef}: no such commit, or folder in shots/`); process.exit(2); }
+  if (baseRef === afterLabel) { console.error(`--base ${baseRef}: this run takes it again; keep it under another name first`); process.exit(2); }
+  before.label = baseRef;
+} else if (baseRef) {
+  const commit = short(baseRef), cached = kept(commit);
+  console.log(`\nbefore: ${baseRef} (${commit})`);
+  if (cached && [...wanted].every(n => cached.shots.some(s => s.name === n))) before = cached;
+  else if (commit === head && !wip) before = await version(commit, {commit, site: root});
+  else {
+    // The older version from a checkout of its own, served on its own (its pages, scripts and model).
+    const site = join(tmpdir(), `osd-demo-shots-${commit}`);
+    rmSync(site, {recursive: true, force: true});
+    git('worktree', 'add', '--detach', site, commit);
+    try { before = await version(commit, {commit, site}); } finally { git('worktree', 'remove', '--force', site); }
+  }
+}
+console.log(`\nafter: this checkout (${head}${wip ? ', with changes not committed' : ''})`);
+const after = await version(afterLabel, {commit: head, site: root, wip});
+const seconds = Math.round((Date.now() - started) / 1000);
+console.log(`\n${after.shots.filter(s => wanted.has(s.name)).length}/${wanted.size} states in ${seconds} s\n${join(SHOTS, after.label, 'index.html')}`);
+if (before) console.log(await compare(before, after));
+process.exit(after.failures.some(f => wanted.has(f.name)) ? 1 : 0);

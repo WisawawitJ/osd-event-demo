@@ -2,12 +2,18 @@
 // alerts, audit and outbox. Nothing here talks to ATOM, Keycloak, mail or cameras.
 import {buildStalls} from './layout.js';
 import {bkk} from './i18n.js';
-import {later, world, demoNow, rng as dice} from './clock.js';
+import {later, world, demoNow, rng, mulberry32} from './clock.js';
 
-const DAY_START = bkk(2026, 11, 24, 0, 0);
+export const DAY_START = bkk(2026, 11, 24, 0, 0);
+// The seeded morning: the records as they stand at 09:00, when the story starts.
+export const STORY_START = bkk(2026, 11, 24, 9, 0);
 
 // Reasons a member of staff can give for opening the barrier by hand.
 export const GATE_REASONS = ['gate.reason.misread', 'gate.reason.delivery', 'gate.reason.guest', 'gate.reason.other'];
+// The reason picked for opening to an unknown car, or the usual one (a delivery).
+export const openReasonOf = alert => alert?.openReason || GATE_REASONS[1];
+// Whether the visitor was emailed their ticket.
+export const emailed = req => Boolean(req?.history.some(h => h.key === 'h.email'));
 
 export const PROVINCES = [
   ['กรุงเทพมหานคร', 'Bangkok'], ['นนทบุรี', 'Nonthaburi'], ['ปทุมธานี', 'Pathum Thani'], ['สมุทรปราการ', 'Samut Prakan'],
@@ -26,9 +32,6 @@ export const STORY = {
   unknown: {plate: '2ฒษ 9077', province: 'ชลบุรี', color: 6},
 };
 
-function rng(seed) {
-  return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-}
 export const normalizePlate = p => String(p || '').replace(/[\s-]/g, '').toUpperCase();
 const key = (plate, province) => `${normalizePlate(plate)}|${province || ''}`;
 let idCounter = 1;
@@ -56,7 +59,7 @@ export function createParkingSim() {
     const keepFrom = DAY_START - 2 * 864e5;
     const move = list => list.filter(x => (x.at += delta) >= keepFrom);
     state.events = move(state.events); state.audit = move(state.audit); state.emails = move(state.emails);
-    for (const a of state.alerts) { a.at += delta; if (a.resolvedAt) a.resolvedAt += delta; }
+    for (const a of state.alerts) a.at += delta;
     state.alerts = state.alerts.filter(a => a.status === 'open' || a.at >= keepFrom);
     for (const p of state.presence.values()) p.since += delta;
     for (const q of state.requests) {
@@ -66,7 +69,7 @@ export function createParkingSim() {
   }
 
   function seed() {
-    const r = rng(2411);
+    const r = mulberry32(2411);
     const pick = list => list[Math.floor(r() * list.length)];
     const plate = () => {
       const c = () => CONSONANTS[Math.floor(r() * CONSONANTS.length)];
@@ -103,10 +106,10 @@ export function createParkingSim() {
       history: [{at: bkk(2026, 11, 22, 17, 2), key: 'h.submitted'}, {at: bkk(2026, 11, 23, 8, 15), key: 'h.rejected', by: 'staff.name'}]});
     addRequest({status: 'expired', visitor: {name: 'ใจดี มีสุข', phone: '085-121-3434', email: 'jaidee@example.com', company: '—'}, contact: 'host.demo@osd.example', plate: '5ฮม 2001', province: 'นครปฐม', arrival: bkk(2026, 11, 22), departure: bkk(2026, 11, 22), createdAt: bkk(2026, 11, 21, 20, 44), color: 1,
       history: [{at: bkk(2026, 11, 21, 20, 44), key: 'h.submitted'}, {at: bkk(2026, 11, 23, 0, 1), key: 'h.expired'}]});
-    // Visitors booked for the event day, approved earlier in the week: they drop in at random during the day (index.js).
+    // Visitors booked for the event day, approved earlier in the week: they drop in at random during the day (life.js).
     // Their own random sequence, so the seeded morning above stays as it was.
     {
-      const v = rng(7310), vpick = list => list[Math.floor(v() * list.length)];
+      const v = mulberry32(7310), vpick = list => list[Math.floor(v() * list.length)];
       const COMPANIES = ['บริษัท ตัวอย่างโลจิสติกส์ จำกัด', 'บริษัท ตัวอย่างการแพทย์ จำกัด', 'บริษัท ตัวอย่างก่อสร้าง จำกัด', 'ห้างหุ้นส่วน ตัวอย่างบริการ', 'บริษัท ตัวอย่างการเงิน จำกัด', 'บริษัท ตัวอย่างอาหาร จำกัด', '—'];
       for (let i = 0; i < 8; i++) {
         let letters;
@@ -120,17 +123,16 @@ export function createParkingSim() {
     }
     for (const req of requests.filter(q => q.status === 'approved')) {
       req.vehicleId = addVehicle({plate: req.plate, province: req.province, type: 'guest', owner: req.visitor.name, validFrom: req.arrival, validTo: req.departure + 86399e3, requestId: req.id, color: req.color}).id;
-      req.qr = req.ref;
     }
 
-    // Today so far: presence was reset at 03:00; staff arrived from 06:50.
+    // Today so far: presence was reset at 03:00; staff arrived from 05:45, steadily (as life.js's OCCUPANCY).
     const events = [], audit = [];
     const presence = new Map();
     const staff = vehicles.filter(v => v.type === 'staff' && v.sync === 'synced');
     const order = [...staff].sort(() => r() - .5);
     const arrivals = [];
     for (let i = 0; i < 27; i++) {
-      const minute = 6 * 60 + 50 + Math.round(Math.pow(i / 27, .8) * 125 + r() * 4);
+      const minute = 5 * 60 + 45 + Math.round(i / 27 * 190 + r() * 4);
       arrivals.push({v: order[i], at: bkk(2026, 11, 24, 0, minute)});
     }
     arrivals.push({v: vehicles.find(v => v.type === 'vip'), at: t(8, 22)});
@@ -142,19 +144,19 @@ export function createParkingSim() {
     for (const {v, at} of arrivals) {
       const stall = freeFor(v.type);
       stall.occupant = key(v.plate, v.province);
-      presence.set(stall.occupant, {plate: v.plate, province: v.province, type: v.type, stallId: stall.id, since: at, color: v.color, vehicleId: v.id});
-      events.push({id: uid('e'), at, kind: 'entry', plate: v.plate, province: v.province, type: v.type, camera: 'LPR-IN', confidence: .93 + r() * .06});
+      presence.set(stall.occupant, {plate: v.plate, province: v.province, type: v.type, stallId: stall.id, since: at, color: v.color});
+      events.push({id: uid('e'), at, kind: 'entry', plate: v.plate, province: v.province, type: v.type, camera: 'LPR-IN'});
     }
     // Three early leavers: a courier run and two others (coming back later is not modelled).
     for (const at of [t(8, 5), t(8, 38), t(8, 57)]) {
       const [k, p] = [...presence.entries()].find(([, p]) => p.type === 'staff' && p.since < at - 20 * 60e3) || [];
       if (!k) continue;
       presence.delete(k); stalls.find(s => s.id === p.stallId).occupant = null;
-      events.push({id: uid('e'), at, kind: 'exit', plate: p.plate, province: p.province, type: p.type, camera: 'LPR-OUT', confidence: .96});
+      events.push({id: uid('e'), at, kind: 'exit', plate: p.plate, province: p.province, type: p.type, camera: 'LPR-OUT'});
     }
-    events.push({id: uid('e'), at: t(8, 47), kind: 'denied', plate: '4ศย 5150', province: 'ปทุมธานี', type: 'unknown', camera: 'LPR-IN', confidence: .9, by: 'staff.guard'});
-    events.push({id: uid('e'), at: t(7, 52), kind: 'manual', plate: 'ผต 8812', province: 'กรุงเทพมหานคร', type: 'unknown', camera: 'LPR-IN', confidence: .88, by: 'staff.guard', reason: 'gate.reason.delivery', left: true});
-    events.push({id: uid('e'), at: t(8, 9), kind: 'exit', plate: 'ผต 8812', province: 'กรุงเทพมหานคร', type: 'unknown', camera: 'LPR-OUT', confidence: .95});
+    events.push({id: uid('e'), at: t(8, 47), kind: 'denied', plate: '4ศย 5150', province: 'ปทุมธานี', type: 'unknown', camera: 'LPR-IN', by: 'staff.guard'});
+    events.push({id: uid('e'), at: t(7, 52), kind: 'manual', plate: 'ผต 8812', province: 'กรุงเทพมหานคร', type: 'unknown', camera: 'LPR-IN', by: 'staff.guard', reason: 'gate.reason.delivery', left: true});
+    events.push({id: uid('e'), at: t(8, 9), kind: 'exit', plate: 'ผต 8812', province: 'กรุงเทพมหานคร', type: 'unknown', camera: 'LPR-OUT'});
     events.sort((a, b) => b.at - a.at);
     audit.push({at: t(7, 46), actor: 'staff.guard', key: 'a.login'});
     audit.push({at: t(7, 52), actor: 'staff.guard', key: 'a.manual', target: 'ผต 8812', reasonKey: 'gate.reason.delivery'});
@@ -165,7 +167,7 @@ export function createParkingSim() {
     audit.push({at: bkk(2026, 11, 21, 10, 2), actor: 'staff.name', key: 'a.approve', target: 'ฎณ 7302'});
     audit.sort((a, b) => b.at - a.at);
 
-    return {stalls, vehicles, requests, events, audit, presence, alerts: [], emails: [], capacity: stalls.length, gate: 'closed', yesterday: {entries: 41, exits: 40, peak: 37, peakAt: '10:40', received: 5, approved: 4, rejected: 1, unknown: 3, manual: 2, syncFailed: 1, byType: {staff: 34, vip: 3, guest: 3, unknown: 1}}};
+    return {stalls, vehicles, requests, events, audit, presence, alerts: [], emails: [], capacity: stalls.length, gate: 'closed', yesterday: {entries: 41, exits: 40, peak: 37, peakAt: '10:40', received: 5, approved: 4, rejected: 1, unknown: 3, manual: 2, syncFailed: 1}};
   }
 
   // The seeded morning is the car park at 09:00. Started at another time of day, whatever lies in its future is left
@@ -175,7 +177,7 @@ export function createParkingSim() {
     idCounter = 1;
     state = seed();
     const at = now();
-    if (at < bkk(2026, 11, 24, 9, 0)) {
+    if (at < STORY_START) {
       const leftLater = state.events.filter(e => e.at > at && e.kind === 'exit');
       state.events = state.events.filter(e => e.at <= at);
       state.audit = state.audit.filter(a => a.at <= at);
@@ -187,7 +189,7 @@ export function createParkingSim() {
         if (!stall) continue;
         const v = findVehicle(e.plate, e.province)[0];
         stall.occupant = k;
-        state.presence.set(k, {plate: e.plate, province: e.province, type: e.type, stallId: stall.id, since: entry.at, color: v?.color ?? 0, vehicleId: v?.id});
+        state.presence.set(k, {plate: e.plate, province: e.province, type: e.type, stallId: stall.id, since: entry.at, color: v?.color ?? 0});
       }
     }
     emit('reset');
@@ -219,20 +221,19 @@ export function createParkingSim() {
     if (!pool.length) return null;
     // Visitors get the first free visitor bay nearest the driveway; others spread through the lot.
     if (type === 'guest') return pool.sort((a, b) => b.z - a.z)[0];
-    return pool[Math.floor(dice() * pool.length)];
+    return pool[Math.floor(rng() * pool.length)];
   }
 
   // `at` is for the car park catching up on time it did not show (a jump, or while off screen); calls go oldest first.
-  function recordEntry({plate, province, type, stallId, color, manual = null, confidence = .97, at = now()}) {
+  function recordEntry({plate, province, type, stallId, color, manual = null, at = now()}) {
     const k = key(plate, province);
     // A plate already in (a second listing of it let in) gives up the bay it held: it kept it taken for good.
     const held = state.presence.get(k), before = held && state.stalls.find(s => s.id === held.stallId && s.occupant === k);
     if (before && before.id !== stallId) before.occupant = null;
     const stall = state.stalls.find(s => s.id === stallId);
     if (stall) stall.occupant = k;
-    const vehicle = findVehicle(plate, province)[0];
-    state.presence.set(k, {plate, province, type, stallId, since: at, color, vehicleId: vehicle?.id});
-    const event = {id: uid('e'), at, kind: manual ? 'manual' : 'entry', plate, province, type, camera: 'LPR-IN', confidence, ...(manual || {})};
+    state.presence.set(k, {plate, province, type, stallId, since: at, color});
+    const event = {id: uid('e'), at, kind: manual ? 'manual' : 'entry', plate, province, type, camera: 'LPR-IN', ...(manual || {})};
     state.events.unshift(event);
     emit('entry', event);
     return event;
@@ -241,7 +242,7 @@ export function createParkingSim() {
     const k = key(plate, province);
     const p = state.presence.get(k);
     if (p) { state.presence.delete(k); const s = state.stalls.find(s => s.id === p.stallId); if (s) s.occupant = null; }
-    const event = {id: uid('e'), at, kind: p ? 'exit' : 'exitNoEntry', plate, province, type: p?.type || findVehicle(plate, province)[0]?.type || 'unknown', camera: 'LPR-OUT', confidence: .96};
+    const event = {id: uid('e'), at, kind: p ? 'exit' : 'exitNoEntry', plate, province, type: p?.type || findVehicle(plate, province)[0]?.type || 'unknown', camera: 'LPR-OUT'};
     state.events.unshift(event);
     emit('exit', event);
     return event;
@@ -251,7 +252,7 @@ export function createParkingSim() {
     // `raised` is simulation time (demoNow): how long a car has waited is not world-clock time, which may run fast.
     const alert = {id: uid('a'), at: now(), raised: demoNow(), plate, province, snapshot, color, status: 'open', ambient};
     state.alerts.unshift(alert);
-    state.events.unshift({id: uid('e'), at: now(), kind: 'unknown', plate, province, type: 'unknown', camera: 'LPR-IN', confidence: .91, alertId: alert.id});
+    state.events.unshift({id: uid('e'), at: now(), kind: 'unknown', plate, province, type: 'unknown', camera: 'LPR-IN', alertId: alert.id});
     emit('alert', alert);
     return alert;
   }
@@ -262,7 +263,7 @@ export function createParkingSim() {
     const alert = state.alerts.find(a => a.id === id);
     if (!alert || alert.status !== 'open') return null;
     alert.status = decision === 'open' ? 'opened' : 'denied';
-    alert.by = actor; alert.reasonKey = reasonKey; alert.resolvedAt = now();
+    alert.by = actor; alert.reasonKey = reasonKey;
     const ev = state.events.find(e => e.alertId === id);
     if (ev && decision === 'deny') { ev.kind = 'denied'; ev.by = actor; }
     if (ev && decision === 'open') state.events.splice(state.events.indexOf(ev), 1);
@@ -286,9 +287,9 @@ export function createParkingSim() {
     const email = e => String(e || '').trim().toLowerCase();
     const dup = state.requests.find(q => ['pending', 'approved'].includes(q.status) && normalizePlate(q.plate) === normalizePlate(data.plate) && q.province === data.province
       && q.arrival === data.arrival && q.departure === data.departure && email(q.visitor.email) === email(data.visitor.email));
-    const req = dup || {id: uid('r'), ref: `PK-${dice().toString(36).slice(2, 6).toUpperCase()}${String(state.requests.length + 41).padStart(3, '0')}`, status: 'pending', createdAt: at, history: [{at, key: 'h.submitted'}], ...data, color: data.color ?? Math.floor(dice() * 9)}; // the colour after the data: an undefined one in it overwrote the random pick (every visitor car white)
+    const req = dup || {id: uid('r'), ref: `PK-${rng().toString(36).slice(2, 6).toUpperCase()}${String(state.requests.length + 41).padStart(3, '0')}`, status: 'pending', createdAt: at, history: [{at, key: 'h.submitted'}], ...data, color: data.color ?? Math.floor(rng() * 9)}; // the colour after the data: an undefined one in it overwrote the random pick (every visitor car white)
     if (!dup) state.requests.unshift(req);
-    req.receipt = `RC-${dice().toString(36).slice(2, 8).toUpperCase()}`;
+    req.receipt = `RC-${rng().toString(36).slice(2, 8).toUpperCase()}`;
     emit('request', req);
     return req;
   }
@@ -307,7 +308,6 @@ export function createParkingSim() {
     const vehicle = {id: uid('v'), plate: req.plate, province: req.province, type: 'guest', owner: req.visitor.name, validFrom: req.arrival, validTo: req.departure + 86399e3, requestId: req.id, enabled: true, sync: 'pending', color: req.color};
     state.vehicles.push(vehicle);
     req.vehicleId = vehicle.id;
-    req.qr = req.ref;
     audit('staff.name', 'a.approve', {target: req.plate});
     emit('request', req);
     // Simulated ATOM confirms the vehicle and person, then the ticket goes out (not if revoked in the meantime).
@@ -346,11 +346,11 @@ export function createParkingSim() {
     audit('staff.name', 'a.revoke', {target: req.plate});
     // As in the ATOM Parking app: the visitor hears of an approval only once ATOM confirms it (the ticket email), so one
     // revoked before that email is not told its access was revoked.
-    if (req.history.some(h => h.key === 'h.email')) sendEmail(req, 'revoked');
+    if (emailed(req)) sendEmail(req, 'revoked');
     emit('request', req);
   }
   function sendEmail(req, kind) {
-    const mail = {id: uid('m'), at: now(), kind, requestId: req.id, to: [req.visitor.email, req.contact]};
+    const mail = {id: uid('m'), at: now(), kind, requestId: req.id};
     state.emails.unshift(mail);
     emit('email', mail);
   }
@@ -360,7 +360,7 @@ export function createParkingSim() {
   // same car twice). Returns null then.
   function addVehicle({plate, province, owner, type = 'staff'}) {
     if (state.vehicles.some(v => v.province === province && normalizePlate(v.plate) === normalizePlate(plate))) return null;
-    const v = {id: uid('v'), plate, province, owner, type, enabled: true, sync: 'pending', color: Math.floor(dice() * 9)};
+    const v = {id: uid('v'), plate, province, owner, type, enabled: true, sync: 'pending', color: Math.floor(rng() * 9)};
     state.vehicles.push(v);
     audit('staff.name', 'a.plateAdd', {target: plate});
     emit('vehicle', v);
@@ -371,7 +371,7 @@ export function createParkingSim() {
     const samples = [['6กฉ 2207', 'กรุงเทพมหานคร', 'อารี ทองคำ'], ['ขธ 5519', 'นนทบุรี', 'สุนทร ศรีสุข'], ['8กร 7340', 'กรุงเทพมหานคร', 'พิมพ์ใจ บุญมา']];
     // Imported again, the same plates are not listed twice.
     const listed = new Set(state.vehicles.map(v => key(v.plate, v.province)));
-    const added = samples.filter(([plate, province]) => !listed.has(key(plate, province))).map(([plate, province, owner]) => ({id: uid('v'), plate, province, owner, type: 'staff', enabled: true, sync: 'pending', color: Math.floor(dice() * 9)}));
+    const added = samples.filter(([plate, province]) => !listed.has(key(plate, province))).map(([plate, province, owner]) => ({id: uid('v'), plate, province, owner, type: 'staff', enabled: true, sync: 'pending', color: Math.floor(rng() * 9)}));
     if (!added.length) return 0;
     state.vehicles.push(...added);
     audit('staff.name', 'a.import', {target: String(added.length)});

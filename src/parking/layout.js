@@ -23,12 +23,11 @@ export const ENTRY_TURN = 4, FAR_TURN = 7;
 // One barrier serves both directions, as on site: entry keeps left (west half), exit the east half.
 export const GATE = {z: 19.3, west: -24.9, east: -18.5, entryX: -23, exitX: -20.2, entryStopZ: 21.9, exitStopZ: 16.6};
 const P1_AISLE_X = -14.16;
-const P2_AISLES = {A: -34, B: -34, C: -50, D: -50};
 const P2_ROWS = [
-  {row: 'A', x: -28.5, nose: 1},
-  {row: 'B', x: -39.5, nose: -1},
-  {row: 'C', x: -44.5, nose: 1},
-  {row: 'D', x: -55.5, nose: -1},
+  {row: 'A', x: -28.5, nose: 1, aisleX: -34},
+  {row: 'B', x: -39.5, nose: -1, aisleX: -34},
+  {row: 'C', x: -44.5, nose: 1, aisleX: -50},
+  {row: 'D', x: -55.5, nose: -1, aisleX: -50},
 ];
 
 export function buildStalls() {
@@ -39,7 +38,7 @@ export function buildStalls() {
   }
   for (const r of P2_ROWS) {
     for (let i = 0; i < 11; i++) {
-      stalls.push({id: `${r.row}${String(i + 1).padStart(2, '0')}`, zone: 'P2', row: r.row, x: r.x, z: -13.25 + 2.5 * i, nose: r.nose, aisleX: P2_AISLES[r.row], y: Y.road, reserved: r.row === 'A' ? 'guest' : null});
+      stalls.push({id: `${r.row}${String(i + 1).padStart(2, '0')}`, zone: 'P2', row: r.row, x: r.x, z: -13.25 + 2.5 * i, nose: r.nose, aisleX: r.aisleX, y: Y.road, reserved: r.row === 'A' ? 'guest' : null});
     }
   }
   return stalls;

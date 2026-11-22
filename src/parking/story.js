@@ -1,7 +1,7 @@
 // The guided parking story: one visitor from request to exit, plus an unknown car.
 // Auto mode advances by itself; guided mode waits for Next or for the presenter to click the cued button.
 import {t, bkk} from './i18n.js';
-import {STORY} from './sim.js';
+import {STORY, emailed} from './sim.js';
 import {demoNow, later} from './clock.js';
 
 const ABORT = Symbol('story-abort');
@@ -64,7 +64,8 @@ export function createStory(ctx) {
 
   // A step's `variant` picks other captions (the visitor's request rejected: no ticket, no pass).
   const captionFor = (i, variant = steps[i].variant?.() || '') => { const key = steps[i].key + variant; return {step: t('story.step', {n: i + 1, total: steps.length}), title: t(`${key}.t`), body: t(`${key}.b`)}; };
-  const noPass = () => ctx.sim.state.requests.find(q => q.id === requestId)?.status !== 'approved';
+  const storyRequest = () => ctx.sim.state.requests.find(q => q.id === requestId);
+  const noPass = () => storyRequest()?.status !== 'approved';
   const steps = [
     {key: 's1', cam: 'lot', async run(s) {
       ctx.panel.show('overview');
@@ -102,15 +103,14 @@ export function createStory(ctx) {
       ctx.panel.show('requests', {request: requestId});
     }, hold: 4500},
     // Rejected already (at step 3, its Reject on screen there), or now: the rejected captions.
-    {key: 's4', cam: 'lot', variant: () => (ctx.sim.state.requests.find(q => q.id === requestId)?.status === 'rejected' ? 'r' : ''), async run(s) {
-      const req = () => ctx.sim.state.requests.find(q => q.id === requestId);
+    {key: 's4', cam: 'lot', variant: () => (storyRequest()?.status === 'rejected' ? 'r' : ''), async run(s) {
       ctx.panel.show('requests', {request: requestId});
-      await s.userAction({cue: 'approve', hint: 'story.hint.approve', done: () => req()?.status !== 'pending', perform: () => ctx.actions.approve(requestId)});
-      if (req()?.status === 'rejected' && shownVariant !== 'r') { shownVariant = 'r'; ctx.caption(captionFor(index, 'r')); }
+      await s.userAction({cue: 'approve', hint: 'story.hint.approve', done: () => storyRequest()?.status !== 'pending', perform: () => ctx.actions.approve(requestId)});
+      if (storyRequest()?.status === 'rejected' && shownVariant !== 'r') { shownVariant = 'r'; ctx.caption(captionFor(index, 'r')); }
       // Rejected, no ticket email follows (it waited 8 s for one).
-      if (req()?.status === 'approved') await s.until(() => req()?.history.some(h => h.key === 'h.email'), 8000);
+      if (storyRequest()?.status === 'approved') await s.until(() => emailed(storyRequest()), 8000);
     }, hold: 2500},
-    {key: 's5', cam: 'lot', variant: () => (!noPass() ? '' : ctx.sim.state.requests.find(q => q.id === requestId)?.status === 'revoked' ? 'v' : 'r'), async run(s) {
+    {key: 's5', cam: 'lot', variant: () => (!noPass() ? '' : storyRequest()?.status === 'revoked' ? 'v' : 'r'), async run(s) {
       ctx.phone.setOpen(true);
       // On the story's request (a tap on the phone's New request since then left it on an empty form).
       ctx.phone.follow(requestId);

@@ -29,7 +29,9 @@ export function createSecurityPreview({renderer,scene,fullVisibility=[],schedule
   }finally{
    for(const [o,visible] of visibility)o.visible=visible;
    renderer.setRenderTarget(previousTarget);renderer.setViewport(viewport);renderer.setScissor(scissor);renderer.setScissorTest(scissorTest);
-   if(changed)renderer.shadowMap.needsUpdate=true;schedule();
+   // The view's own shadows next frame, always: a shadow update the capture used up (one asked for since the last
+   // frame) left the view with the capture's, cast by the whole building, until the next update.
+   renderer.shadowMap.needsUpdate=true;schedule();
   }
  }
  // Compiles the snapshot's colour pass at load (main.js warm-up), not at the first snapshot.

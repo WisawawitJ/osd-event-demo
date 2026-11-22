@@ -1,5 +1,5 @@
 import * as T from 'osd/node_modules/three/build/three.module.js';
-import {realNow as demoNow} from 'osd/parking/clock.js';
+import {realNow, ramp} from 'osd/parking/clock.js';
 import {createLightConeMaterial, createLightConeGeometry} from 'osd/viewer/light-cone.js';
 // Presentation-only objects. No bindings to hardware or Home Assistant.
 export function createTourEffects({model,schedule,meetingRoom}){
@@ -61,58 +61,35 @@ export function createTourEffects({model,schedule,meetingRoom}){
  // with them by distance, the meeting room's glazing (one mesh around the room, its centre near the light's) was
  // drawn after the light cone from some sides and over it from others, so the cone's top turned bright or faint as
  // the camera turned.
- const level={},goal={},own=new Map(),stopOf=new Map();
- for(const [id,g] of Object.entries(groups)){level[id]=goal[id]=0;g.traverse(o=>{o.renderOrder=1;for(const m of [].concat(o.material||[])){stopOf.set(m,id);own.set(m,m.opacity);m.transparent=true;}});}
- function paint(){
-  for(const [m,opacity] of own)m.opacity=opacity*level[stopOf.get(m)];
-  for(const [id,g] of Object.entries(groups))g.visible=level[id]>.001;
-  schedule();
- }
- let stopFrame=0;
- function fadeStops(instant=false){
-  cancelAnimationFrame(stopFrame);stopFrame=0;
-  if(instant){for(const id of Object.keys(groups))level[id]=goal[id];paint();return;}
-  let last=performance.now();
-  // Each step is at most 50 ms of fade (as in fader below): one slow frame on arrival made the cone pop in.
-  const step=time=>{const d=Math.min(50,Math.max(0,time-last))/450;last=time;let moving=false;
-   for(const id of Object.keys(groups)){const g=goal[id];level[id]=g>level[id]?Math.min(g,level[id]+d):Math.max(g,level[id]-d);if(level[id]!==g)moving=true;}
-   paint();stopFrame=moving?requestAnimationFrame(step):0;};
-  stopFrame=requestAnimationFrame(step);
- }
-
- // The AC's air: fades in and out with the switch, and while it is on the dashes flow down from the unit.
- let airLevel=1,airTarget=1,airFrame=0,airLast=0,airShift=-1;
- const airBase=air.map(o=>o.material.opacity);
+ // Every fade here is on the demo's clock (clock.js ramp): a function of the time, the same at the same moment however
+ // many frames are drawn (stepped frame by frame, with each step capped, a fade got further or less far with the frame
+ // rate); paused, it holds. `sync` brings everything to the moment, before each draw too (beforeDraw).
+ const stops={},own=new Map(),stopOf=new Map();
+ for(const [id,g] of Object.entries(groups)){stops[id]=ramp(450,0);g.traverse(o=>{o.renderOrder=1;for(const m of [].concat(o.material||[])){stopOf.set(m,id);own.set(m,m.opacity);m.transparent=true;}});}
+ // The AC's air: fades in and out with the switch, and while it is on the dashes flow down from the unit. The room
+ // light's pool and beam, and the seat markers (the meeting ending or starting), fade in and out (~0.35 s).
+ const air_=ramp(350,1),lampFade=ramp(350,1),peopleFade=ramp(350,1);
+ const airBase=air.map(o=>o.material.opacity),lampBase=lamp.map(o=>own.get(o.material)),peopleBase=own.get(teal);
  for(const line of air)line.userData.distances=Float32Array.from(line.geometry.attributes.lineDistance.array);
- const setAir=()=>{air.forEach((o,i)=>{o.visible=airLevel>.001;own.set(o.material,airBase[i]*airLevel);});paint();};
- function airStep(){
-  // On demo time, like the air's flow below: paused, its fade holds too.
-  const time=demoNow();airFrame=0;const dt=Math.min(.1,(time-(airLast||time))/1000);airLast=time;
-  const level=airTarget>airLevel?Math.min(airTarget,airLevel+dt/.35):Math.max(airTarget,airLevel-dt/.35);
-  const shift=(demoNow()/1000*.35)%.26; // demo time: the air stands still while paused
-  // Paused, nothing changes: no upload, no redraw (the frames keep watching for Resume).
-  if(shift!==airShift||level!==airLevel){airLevel=level;airShift=shift;
-   for(const o of air){const d=o.geometry.attributes.lineDistance,base=o.userData.distances;for(let j=0;j<base.length;j++)d.array[j]=base[j]-shift;d.needsUpdate=true;}
-   setAir();}
-  if(current==='meeting'&&(airLevel>0||airTarget>0)&&!document.hidden)airFrame=requestAnimationFrame(airStep);else airLast=0;
+ let airShift=-1;
+ function sync(now=realNow()){
+  const airLevel=air_.value(now),lampLevel=lampFade.value(now),peopleLevel=peopleFade.value(now);
+  const shift=(now/1000*.35)%.26; // demo time: the air stands still while paused
+  if(shift!==airShift){airShift=shift;for(const o of air){const d=o.geometry.attributes.lineDistance,base=o.userData.distances;for(let j=0;j<base.length;j++)d.array[j]=base[j]-shift;d.needsUpdate=true;}}
+  air.forEach((o,i)=>{o.visible=airLevel>.001;own.set(o.material,airBase[i]*airLevel);});
+  lamp.forEach((o,i)=>{own.set(o.material,lampBase[i]*lampLevel);o.visible=lampLevel>.001;});
+  own.set(teal,peopleBase*peopleLevel);for(const o of people)o.visible=peopleLevel>.001;
+  for(const [m,opacity] of own)m.opacity=opacity*stops[stopOf.get(m)].value(now);
+  for(const [id,g] of Object.entries(groups))g.visible=stops[id].value(now)>.001;
  }
- function fadeAir(on){airTarget=on?1:0;if(!airFrame&&current==='meeting')airFrame=requestAnimationFrame(airStep);if(current!=='meeting'){airLevel=airTarget;setAir();}}
- // A level (0 … 1) that runs toward on or off over `ms` instead of snapping, drawn by `draw` on each step. A step
- // covers at most 50 ms: the frame a switch lands in can be slow (the panel, the room and its shadows all change), and
- // the fade then went most of the way in that one frame.
- function fader(ms,draw){
-  let level=1,target=1,frame=0,last=0;
-  // On demo time: paused, the fade holds where it is (and draws nothing new).
-  const step=()=>{const now=demoNow(),d=Math.min(50,Math.max(0,now-last))/ms;last=now;if(d>0){level=target>level?Math.min(target,level+d):Math.max(target,level-d);draw(level);}frame=level===target?0:requestAnimationFrame(step);};
-  return {set(on){target=on?1:0;if(frame||level===target)return;last=demoNow();frame=requestAnimationFrame(step);},stop(){cancelAnimationFrame(frame);frame=0;}};
- }
- // The room light's pool and beam, and the seat markers (the meeting ending or starting), fade in and out (~0.35 s).
- const lampBase=lamp.map(o=>own.get(o.material)),peopleBase=own.get(teal);
- const lampFade=fader(350,level=>{lamp.forEach((o,i)=>{own.set(o.material,lampBase[i]*level);o.visible=level>.001;});paint();});
- const peopleFade=fader(350,level=>{own.set(teal,peopleBase*level);for(const o of people)o.visible=level>.001;paint();});
+ // Frames keep coming while a fade runs, and while the meeting room's air flows.
+ let frame=0;
+ const busy=now=>[...Object.values(stops),air_,lampFade,peopleFade].some(r=>!r.done(now))||(current==='meeting'&&air_.value(now)>0&&!document.hidden);
+ function step(){frame=0;const now=realNow();sync(now);schedule();if(busy(now))frame=requestAnimationFrame(step);}
+ const run=()=>{if(!frame)frame=requestAnimationFrame(step);};
  let started=false;
- function select(id){current=id;if(id==='meeting'&&!airFrame&&airTarget>0)airFrame=requestAnimationFrame(airStep);for(const name of Object.keys(groups))goal[name]=name===id?1:0;fadeStops(!started);started=true;}
- function update(state){peopleFade.set(state.occupied);lampFade.set(state.light!==false);fadeAir(state.climate);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');packet.visible=state.solar>0;own.set(energyMaterial,state.solar>5?.8:.35);paint();}
+ function select(id){current=id;for(const name of Object.keys(groups)){if(started)stops[name].set(name===id?1:0);else stops[name].jump(name===id?1:0);}started=true;sync();schedule();run();}
+ function update(state){peopleFade.set(state.occupied?1:0);lampFade.set(state.light!==false?1:0);air_.set(state.climate?1:0);if(current!=='meeting')air_.jump(state.climate?1:0);pondMaterial.color.set(state.pondAlert?'#d58c26':'#1b9caa');packet.visible=state.solar>0;own.set(energyMaterial,state.solar>5?.8:.35);sync();schedule();run();}
  function animate(t){if(current==='meeting')air.forEach((o,i)=>{o.material.dashSize=.12+.035*Math.sin(t*2+i);});if(current==='energy')packet.position.z=-5.9+((t*.9)%12);schedule();}
- select('overview');return {select,update,animate,dispose(){lampFade.stop();peopleFade.stop();cancelAnimationFrame(airFrame);cancelAnimationFrame(stopFrame);for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
+ select('overview');return {select,update,animate,beforeDraw:()=>sync(),dispose(){cancelAnimationFrame(frame);for(const g of Object.values(groups))g.removeFromParent();for(const g of owned)g.dispose();for(const m of materials){m.userData.glowMap?.dispose();m.dispose();}}};
 }

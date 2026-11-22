@@ -5,8 +5,10 @@ import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries, mergeVertices} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
 import {DRIVE, GATE, STREET, SITE, Y, RAMP, PAVEMENT} from './layout.js';
 import {createLightConeMaterial, createLightConeGeometry} from 'osd/viewer/light-cone.js';
+import {createCarInstances} from './cars.js';
 
-export function createLot({scene, stalls, schedule}) {
+// `renderer`: its shadows are redrawn while the barrier's arm moves (they are drawn only when something asks).
+export function createLot({scene, stalls, schedule, renderer = null}) {
   const root = new THREE.Group();
   root.name = 'Demo_parking';
   scene.add(root);
@@ -15,7 +17,7 @@ export function createLot({scene, stalls, schedule}) {
   const basic = (o) => { const m = new THREE.MeshBasicMaterial(o); materials.push(m); return m; };
   // Paint and tints lie a centimetre or two above the asphalt; a depth offset keeps them drawn on top
   // at any distance instead of flickering against the surface underneath.
-  const decal = (o, layer = 1) => basic({...o, polygonOffset: true, polygonOffsetFactor: -2 * layer, polygonOffsetUnits: -4 * layer});
+  const decal = o => basic({...o, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4});
   const put = (geo, material, {x = 0, y = 0, z = 0, ry = 0, shadow = false, parent = root} = {}) => {
     owned.push(geo);
     const m = new THREE.Mesh(geo, material);
@@ -31,7 +33,8 @@ export function createLot({scene, stalls, schedule}) {
   // as one surface; only the public street is darker.
   const modelPaving = scene.getObjectByName('Parking_paving')?.material;
   const asphalt = mat({color: modelPaving?.color.clone() ?? '#a0a69f', roughness: modelPaving?.roughness ?? .95}), street = mat({color: '#6f7774'}), kerb = mat({color: '#cfd3cc'}), paint = mat({color: '#f7f4df', roughness: .7, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8});
-  // Lines between opposite ways are yellow, as on Thai roads (white: lane edges, stop lines, bays and arrows).
+  // Lines between opposite ways are yellow, as on Thai roads (white: lane edges, stop lines and bays). No arrows on the
+  // ground: they read as noise from the demo's views (the model's own, in P1's aisle, are left out too: main.js).
   const yellowPaint = mat({color: '#e8b62c', roughness: .7, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8});
   const LOT = {west: -60, east: SITE.west - .7, north: -16, south: DRIVE.north};
   put(mergeGeometries([
@@ -73,36 +76,17 @@ export function createLot({scene, stalls, schedule}) {
     line(back, s.z - 1.25, back, s.z + 1.25);
   }
   for (let x = -96; x < 96; x += 6) line(x, STREET.centre, x + 3, STREET.centre, .12, yellow, Y.road - .003);
-  // Only the main road has a centre line: the driveway and the entrance road go without, their arrows showing each way.
+  // Only the main road has a centre line: the driveway and the entrance road go without.
   // One stop line straight under the barrier's arm, across both lanes: a car going in stops just short of it on the
   // street side, one going out just short of it on the car park side.
   line(GATE.west + .1, GATE.z, GATE.east - .1, GATE.z, .25);
-  // Arrows in the model's style: a 1.6 m shaft and two 0.6 m head strokes at 45°, 9 cm wide, slightly raised.
-  const strokeArrow = (x, z, heading) => {
-    const box = (len, cx, cz, angle) => new THREE.BoxGeometry(.09, .012, len).rotateY(angle).translate(cx, 0, cz);
-    // Built pointing -Z (tip at z = -0.8), then turned to the route heading (0 = +Z).
-    return mergeGeometries([box(1.6, 0, 0, 0), box(.6, .21, -.59, Math.PI / 4), box(.6, -.21, -.59, -Math.PI / 4)])
-      .rotateY(heading - Math.PI).translate(x, Y.road + .006, z);
-  };
-  // One rule throughout, for traffic that keeps left (as in Thailand): every two-way stretch has a pair of arrows side
-  // by side, each on the side its way keeps to. (They were staggered at odd spacings, with a lone arrow here and there.)
-  const arrows = [], WEST = -Math.PI / 2, EAST = Math.PI / 2, NORTH = Math.PI, SOUTH = 0;
-  // The driveway: westbound, into the lot, on its south half; eastbound, towards the exit, on its north half. Between
-  // the gate and the first aisle, and between the aisles. (East of the gate, the way to P1, has none: cars bound for P1
-  // drive in along the exit lane.)
-  for (const x of [-28.5, -42]) arrows.push(strokeArrow(x, 17.6, WEST), strokeArrow(x, 14.8, EAST));
-  // Each P2 aisle's mouth: in (north) on its west side, out (south) on its east side.
-  for (const x of new Set(stalls.filter(s => s.zone === 'P2').map(s => s.aisleX))) arrows.push(strokeArrow(x - 1.3, DRIVE.north - 2.2, NORTH), strokeArrow(x + 1.3, DRIVE.north - 2.2, SOUTH));
-  // The entrance road, near the street where drivers turn in: in on its west half, out on its east half.
-  const roadZ = STREET.north - 2.3;
-  arrows.push(strokeArrow(GATE.entryX, roadZ, NORTH), strokeArrow(GATE.exitX, roadZ, SOUTH));
-  put(mergeGeometries([...lines, ...arrows]), paint);
+  put(mergeGeometries(lines), paint);
   put(mergeGeometries(yellow), yellowPaint);
-  for (const g of [...lines, ...yellow, ...arrows]) g.dispose();
+  for (const g of [...lines, ...yellow]) g.dispose();
   // Visitor bays in row A are tinted and labelled.
-  const visitorFill = decal({color: '#3d8fb0', transparent: true, opacity: .22, depthWrite: false}, 1);
+  const visitorFill = decal({color: '#3d8fb0', transparent: true, opacity: .22, depthWrite: false});
   put(mergeGeometries(stalls.filter(s => s.reserved === 'guest').map(s => rect(s.x - 2.4, s.x + 2.4, s.z - 1.15, s.z + 1.15, Y.road + .011))), visitorFill);
-  const vipFill = decal({color: '#7a5bb5', transparent: true, opacity: .2, depthWrite: false}, 1);
+  const vipFill = decal({color: '#7a5bb5', transparent: true, opacity: .2, depthWrite: false});
   put(mergeGeometries(stalls.filter(s => s.reserved === 'vip').map(s => rect(s.x - 2.4, s.x + 2.4, s.z - 1.15, s.z + 1.15, Y.site + .013))), vipFill);
 
   // Planting in the building model's own style: tall slim trunks under rounded multi-blob canopies in three
@@ -168,8 +152,8 @@ export function createLot({scene, stalls, schedule}) {
     heads.push(new THREE.BoxGeometry(.34, .14, .9).translate(x, streetY + LAMP_HEIGHT + .07, kerbZ + arm - .15));
     lit.push([x, streetY, kerbZ + arm - .15]);
   }
-  put(mergeGeometries(poles), poleMat);
-  put(mergeGeometries(heads), lampMat);
+  put(mergeGeometries(poles), poleMat, {shadow: true});
+  put(mergeGeometries(heads), lampMat, {shadow: true});
   for (const g of [...poles, ...heads]) g.dispose();
   // At night each lamp throws light: a cone of lit air down to the ground (light-cone.js, as the meeting room's
   // light) and a soft pool where it lands. Painted, not real lights, so they cost the rest of the scene nothing.
@@ -199,13 +183,13 @@ export function createLot({scene, stalls, schedule}) {
   put(new THREE.BoxGeometry(boomLength, .11, .12).translate(boomLength / 2, 0, 0), white, {parent: boom, shadow: true});
   put(mergeGeometries(Array.from({length: 9}, (_, i) => new THREE.BoxGeometry(.24, .115, .125).translate(.45 + i * .68, 0, 0))), red, {parent: boom});
   // Rest post on the far side
-  put(new THREE.BoxGeometry(.12, .95, .12), mat({color: '#4b5560'}), {x: GATE.east + .2, y: Y.road + .48, z: GATE.z, parent: gate});
+  put(new THREE.BoxGeometry(.12, .95, .12), mat({color: '#4b5560'}), {x: GATE.east + .2, y: Y.road + .48, z: GATE.z, parent: gate, shadow: true});
 
   // Plate cameras: LPR-IN watches arriving fronts from inside; LPR-OUT watches leaving fronts from outside.
   const camBody = mat({color: '#e9edf0', roughness: .35}), camDark = mat({color: '#28323b'});
   function lprCamera(name, pole, aim) {
     const height = 2.2;
-    put(new THREE.CylinderGeometry(.06, .07, height, 8), poleMat, {x: pole[0], y: Y.road + height / 2, z: pole[1], parent: gate});
+    put(new THREE.CylinderGeometry(.06, .07, height, 8), poleMat, {x: pole[0], y: Y.road + height / 2, z: pole[1], parent: gate, shadow: true});
     const head = new THREE.Group(); head.position.set(pole[0], Y.road + height, pole[1]); gate.add(head);
     // Matrix4.lookAt keeps the horizon level (local -Z toward the target, +Y up).
     head.quaternion.setFromRotationMatrix(new THREE.Matrix4().lookAt(head.position, new THREE.Vector3(...aim), new THREE.Vector3(0, 1, 0)));
@@ -232,7 +216,8 @@ export function createLot({scene, stalls, schedule}) {
   const signCanvas = document.createElement('canvas'); signCanvas.width = 512; signCanvas.height = 256;
   const signTexture = new THREE.CanvasTexture(signCanvas); signTexture.colorSpace = THREE.SRGBColorSpace; textures.push(signTexture);
   const sign = new THREE.Group(); sign.position.set(GATE.west - 6.2, Y.road, STREET.north - .6); gate.add(sign);
-  put(mergeGeometries([new THREE.BoxGeometry(.1, 2.3, .1).translate(-.95, 1.15, 0), new THREE.BoxGeometry(.1, 2.3, .1).translate(.95, 1.15, 0)]), poleMat, {parent: sign});
+  // Its poles cast shadows as the board does (without, the board's shadow floated on the ground).
+  put(mergeGeometries([new THREE.BoxGeometry(.1, 2.3, .1).translate(-.95, 1.15, 0), new THREE.BoxGeometry(.1, 2.3, .1).translate(.95, 1.15, 0)]), poleMat, {parent: sign, shadow: true});
   put(new THREE.BoxGeometry(2.3, 1.2, .14).translate(0, 2.55, 0), mat({color: '#24323f'}), {parent: sign, shadow: true});
   put(new THREE.PlaneGeometry(2.16, 1.08).translate(0, 2.55, .072), basic({map: signTexture, toneMapped: false}), {parent: sign});
   function drawSign(free, capacity) {
@@ -251,7 +236,7 @@ export function createLot({scene, stalls, schedule}) {
   // Bay indicator lights: a short post at the head of every bay.
   const ledGeo = new THREE.SphereGeometry(.13, 10, 8), postGeo = new THREE.CylinderGeometry(.035, .035, 1.1, 6);
   owned.push(ledGeo, postGeo);
-  const ledMat = new THREE.MeshBasicMaterial({color: '#ffffff', toneMapped: false}); materials.push(ledMat);
+  const ledMat = basic({color: '#ffffff', toneMapped: false});
   // The posts look like the poles but need their own material: one shared by instanced and plain meshes is re-checked
   // for a different shader on every draw.
   const postMat = mat({color: '#59636b', metalness: .4, roughness: .5});
@@ -261,6 +246,7 @@ export function createLot({scene, stalls, schedule}) {
     posts.setMatrixAt(i, m4.makeTranslation(hx, s.y + .55, s.z));
     leds.setMatrixAt(i, m4.makeTranslation(hx, s.y + 1.16, s.z));
   });
+  posts.castShadow = true;
   root.add(leds, posts);
   const ledColors = {free: new THREE.Color('#38d36b'), guest: new THREE.Color('#3aa7e8'), vip: new THREE.Color('#a77bf0'), used: new THREE.Color('#ff4b3e')};
   function setBays(list) {
@@ -276,6 +262,9 @@ export function createLot({scene, stalls, schedule}) {
     const step = dt * 2; // a quarter turn in ~0.8 s, like a fast parking barrier
     boomAngle = boomTarget > boomAngle ? Math.min(boomTarget, boomAngle + step) : Math.max(boomTarget, boomAngle - step);
     boom.rotation.z = boomAngle;
+    // Its shadow moves with it (it stayed where the arm had been until the sun's next step); not while the car park is
+    // hidden (showing it again redraws the shadows anyway).
+    if (renderer && root.visible) renderer.shadowMap.needsUpdate = true;
     const open = boomAngle > .05;
     lampOn.color.set(open ? '#2f9e57' : '#c03d32'); lampOn.emissive.set(open ? '#3dff7a' : '#ff3b2f');
     return true;
@@ -290,6 +279,8 @@ export function createLot({scene, stalls, schedule}) {
   // Everything here is static except the boom: skip the per-frame matrix work for the rest.
   root.traverse(o => { o.updateMatrix(); o.matrixAutoUpdate = false; });
   boom.matrixAutoUpdate = true;
+  // The cars' bodies, details and blob shadows, drawn for all of them at once (cars.js).
+  const carParts = createCarInstances(root);
 
   return {
     root, cameras: {in: camIn, out: camOut}, setBays, drawSign, setBoom, update, setNight,
@@ -300,6 +291,7 @@ export function createLot({scene, stalls, schedule}) {
       for (const m of materials) m.dispose();
       for (const t of textures) t.dispose();
       leds.dispose(); posts.dispose(); trunks.dispose(); for (const l of leaves) l.dispose();
+      carParts.dispose();
     },
   };
 }
