@@ -102,6 +102,8 @@ test('a busy hour of random traffic: no car drives through another, nothing stuc
     for (let i = 0; i < 80; i++) { await cp.run(50); for (const h of cp.overlaps()) hits.add(h); for (const a of cp.sim.state.alerts) if (a.status === 'open' && cp.now() - a.raised > 3000) cp.sim.resolveAlert(a.id, 'deny'); }
   }
   assert.deepEqual([...hits], [], 'no two cars overlapped');
-  assert.ok(await cp.until(() => cp.settled(), 180000), `everything settles (${JSON.stringify(cp.traffic.inspect())})`);
+  // Settling: unknown cars still at the barrier are turned away as before (this car park has no guard of its own).
+  const deny = () => { for (const a of cp.sim.state.alerts) if (a.status === 'open' && cp.now() - a.raised > 3000) cp.sim.resolveAlert(a.id, 'deny'); return cp.settled(); };
+  assert.ok(await cp.until(deny, 180000), `everything settles (${JSON.stringify(cp.traffic.inspect())})`);
   cp.dispose();
 });

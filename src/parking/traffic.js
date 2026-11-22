@@ -526,8 +526,10 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     exitLane = new Promise(r => { releaseLane = r; });
     return guard(agent, async () => {
       try {
-        // The next car out waits in its bay until the one ahead has cleared the exit lane, and takes its aisle only to
-        // drive out (waiting in the aisle, it held the aisle while cars bound for it queued back to the barrier).
+        // The next car out waits in its bay until the one ahead has turned out onto the exit lane (or, from P1, is at
+        // the exit's stop line), then backs out and follows it, waiting on the exit lane, not in its aisle (waiting there,
+        // it held the aisle while cars bound for it queued back to the barrier). Set off only once the one ahead was
+        // through the barrier, cars left one every 16 s; a car's drive from its bay is longer than its turn at the gate.
         await previous; alive();
         await waitFor(() => !p1In, gen);
         outbound++; driving = true;
@@ -549,8 +551,11 @@ export function createTraffic({lot, sim, schedule, hooks}) {
             const turnedOut = Math.abs(LANE_OUT - stall.z) + Math.PI;
             await waitFor(() => passed(agent, turnedOut), gen);
             outOfAisle();
+            releaseLane();
           }
           await toExit;
+          // At the stop line: the next car out may set off now and queue behind it.
+          releaseLane();
         // `outbound` ends at the exit's stop line, where the car still stands across the way into P1: a P1 arrival let
         // go then stops behind it until it has gone (each lane has its own turn at the barrier, so neither waits on the
         // other's).

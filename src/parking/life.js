@@ -146,8 +146,10 @@ export function startLotLife({sim, traffic, lot, camera = null, staffOnly = fals
       const g = gap(), m = world.minute();
       if (onScreen()) {
         // A gap of one car is the everyday coming and going below, not a rush: one car leaving does not send another in.
-        if (g >= 2 && traffic.queued < 2) arrive();
-        else if (g <= -2 && traffic.leaving < 2) leave();
+        // The further behind the hour, the more at once (up to 4 coming, 5 going; those going wait in their bays and
+        // queue on the exit lane): two at a time, the barrier sat idle while the car park fell behind the rushes.
+        if (g >= 2 && traffic.queued < Math.min(4, 1 + Math.ceil(g / 3))) arrive();
+        else if (g <= -2 && traffic.leaving < Math.min(5, 1 + Math.ceil(-g / 3))) leave();
         else if (!traffic.busy && rng() < (daytime(m) ? .07 : .01)) {
           if (unknown && daytime(m) && rng() < .12) unknown();
           else if (g >= 0) arrive(); else leave();
