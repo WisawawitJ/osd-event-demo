@@ -56,8 +56,8 @@ export function leavingCandidates(sim, traffic, {staffOnly = false, guests = fal
 // allow (two arriving and two leaving at a time); the rest of a gap the barrier cannot close (a rush in time-lapse,
 // a jump in time, or time spent off screen) is made up in the bays directly, logged at times spread over that gap.
 // Between rushes a car comes or goes now and then. `paused()` (the story playing) stops all of it.
-export function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paused = () => false, watched = () => true, arrive, leave, unknown = null}) {
-  const onScreen = () => lotOnScreen(lot);
+// `onScreen()`: the car park is in view (cars then drive through the barrier; out of view they are made up in the bays).
+export function startLotLife({sim, traffic, lot, camera = null, staffOnly = false, paused = () => false, watched = () => true, onScreen = () => lotOnScreen(lot), arrive, leave, unknown = null}) {
   // Cars made up in the bays appear or vanish on the spot, so while the car park is on screen only in bays the camera
   // cannot see: popping in and out of view (the building's covered bays, at rush hour on a short day) read as a flicker.
   const frustum = new THREE.Frustum(), matrix = new THREE.Matrix4(), bay = new THREE.Sphere(new THREE.Vector3(), 3.2);

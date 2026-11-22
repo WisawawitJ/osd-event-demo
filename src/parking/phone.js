@@ -18,7 +18,8 @@ const faceArt = `<svg viewBox="0 0 80 80" class="ph-face" role="img" aria-label=
 export function createPhone({root, sim, actions}) {
   const ui = {open: false, screen: 'form', form: blankForm(), error: '', requestId: null, banner: null, cue: null, typing: null};
   let frame = 0;
-  const schedule = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; render(); }); };
+  // No `root` (the headless world in tests): the phone keeps its form and sends its request, and draws nothing.
+  const schedule = () => { if (root && !frame) frame = requestAnimationFrame(() => { frame = 0; render(); }); };
   const req = () => ui.requestId && sim.state.requests.find(q => q.id === ui.requestId);
   const cue = name => (ui.cue === name ? ' data-cue="true"' : '');
 
@@ -74,6 +75,7 @@ export function createPhone({root, sim, actions}) {
   }
 
   function render() {
+    if (!root) return;
     root.hidden = !ui.open;
     if (!ui.open) return;
     const body = ui.screen === 'form' ? formScreen() : ui.screen === 'sent' ? sentScreen() : mailScreen();
@@ -103,7 +105,7 @@ export function createPhone({root, sim, actions}) {
     return r;
   }
 
-  root.addEventListener('click', e => {
+  root?.addEventListener('click', e => {
     const b = e.target.closest('[data-ph]');
     if (!b) return;
     actions.interact?.(b);
@@ -118,7 +120,7 @@ export function createPhone({root, sim, actions}) {
     if (what === 'calendar' && req()) saveFile('parking-visit.ics', visitInvite(req()), 'text/calendar;charset=utf-8');
     if (what === 'new') { settleRead?.(); ui.form = blankForm(); ui.screen = 'form'; ui.requestId = null; ui.banner = null; render(); }
   });
-  root.addEventListener('input', e => {
+  root?.addEventListener('input', e => {
     const n = e.target.name;
     if (!n) return;
     // Saved first: a keystroke can end the tour and its story, and the phone redraws from the form when it does.
@@ -175,7 +177,7 @@ export function createPhone({root, sim, actions}) {
   return {
     render: schedule,
     get isOpen() { return ui.open; },
-    setOpen(v) { ui.open = v; document.body.classList.toggle('phone-open', v); render(); actions.openChanged?.(v); },
+    setOpen(v) { ui.open = v; globalThis.document?.body?.classList.toggle('phone-open', v); render(); actions.openChanged?.(v); },
     // A photo still being read belongs to the old form (as with New request): it ends without filling in the new one.
     reset() { settleRead?.(); Object.assign(ui, {screen: 'form', form: blankForm(), error: '', requestId: null, banner: null, cue: null, typing: null, photoPlate: null, photoProvince: null}); render(); },
     setForm(values) { Object.assign(ui.form, values); render(); },

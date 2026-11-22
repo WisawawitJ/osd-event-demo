@@ -9,7 +9,7 @@ import {createTraffic} from './traffic.js';
 import {createPanel} from './panel.js';
 import {createPhone} from './phone.js';
 import {createOverlays} from './overlays.js';
-import {createStory} from './story.js';
+import {createParkingWorld} from './world.js';
 import {CAR, disposeCars} from './cars.js';
 
 export const PARKING_POSES = {
@@ -27,7 +27,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   const layer = $('#parking-layer'), panelRoot = $('#parking-panel'), phoneRoot = $('#pk-phone'), bar = $('#parking-bar');
   const sim = createParkingSim();
   const lot = createLot({scene, stalls: sim.state.stalls, schedule});
-  let active = false, passTimer = 0, quietAmbient = false;
+  let active = false;
 
   // Plate camera: snapshot plus where the plate sits in the frame, or null when the camera cannot read it: the plate
   // faces away, is behind the lens (projected corners would flip into the frame), or is not wholly in the picture.
@@ -73,132 +73,59 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   }
   afterRender?.add(drawLiveFeed);
 
-  const traffic = createTraffic({lot, sim, schedule, hooks: {
-    snapshot: snap,
-    async readPlate(which, agent, verdict) {
-      const camera = lot.cameras[which];
-      const confidence = .9 + rng() * .09;
+  // The console, the pop-ups and the phone call `actions`: the world's, plus the page's own (filled in below).
+  const actions = {};
+  const panel = createPanel({root: panelRoot, sim, actions});
+  const phone = createPhone({root: phoneRoot, sim, actions: {interact: el => actions.interact(el), openChanged: () => renderBar()}});
+  const overlays = createOverlays({layer: $('#pk-overlays'), sim, actions});
+  const say = (ic, key, vars, tone, queued) => overlays.toast(`${icon(ic)}<span>${esc(t(key, vars))}${queued ? ` · ${esc(t('gate.sim.queued'))}` : ''}</span>`, tone);
+
+  let currentHint = null, currentCaption = null;
+  const showCaption = () => overlays.caption(currentCaption ? {...currentCaption, hint: currentHint && t(currentHint)} : null);
+  const parking = createParkingWorld({lot, sim, camera, phone, watched: () => active, ui: {
+    panel, overlays, schedule, snapshot: snap,
+    fly: (name, ms) => fly(PARKING_POSES[name], ms),
+    caption(c, hint) { currentCaption = c; currentHint = hint; showCaption(); },
+    tap() { for (const el of document.querySelectorAll('[data-cue="true"]')) { el.classList.remove('pk-tapped'); void el.offsetWidth; el.classList.add('pk-tapped'); } },
+    toast: say,
+    // The plate camera reads: the pop-up shows the gate camera live (the 3D view draws it into its picture area).
+    plateRead(which, agent, verdict, confidence) {
       const shot = snap(which);
-      // The pop-up shows the gate camera live: the 3D view draws this camera into its picture area every frame.
-      live = {camera, agent};
+      live = {camera: lot.cameras[which], agent};
       overlays.showFeed({which, snapshot: shot, live: Boolean(renderer && afterRender), phase: 'reading', plate: agent.plate, province: agent.province, verdict, confidence});
       panel.setSnapshot(which, shot);
       schedule();
-      await sleep(900);
-      overlays.updateFeed({phase: 'done'});
-      await sleep(verdict.allow ? 500 : 300);
     },
-    onFull(plate) { overlays.toast(`${icon('alert')}<span>${esc(t('gate.full', {plate}))}</span>`); },
-    onLeaveGate(which) {
-      later(() => panel.setSnapshot(which, snap(which)), 700);
-      overlays.hideFeed(3200);
+    plateDone() { overlays.updateFeed({phase: 'done'}); },
+    full(plate) { say('alert', 'gate.full', {plate}); },
+    leftGate(which) { later(() => panel.setSnapshot(which, snap(which)), 700); overlays.hideFeed(3200); },
+    event(kind, payload) {
+      if (kind === 'request' && payload?.status === 'pending' && payload.history.length === 1) {
+        panel.markNew(payload.id);
+        overlays.toast(`${icon('inbox')}<span><b>${esc(t('att.pending'))}</b> ${esc(payload.visitor.name)} · ${esc(payload.plate)}</span>`, 'info');
+      }
+      // A presenter's own unknown car brings up the Gate tab; a background one does not (every few minutes it closed
+      // the request or reason being worked on).
+      if (kind === 'alert') { overlays.showAlert(payload.id); if (!story.running && !payload.ambient) panel.show('gate'); }
+      if (kind === 'entry' || kind === 'exit') panel.flash(payload.id);
+      if (kind === 'alertReason') overlays.refresh(); // the pop-up shows the card's pick
+      // Which email went (a rejection or revocation said "Ticket emailed" too).
+      if (kind === 'email') overlays.toast(`${icon('check')}<span>${esc(t(payload.kind === 'approved' ? 'req.emailSent' : `req.emailSent.${payload.kind}`))}</span>`, 'ok');
+      panel.render();
     },
+    storyChanged() { renderBar(); panel.render(); }, // the Gate tab's test buttons too
   }});
-
-  const actions = {
-    storyRunning: () => story.running,
+  const {traffic, story} = parking;
+  Object.assign(actions, parking.actions, {
     // A tap on what the story cues (Approve, Deny, the photo button) is the presenter going along with it, not taking
     // over: it ended the building tour or Follow the day the story was part of, and the story with it.
     interact: el => { if (story.running && el?.closest?.('[data-cue="true"]')) return; onInteract(); },
     feedChanged: () => schedule(),
     toast: text => overlays.toast(esc(text)),
-    approve(id) { sim.approve(id); },
-    resolveAlert(id, decision, reason) { sim.resolveAlert(id, decision === 'open' ? 'open' : 'deny', reason); },
-    // While an unknown car's alert holds the barrier, the answer is Open/Deny on that alert, not a blind pulse.
-    manualOpen(reason) { if (sim.state.gate !== 'closed' || sim.state.alerts.some(a => a.status === 'open')) return; sim.manualGate(reason); traffic.pulse(5000); },
-    // `west`: the car comes along the far lane (by default a third do; the story's own steps keep the near lane).
-    simulate(kind, {fromX = -70, quiet = false, west = fromFarLane()} = {}) {
-      const presence = sim.state.presence;
-      // Every button press says what happens, including when the car has to queue.
-      const say = (key, plate) => { if (!quiet) overlays.toast(`${icon('car')}<span>${esc(t(key, {plate}))}${traffic.queued > 1 ? ` · ${esc(t('gate.sim.queued'))}` : ''}</span>`, 'info'); };
-      const blocked = () => { if (!quiet && sim.state.alerts.some(a => a.status === 'open')) overlays.toast(`${icon('alert')}<span>${esc(t('gate.sim.waitingAlert'))}</span>`); };
-      if (kind === 'exit') {
-        // Pressed by hand, any parked car may be the one (a visitor too); the background's own departures are not.
-        const keys = leavingCandidates(sim, traffic, {guests: !quiet});
-        if (!keys.length) return;
-        const k = pickOne(keys);
-        traffic.leave(k, {west: fromFarLane()});
-        if (!quiet) overlays.toast(`${icon('arrowOut')}<span>${esc(t('gate.sim.leaving', {plate: presence.get(k)?.plate}))}</span>`, 'info');
-        blocked();
-        return;
-      }
-      if (kind === 'unknown') {
-        const free = UNKNOWN_PLATES.filter(([p, pr]) => !traffic.isAround(sim.key(p, pr)) && !presence.has(sim.key(p, pr)));
-        if (!free.length) return;
-        const [plate, province] = pickOne(free);
-        traffic.arrive({plate, province, color: Math.floor(rng() * 9), fromX, ambient: quiet, west});
-        say('gate.sim.coming', plate); blocked();
-        return;
-      }
-      const pool = kind === 'visitor'
-        ? sim.state.vehicles.filter(v => v.type === 'guest' && v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isAround(sim.key(v.plate, v.province)) && v.validFrom <= sim.now() && v.validTo >= sim.now())
-        : idleCars(sim, traffic, {staffOnly: !quiet}); // the Staff car button sends a staff car, never a VIP
-      // The newest approved visitor drives up first, so a request made on the phone can be followed to the gate.
-      const v = kind === 'visitor' ? pool[pool.length - 1] : pickOne(pool);
-      if (!v) { if (!quiet) overlays.toast(`${icon('user')}<span>${esc(t(kind === 'visitor' ? 'gate.sim.noVisitor' : 'gate.sim.noStaff'))}</span>`); return; }
-      traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX, west});
-      say('gate.sim.coming', v.plate); blocked();
-    },
-  };
-
-  actions.gateShown = () => { for (const which of ['in', 'out']) panel.setSnapshot(which, snap(which)); };
-  const panel = createPanel({root: panelRoot, sim, actions});
-  const phone = createPhone({root: phoneRoot, sim, actions: {interact: actions.interact, openChanged: () => renderBar()}});
-  const overlays = createOverlays({layer: $('#pk-overlays'), sim, actions});
+    gateShown() { for (const which of ['in', 'out']) panel.setSnapshot(which, snap(which)); },
+  });
   // A presenter working the console or the alert during the story: a cue on auto-advance waits for them.
   for (const el of [panelRoot, $('#pk-overlays')]) for (const type of ['pointerdown', 'keydown']) el.addEventListener(type, () => { if (story.running) story.touched(); }, {capture: true});
-
-  sim.subscribe((kind, payload) => {
-    if (kind === 'request' && payload?.status === 'pending' && payload.history.length === 1) {
-      panel.markNew(payload.id);
-      overlays.toast(`${icon('inbox')}<span><b>${esc(t('att.pending'))}</b> ${esc(payload.visitor.name)} · ${esc(payload.plate)}</span>`, 'info');
-    }
-    // A presenter's own unknown car brings up the Gate tab; a background one does not (every few minutes it closed the
-    // request or reason being worked on).
-    // The story's own cars reaching the barrier after it was left (its unknown car, or its visitor with no pass) are
-    // background ones: turned away after 8 s, the console left where it is (they took the 45 s a presenter's own car
-    // gets, and switched the console to the Gate tab, for a car nobody had sent).
-    if (kind === 'alert' && !story.running && storyCar(payload)) payload.ambient = true;
-    if (kind === 'alert') { overlays.showAlert(payload.id); if (!story.running && !payload.ambient) panel.show('gate'); }
-    if (kind === 'entry' || kind === 'exit') panel.flash(payload.id);
-    if (kind === 'alertReason') overlays.refresh(); // the pop-up shows the card's pick
-    // Which email went (a rejection or revocation said "Ticket emailed" too).
-    if (kind === 'email') overlays.toast(`${icon('check')}<span>${esc(t(payload.kind === 'approved' ? 'req.emailSent' : `req.emailSent.${payload.kind}`))}</span>`, 'ok');
-    panel.render();
-  });
-
-  // Story ---------------------------------------------------------------
-  let currentHint = null, currentCaption = null;
-  const story = createStory({
-    sim, panel, phone, overlays, traffic, actions,
-    fly: (name, ms) => fly(PARKING_POSES[name], ms),
-    cue(name) { panel.setCue(name); overlays.setCue(name); },
-    // A hint is a text key, put in the language on show each time (it stayed in the old one after a switch).
-    hint(key) { currentHint = key; if (currentCaption) overlays.caption({...currentCaption, hint: key && t(key)}); },
-    caption(c) { currentCaption = c; overlays.caption(c ? {...c, hint: currentHint && t(currentHint)} : null); },
-    tap() { for (const el of document.querySelectorAll('[data-cue="true"]')) { el.classList.remove('pk-tapped'); void el.offsetWidth; el.classList.add('pk-tapped'); } },
-    // The story starts from the seeded 09:00 car park, so the clock goes to 09:00 first (the seed would otherwise
-    // leave out whatever lies after an earlier time).
-    async resetWorld() {
-      quietAmbient = true;
-      sim.setNow(STORY_START);
-      sim.reset(); traffic.syncParked(); panel.reset(); phone.reset(); overlays.reset();
-      await sleep(50);
-    },
-  });
-  // Only when the story stops (not on every story update, e.g. Auto-advance in free play) are its phone cue and
-  // photo read cleared: a cue left on would keep the photo button doing nothing in free play.
-  // While the story plays, the world clock runs at real speed: its steps set their own times (09:02 … 11:30).
-  let storyWasRunning = false, releaseClock = null;
-  story.subscribe(() => {
-    quietAmbient = story.running;
-    if (story.running && !releaseClock) releaseClock = world.hold();
-    if (!story.running && releaseClock) { releaseClock(); releaseClock = null; }
-    // Its unknown car still waiting at the barrier is turned away like a background one (8 s, not a presenter's 45 s:
-    // left at step 7, it held the barrier and every car behind it).
-    if (storyWasRunning && !story.running) { phone.setCue(null); phone.cancelRead(); for (const a of sim.state.alerts) if (a.status === 'open' && storyCar(a)) a.ambient = true; }
-    storyWasRunning = story.running; renderBar(); panel.render(); // the Gate tab's test buttons
-  });
 
   // Story bar below the viewport -----------------------------------------
   function renderBar() {
@@ -264,30 +191,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   panelRoot.addEventListener('click', event => { if (event.target.closest('[data-tab]')) takeOver(event); }, {capture: true});
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && active && story.running) leaveStory(); });
 
-  // Background life of the car park. Unknown cars only on the parking stop, where their alert can be answered.
-  // The parked cars are placed first: a late start's first catch-up takes cars away from the bays.
-  traffic.syncParked();
-  const stopLife = startLotLife({sim, traffic, lot, camera, paused: () => quietAmbient, watched: () => active,
-    arrive: () => actions.simulate('registered', {quiet: true}), leave: () => actions.simulate('exit', {quiet: true}),
-    unknown: () => { if (active) actions.simulate('unknown', {quiet: true}); }});
-  function schedulePass() {
-    cancelLater(passTimer);
-    // Through-traffic runs whenever the street is on screen (overview and car park), not only in the parking stop.
-    passTimer = later(() => { if (lotOnScreen(lot)) traffic.passBy(); schedulePass(); }, streetGap(world.minute()));
-  }
-  // Unknown cars that nobody answers are turned away after a while in free play.
-  // The single barrier serves entry and exit, so a waiting unknown car blocks cars leaving too. Background ones
-  // are turned away after 8 s (demo time); ones a presenter sends wait 45 s for an answer.
-  // Checked every 250 ms of simulation time (alerts' waits are simulation time too).
-  let autoDeny = null;
-  const denyLeftAlone = () => {
-    if (!story.running) for (const a of sim.state.alerts) if (a.status === 'open' && demoNow() - a.raised > (a.ambient ? 8000 : 45000)) sim.resolveAlert(a.id, 'deny', undefined, 'staff.guard');
-    autoDeny = later(denyLeftAlone, 250);
-  };
-  autoDeny = later(denyLeftAlone, 250);
-
   onLang(() => { panel.render(); phone.render(); overlays.refresh(); story.refreshCaption(); renderBar(); });
-  schedulePass();
   renderBar();
   panel.render();
 
@@ -308,12 +212,12 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     },
     get active() { return active; },
     // Runs the story once (the showcase loop calls this) and resolves when it ends or stops.
-    playStory({auto = true} = {}) { world.setPaused(false); story.setAuto(auto); return story.play({auto}); },
+    playStory(options) { return parking.playStory(options); },
     stopStory() { story.stop(); },
     setNight(night) { lot.setNight(night); traffic.setNight(night); },
     toggleLang() { setLang(getLang() === 'en' ? 'th' : 'en'); },
     setInteractHandler(fn) { interactHandler = fn; },
-    dispose() { afterRender?.delete(drawLiveFeed); story.stop(); stopLife(); cancelLater(passTimer); cancelLater(autoDeny); lot.dispose(); disposeCars(); },
+    dispose() { afterRender?.delete(drawLiveFeed); parking.dispose(); lot.dispose(); disposeCars(); },
   };
 }
 

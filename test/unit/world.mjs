@@ -5,9 +5,11 @@ import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {advance, runUntil, seed, sleep, demoNow, TICK, world} from 'osd/parking/clock.js';
 import {createParkingSim} from 'osd/parking/sim.js';
 import {createTraffic} from 'osd/parking/traffic.js';
+import {createParkingWorld} from 'osd/parking/world.js';
+import {createPhone} from 'osd/parking/phone.js';
 
 // The lot as traffic sees it: a group the cars are added to, and the arm, which turns a quarter in about 0.8 s.
-function standInLot() {
+export function standInLot() {
   let angle = 0, target = 0;
   return {
     root: new THREE.Group(),
@@ -56,5 +58,22 @@ export function carPark({seed: s = 1, time} = {}) {
     // Counters that must all be back at 0 once nothing moves.
     settled() { const s = traffic.inspect(); return !traffic.busy && !traffic.leaving && !s.entryPending && !s.gateHolders && !s.inbound && !s.outWest && !s.outEast && !s.backingOut && !s.crossing && !s.p1In && !s.outbound && sim.state.gate === 'closed'; },
     dispose() { traffic.dispose(); },
+  };
+}
+
+// The whole parking world without a page: records, traffic, the story, the background life and their rules, with a
+// stand-in car park and a phone that draws nothing. `ui` gets what the page would (events, captions, toasts…).
+export function parking({seed: s = 1, time, onScreen = true, ui = {}} = {}) {
+  seed(s);
+  if (time) { const [h, m] = time.split(':').map(Number); world.jumpTo(h * 60 + m); }
+  const sim = createParkingSim(), lot = standInLot();
+  const phone = createPhone({root: null, sim, actions: {}});
+  const w = createParkingWorld({lot, sim, phone, onScreen: () => onScreen, ui});
+  const key = v => sim.key(v.plate, v.province);
+  return {
+    ...w, phone, key, now: demoNow,
+    car: plate => lot.root.children.find(c => c.name === `Demo_car_${plate}`),
+    run: ms => advance(Math.ceil(ms / TICK) * TICK),
+    until: runUntil,
   };
 }
