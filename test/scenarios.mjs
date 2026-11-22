@@ -329,6 +329,26 @@ export const scenarios = [
     await p.until(`__q.every(v=>__parking.sim.state.presence.has(__parking.sim.key(v.plate,v.province)))`, {timeout: 40000, what: 'the turned-away car out and both queued cars in'});
     expect(await p.eval('__hit') === null, `no car drove into another (${await p.eval('__hit')})`);
   }},
+  {name: 'inside the car park a car rolls straight into a clear aisle, without stopping at its mouth', async run(p, expect) {
+    // Every car stopped at its aisle's mouth (its drive from the barrier ended there), with nothing coming.
+    // 06:00: the car park is quiet, no one leaving to wait for.
+    await p.goto('?dest=parking&debug=1&speed=10&warm=0&time=06:00');
+    await p.until(ready, {timeout: 40000});
+    const plate = await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
+      window.__k=sim.key(v.plate,v.province);void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-40});return v.plate})()`);
+    await p.until(`__parking.sim.state.presence.has(__k) && !__parking.traffic.isArriving(__k)`, {timeout: 30000, what: 'the car in its bay'});
+    const stops = await p.eval('__parking.traffic.inspect().mouthStops');
+    expect(Array.isArray(stops) && !stops.includes(plate), `it did not stop at its aisle's mouth (cars that did: ${JSON.stringify(stops)})`);
+  }},
+  {name: 'the ground is grass, on the real start-up path (shaders warmed up)', async run(p, expect) {
+    // A flat pale plane; and on the test GPU the grass drew as background when its shader came from the first frame.
+    await p.goto('?dest=overview&debug=1&speed=30');
+    await p.until(`window.__scene && document.documentElement.dataset.warm === 'done'`, {timeout: 60000, what: 'warm-up done'});
+    const px = JSON.parse(await p.eval(`JSON.stringify((()=>{__controls.target.set(30,0,45);__camera.position.set(30,30,75);__controls.update();
+      const r=__renderer,gl=r.getContext(),w=gl.drawingBufferWidth,h=gl.drawingBufferHeight;r.render(__scene,__camera);
+      const v=new __camera.position.constructor(30,.3,45).project(__camera),b=new Uint8Array(4);gl.readPixels(Math.round((v.x+1)/2*w),Math.round((v.y+1)/2*h),1,1,gl.RGBA,gl.UNSIGNED_BYTE,b);return [...b].slice(0,3)})())`));
+    expect(px[1] > px[0] + 10 && px[1] > px[2] + 20, `a ground pixel 54 m out is grass green (${px})`);
+  }},
   {name: 'a near-lane car queuing for the barrier signals left while it waits', async run(p, expect) {
     // In the queue it showed no blinker, so it was not clear it was waiting to turn in.
     // speed 10: an unknown car holds the barrier for its alert (45 s of demo time) while the next car queues.

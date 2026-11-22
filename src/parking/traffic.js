@@ -42,6 +42,8 @@ const ENTRY_R = STREET.laneEast - GATE.entryStopZ;
 // turned away, which ends where the turn in starts; the places behind are a car and 2 m apart. (The first place was
 // x -33, leaving 7–8 m of empty road behind the car at the barrier.)
 const QUEUE_HEAD = GATE.entryX - ENTRY_R - 2.23 - .8 - 2.2, QUEUE_GAP = 6.5;
+// Speed into an aisle and its bay.
+const AISLE_SPEED = 4.5;
 // How far before its turn off the street a car starts signalling.
 const SIGNAL_AHEAD = 30;
 const streetToGate = fromX => new Route(fromX, STREET.laneEast, EAST).toX(GATE.entryX - ENTRY_R).arc(ENTRY_R, Math.PI / 2).build();
@@ -118,6 +120,7 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   // An aisle is one lane: cars go in or come out of it, not both at once (they met head-on in it). Same-way cars
   // keep their distance by pathCap below.
   const aisles = new Map();
+  const mouthStops = []; // plates of the last cars that had to stop at their aisle's mouth (for tests and probes)
   const aisleOf = x => { if (!aisles.has(x)) aisles.set(x, {in: 0, out: 0}); return aisles.get(x); };
   async function enterAisle(x, way, gen) { const a = aisleOf(x); await waitFor(() => a[way === 'in' ? 'out' : 'in'] === 0, gen); a[way]++; }
   const leaveAisle = (x, way, gen) => { if (gen === generation) aisleOf(x)[way]--; };
@@ -147,11 +150,13 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   // Trapezoidal speed profile: accelerate, cruise, brake to a stop at the end.
   // Every flow passes the generation it started in: after a reset (syncParked) its awaits reject with ABORT,
   // even ones that only begin later, so traffic from a previous run never carries on into the new one.
-  function drive(agent, route, {speed = 6.5, reverse = false, startMoving = false} = {}, gen = generation) {
+  // `endSpeed(remaining)`: the speed to arrive at instead of stopping (a car rolling on into its next stretch, see
+  // the turn into an aisle); `startSpeed`: the speed it starts at (its speed at the end of the last stretch).
+  function drive(agent, route, {speed = 6.5, reverse = false, startMoving = false, endSpeed = null, startSpeed = null} = {}, gen = generation) {
     if (gen !== generation) return Promise.reject(ABORT);
     return new Promise((resolve, reject) => {
       const accel = reverse ? 1.6 : 2.6, vmax = reverse ? 2.2 : speed;
-      const m = {agent, route, s: 0, v: startMoving ? vmax : 0, vmax, accel, reverse, resolve: () => (gen === generation ? resolve() : reject(ABORT))};
+      const m = {agent, route, s: 0, v: startSpeed ?? (startMoving ? vmax : 0), vmax, accel, reverse, endSpeed, resolve: () => (gen === generation ? resolve() : reject(ABORT))};
       agent.mover = m;
       movers.add(m);
       kick();
@@ -401,15 +406,25 @@ export function createTraffic({lot, sim, schedule, hooks}) {
           agents.set(k, agent);
           refreshBays();
           const going = (async () => {
-            await drive(agent, gateToAisle(stall), {speed: 5.5}, gen);
-            // Waiting at the aisle's mouth, it signals the turn in (left from the exit lane into P1, right into P2).
-            agent.signal = stall.zone === 'P1' ? 'left' : 'right';
-            await enterAisle(stall.aisleX, 'in', gen);
-            // Into a P2 aisle the car turns across the exit lane: it goes once no car on that lane is coming up to the
-            // aisle (they met crosswise, each in the other's way, and both stopped for good).
-            if (stall.zone !== 'P1') await waitFor(() => exitLaneClear(stall.aisleX), gen);
-            agent.signal = null;
-            try { await drive(agent, aisleToStall(stall), {speed: 4.5}, gen); agent.inBay = true; } finally { leaveAisle(stall.aisleX, 'in', gen); }
+            // Into the aisle: no car coming out of it, and into a P2 aisle, which the car turns into across the exit
+            // lane, no car on that lane coming up to it (they met crosswise, each in the other's way, and both stopped
+            // for good). Clear as it comes up to the aisle's mouth, it takes the aisle there and rolls straight on into
+            // the turn; else it stops at the mouth and waits, signalling (every car stopped there, with nothing coming).
+            const aisle = aisleOf(stall.aisleX), clear = () => aisle.out === 0 && (stall.zone === 'P1' || exitLaneClear(stall.aisleX));
+            let taken = false;
+            const rollOn = remaining => { if (!taken && remaining < 9 && clear()) { aisle.in++; taken = true; } return taken ? AISLE_SPEED : 0; };
+            try {
+              await drive(agent, gateToAisle(stall), {speed: 5.5, endSpeed: rollOn}, gen);
+              if (!taken) {
+                mouthStops.push(plate); if (mouthStops.length > 20) mouthStops.shift();
+                agent.signal = stall.zone === 'P1' ? 'left' : 'right';
+                await waitFor(clear, gen);
+                aisle.in++; taken = true;
+                agent.signal = null;
+              }
+              await drive(agent, aisleToStall(stall), {speed: AISLE_SPEED, startSpeed: agent.speed}, gen);
+              agent.inBay = true;
+            } finally { if (taken) leaveAisle(stall.aisleX, 'in', gen); }
           })().finally(endP1);
           going.catch(() => {}); // awaited later; if a reset cancels the drive before that, its rejection is expected
           // The barrier is done with once the whole car is past its arm (or 6.5 m on): a car bound for the row by the
@@ -628,10 +643,10 @@ export function createTraffic({lot, sim, schedule, hooks}) {
       const caps = new Map([...movers].map(m => [m, Math.min(followCap(m), pathCap(m))]));
       for (const m of [...movers]) {
         const remaining = m.route.length - m.s;
-        const brake = Math.sqrt(2 * m.accel * Math.max(0, remaining));
+        const end = m.endSpeed?.(remaining) || 0, brake = Math.sqrt(end * end + 2 * m.accel * Math.max(0, remaining));
         m.v = Math.min(m.vmax, m.v + m.accel * dt, Math.max(.5, brake), caps.get(m) ?? Infinity);
         m.s = Math.min(m.route.length, m.s + m.v * dt);
-        if (m.s >= m.route.length - 1e-3) { movers.delete(m); place(m.agent, sample(m.route, m.s), m.reverse); m.resolve(); }
+        if (m.s >= m.route.length - 1e-3) { movers.delete(m); m.agent.speed = m.v; place(m.agent, sample(m.route, m.s), m.reverse); m.resolve(); }
         active = true;
       }
     }
@@ -658,6 +673,6 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     get gateHolders() { return gateHolders; },
     isArriving: k => arriving.has(k),
     // For tests and probes: the flows' shared state.
-    inspect: () => ({aisles: Object.fromEntries(aisles), crossing, westOnStreet, westHold, exitingStreet, eastHold, gateHolders, under, armHeld, entryPending, outWest, westExitHold, inbound, outbound, p1In}),
+    inspect: () => ({aisles: Object.fromEntries(aisles), crossing, westOnStreet, westHold, exitingStreet, eastHold, gateHolders, under, armHeld, entryPending, outWest, westExitHold, inbound, outbound, p1In, mouthStops: [...mouthStops]}),
   };
 }

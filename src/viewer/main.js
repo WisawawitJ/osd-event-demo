@@ -276,7 +276,6 @@ try {
   flight=createCameraFlight({read:readPose,write:writePose,onState(active){viewport.classList.toggle('flying',active);const el=document.querySelector('#flight-status');if(el)el.textContent=active?L('กำลังพาไปยังจุดที่เลือก…','Taking you to the selected spot…'):'';setInMotion(active);}});
   // ?speed=N (tests, rehearsals) shortens every camera flight like the rest of the demo's timing.
   if (SPEED !== 1) { const flyPath = flight.flyPath; flight.flyPath = steps => flyPath(steps.map(step => ({...step, duration: (step.duration ?? 1800) / SPEED}))); }
-  if(isShowcase)renderKit.ground.material.color.set(dayBackground);
 
   function visibleBounds() {
     const bounds = new THREE.Box3();

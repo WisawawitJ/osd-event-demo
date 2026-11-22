@@ -92,7 +92,47 @@ export function createRenderKit(renderer, scene) {
    pond.parent.add(reflection);reflections.push(reflection);
   }
  }
- const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:'#d9ded5',roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=.26;ground.receiveShadow=true;ground.name='PresentationGround';scene.add(ground);
+ const ground=createGround();ground.rotation.x=-Math.PI/2;ground.position.y=.26;ground.receiveShadow=true;ground.name='PresentationGround';scene.add(ground);
+ // The ground: a field of grass, not a flat pale plane. A tiling texture (grass speckle and soft tufts, 8 m across)
+ // gives it close-up detail; light and dark patches tens of metres wide, from smooth noise, break up
+ // the tiling and make it look mown and worn. Its edge, 100 m out, is lost in the fog (main.js).
+ function createGround(){
+  const size=512,canvas=document.createElement('canvas');canvas.width=canvas.height=size;const c=canvas.getContext('2d');
+  let seed=7;const rand=()=>(seed=(seed*16807)%2147483647)/2147483647;
+  c.fillStyle='#7d9257';c.fillRect(0,0,size,size);
+  // Drawn three times over, offset by the tile's size, so tufts and blades crossing an edge carry on across it.
+  const wrap=draw=>{for(const dx of [-size,0,size])for(const dy of [-size,0,size])draw(dx,dy);};
+  // Faint: stronger, these tufts repeated with the tile as a visible grid from afar (the shader's patches do not repeat).
+  for(let i=0;i<70;i++){const x=rand()*size,y=rand()*size,r=20+rand()*60,light=rand()<.5,g=c.createRadialGradient(x,y,0,x,y,r);
+   g.addColorStop(0,light?'rgba(160,178,104,.1)':'rgba(84,104,52,.1)');g.addColorStop(1,'rgba(0,0,0,0)');
+   wrap((dx,dy)=>{c.save();c.translate(dx,dy);c.fillStyle=g;c.fillRect(x-r,y-r,r*2,r*2);c.restore();});}
+  const greens=['#5f7a3e','#6d8a45','#8aa05f','#9bb06a','#a8a46a','#55703a'];
+  for(let i=0;i<9000;i++){const x=rand()*size,y=rand()*size,a=rand()*Math.PI,l=2+rand()*4;c.strokeStyle=greens[i%greens.length];c.globalAlpha=.35+rand()*.4;c.lineWidth=1;
+   wrap((dx,dy)=>{c.beginPath();c.moveTo(x+dx,y+dy);c.lineTo(x+dx+Math.cos(a)*l,y+dy+Math.sin(a)*l);c.stroke();});}
+  c.globalAlpha=1;
+  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(25,25);texture.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),8);
+  // Patches: smooth value noise across the ground, three octaves, as a brightness from 0.76 to 1.12, worked out per pixel
+  // from the ground position the fog passes on (main.js). (As vertex colours, with shadows, fog and the texture on
+  // too, the whole ground drew as background on the test GPU, without an error.)
+  const material=new THREE.MeshStandardMaterial({map:texture,roughness:1});
+  material.onBeforeCompile=shader=>{
+   shader.fragmentShader=shader.fragmentShader.replace('void main() {',`float groundHash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float groundNoise(vec2 p){vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f);return mix(mix(groundHash(i),groundHash(i+vec2(1.,0.)),u.x),mix(groundHash(i+vec2(0.,1.)),groundHash(i+vec2(1.,1.)),u.x),u.y);}
+void main() {`).replace('#include <map_fragment>',`#ifdef USE_FOG
+ // Two samples of the grass, at different sizes and angles, blended by noise: a single 8 m tile repeated across
+ // the field showed as a grid.
+ {vec2 q=vFogGround;float k=smoothstep(.3,.7,groundNoise(q/9.+vec2(5.,1.)));
+  diffuseColor*=mix(texture2D(map,q/8.),texture2D(map,mat2(.8,-.6,.6,.8)*q/11.3+vec2(.37,.71)),k);}
+#else
+#include <map_fragment>
+#endif
+#ifdef USE_FOG
+ {float n=.5*groundNoise(vFogGround/38.)+.3*groundNoise(vFogGround/13.+vec2(9.,4.))+.2*groundNoise(vFogGround/4.5+vec2(2.,7.)),b=.76+.36*n;
+  diffuseColor.rgb*=vec3(b*(.97+.06*groundNoise(vFogGround/25.+vec2(3.,0.))),b,b*.96);}
+#endif`);
+  };
+  return new THREE.Mesh(new THREE.PlaneGeometry(200,200),material);
+ }
  const receptionCanvas=document.createElement('canvas');receptionCanvas.width=512;receptionCanvas.height=160;
  const logo=receptionCanvas.getContext('2d');logo.font='bold 112px Arial';logo.textAlign='center';logo.textBaseline='middle';logo.strokeStyle='#b9eaff';logo.lineWidth=2;logo.shadowColor='#5caaff';logo.shadowBlur=12;logo.strokeText('OSD',256,82);
  const receptionTexture=new THREE.CanvasTexture(receptionCanvas);receptionTexture.colorSpace=THREE.SRGBColorSpace;
