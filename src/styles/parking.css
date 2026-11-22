@@ -423,4 +423,12 @@ html[data-night=true] .ph-caption { background: #ffffffe6; }
 /* A narrow view: the stop's chip (bottom left) sits above the view controls' row, which reaches across under it. */
 @container scene (max-width: 560px) {
   .showcase-page .scene-bottom { bottom: 62px; }
+  .showcase-page #scene-chip { max-width: none; } /* the whole row is its own up there (it wrapped to 3 or 4 lines) */
 }
+/* A narrow view with the visitor's phone open: the controls stand in a column on the right, clear of the phone (a row
+   covered its lower part). */
+@container scene (max-width: 720px) {
+  .parking-active.phone-open .view-controls { flex-direction: column; }
+}
+/* Toasts over the story caption (on top in a narrow view, it hid them). */
+.pk-toasts { z-index: 7; }

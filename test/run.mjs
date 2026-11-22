@@ -54,8 +54,13 @@ async function worker() {
       await page.cdp('Storage.clearDataForOrigin', {origin, storageTypes: 'local_storage'}).catch(() => {});
       page.logs.length = 0;
       try { await scenario.run(page, expect); } catch (error) { problems.push(error.message); }
-      problems.push(...page.logs.filter(line => !NOISE.test(line)));
       const shot = problems.length ? await page.shot(scenario.name.replace(/\W+/g, '-')).catch(() => '') : '';
+      // Its page is left for a blank one before its log is read: still running (story and traffic timers), it logged
+      // into the next check's, which then failed for it. The window goes back to its usual size too (a check that
+      // failed before setting it back left the next ones on a phone-sized page).
+      await page.cdp('Page.navigate', {url: 'about:blank'}).catch(() => {});
+      await page.cdp('Emulation.setDeviceMetricsOverride', {width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false}).catch(() => {});
+      problems.push(...page.logs.filter(line => !NOISE.test(line)));
       // A check cut short by its browser dying keeps no time (a near-0 s time made it look short to the next run).
       const r = results[index] = {name: scenario.name, problems, shot, time: page.gone ? 0 : (Date.now() - t0) / 1000};
       console.log(`${r.problems.length ? '✗' : '✓'} ${r.name} (${r.time.toFixed(1)} s)${r.problems.length ? `\n    ${r.problems.join('\n    ')}${r.shot ? `\n    screenshot: ${r.shot}` : ''}` : ''}`);

@@ -341,7 +341,9 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     quietAmbient = story.running;
     if (story.running && !releaseClock) releaseClock = world.hold();
     if (!story.running && releaseClock) { releaseClock(); releaseClock = null; }
-    if (storyWasRunning && !story.running) { phone.setCue(null); phone.cancelRead(); }
+    // Its unknown car still waiting at the barrier is turned away like a background one (8 s, not a presenter's 45 s:
+    // left at step 7, it held the barrier and every car behind it).
+    if (storyWasRunning && !story.running) { phone.setCue(null); phone.cancelRead(); for (const a of sim.state.alerts) if (a.status === 'open' && a.plate === STORY.unknown.plate) a.ambient = true; }
     storyWasRunning = story.running; renderBar(); panel.render(); // the Gate tab's test buttons
   });
 
@@ -394,6 +396,11 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   };
   viewport.addEventListener('pointerdown', takeOver, {capture: true});
   viewport.addEventListener('wheel', takeOver, {capture: true, passive: true});
+  // A view key on the 3D view too (arrows, + −, Page Up/Down, R): the story's next camera move overrode the presenter.
+  viewport.addEventListener('keydown', event => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.target.tagName !== 'CANVAS') return;
+    if (/^(Arrow|Page)/.test(event.key) || ['KeyR', 'Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(event.code)) takeOver(event);
+  }, {capture: true});
   panelRoot.addEventListener('click', event => { if (event.target.closest('[data-tab]')) takeOver(event); }, {capture: true});
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && active && story.running) leaveStory(); });
 

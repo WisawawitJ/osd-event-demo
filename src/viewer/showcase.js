@@ -26,7 +26,7 @@ const pageText={
  toolbar:['ข้อมูลบนโมเดล','Data on the model'],'layer.heading':['สีพื้นห้อง','Room colours'],'layer.group':['เลือกข้อมูลแสดงด้วยสี','Choose the data shown as colour'],
  'layer.none':['ปกติ','Plain'],'layer.temperature':['อุณหภูมิ','Temperature'],'layer.occupancy':['การใช้ห้อง','Occupancy'],'layer.lights':['ไฟ','Lights'],
  viewport:['โมเดลอาคาร OSD แบบโต้ตอบ','Interactive OSD building model'],
- canvas:['โมเดลอาคาร OSD ลากเพื่อหมุน กด Shift ค้างแล้วลาก หรือใช้ปุ่มลูกศร เพื่อเลื่อน ปุ่มบวกหรือลบเพื่อซูม และ R เพื่อคืนมุมมอง','OSD building model. Drag to rotate, Shift-drag or the arrow keys to pan, plus or minus to zoom, and R to reset the view'],
+ canvas:['โมเดลอาคาร OSD ลากเพื่อหมุน กด Shift ค้างแล้วลาก หรือใช้ปุ่มลูกศร เพื่อเลื่อน ปุ่มบวกหรือลบเพื่อซูม Page Up หรือ Page Down เพื่อยกหรือลดกล้อง และ R เพื่อคืนมุมมอง','OSD building model. Drag to rotate, Shift-drag or the arrow keys to pan, plus or minus to zoom, Page Up or Page Down to raise or lower the camera, and R to reset the view'],
  'scene.heading':['ภาพรวมอาคาร','Building overview'],
  'scene.floor':['ทั้งอาคาร','Whole building'],'scene.chip':['โมเดลอาคาร OSD · 5 ระดับ','OSD building model · 5 levels'],
  loading:['กำลังเตรียมอาคาร…','Preparing the building…'],retry:['ลองโหลดใหม่','Reload'],
@@ -46,7 +46,7 @@ const pageText={
  'x.cameras':['มุมกล้อง','Camera views'],'x.explore':['สำรวจอาคาร','Explore'],'x.front':['มุมหลัก','Front'],'x.side':['อีกมุม','Side'],'x.lift':['ดูลิฟต์','Lift'],
  'x.courtyard':['บ่อปลา','Fish pond'],'x.office':['สำนักงาน','Offices'],'x.arrival':['ลานวนรถ','Drop-off'],'x.reception':['ต้อนรับ','Reception'],'x.services':['ห้องบริการ','Service rooms'],
  'x.parking':['ที่จอดรถ','Parking'],'x.stairs':['บันได','Stairs'],'x.loading':['กำลังโหลดโมเดลอาคาร…','Loading the building model…'],
- 'x.help':['ลากเพื่อหมุน · กด Shift ค้างแล้วลาก ลากปุ่มขวา หรือปัดสองนิ้วบนทัชแพด เพื่อเลื่อน · หมุนล้อเมาส์หรือถ่างนิ้วเพื่อซูม','Drag to rotate · Shift-drag, right-drag or two-finger scroll on a touchpad to pan · mouse wheel or pinch to zoom'],
+ 'x.help':['ลากเพื่อหมุน · ลากสองนิ้ว กด Shift ค้างแล้วลาก หรือปัดสองนิ้วบนทัชแพด เพื่อเลื่อน · ถ่างนิ้วหรือหมุนล้อเมาส์เพื่อซูม · Page Up/Down ยกหรือลดกล้อง','Drag to rotate · two-finger drag, Shift-drag or a two-finger touchpad scroll to pan · pinch or mouse wheel to zoom · Page Up/Down to raise or lower the camera'],
  'x.footer':['โมเดลสำหรับนำเสนอ','Presentation model'],'x.footnote':['อ้างอิงแปลนและภาพถ่าย · วัสดุ เปลือกอาคาร และสวนเป็นภาพจำลอง','Based on plans and photos · materials, facade and garden are illustrative'],
 };
 export const pageString=key=>{const text=pageText[key];return typeof text==='function'?text():L(...text);};
@@ -234,11 +234,14 @@ export function createShowcase({model,simulation,navigate,cancelFlight,schedule,
  // or below that card in a view too narrow for both side by side (on a phone it covered the title). The card's width:
  // its own when shown, else what parking.css gives it.
  const corner=$('.scene-top-right'),stage=$('#viewport'),titleCard=$('.scene-title');
+ // A title card hidden (the car park with the visitor's phone open) leaves the corner free: the card went below it
+ // all the same, half-way down a narrow view.
  const placeCornerCard=()=>{const v=stage.getBoundingClientRect(),c=corner.getBoundingClientRect(),t=titleCard.getBoundingClientRect();
-  const card=$('.pk-feed')?.offsetWidth||(innerWidth<=1280?270:Math.min(330,v.width*.4)),beside=t.right+8<=c.right-card;
+  const card=$('.pk-feed')?.offsetWidth||(innerWidth<=1280?270:Math.min(330,v.width*.4)),beside=document.body.matches('.parking-active.phone-open')||t.right+8<=c.right-card;
   stage.style.setProperty('--corner-free',`${Math.round((c.height>=1?c.bottom+8:beside?t.top:t.bottom+8)-v.top)}px`);
   stage.style.setProperty('--corner-right',`${Math.round(v.right-c.right)}px`);};
  const cornerSize=new ResizeObserver(placeCornerCard);cornerSize.observe(corner);cornerSize.observe(stage);cornerSize.observe(titleCard);signal.addEventListener('abort',()=>cornerSize.disconnect(),{once:true});
+ const bodyClass=new MutationObserver(placeCornerCard);bodyClass.observe(document.body,{attributes:true,attributeFilter:['class']});signal.addEventListener('abort',()=>bodyClass.disconnect(),{once:true});
  simulation.setInteractionFilter(room=>!traveling&&destination==='meeting'&&room.id===meetingId);
  listen(document,'visibilitychange',()=>{if(document.hidden){stopTour(['พักการพาชมเมื่อออกจากหน้านี้','Tour paused while you were away']);stopScenario();cancelFlight();render();}});
  onUserOrbit(()=>{stopFollowing();stopTour(['กำลังสำรวจด้วยตัวเอง','Exploring on your own']);cancelFlight();});

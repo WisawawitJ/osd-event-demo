@@ -39,10 +39,12 @@ export function createStory(ctx) {
       // A touch on the console or the alert meanwhile (Reject, a reason to open with) waits on: done for them anyway,
       // the presenter's own choice was overridden. Until 6 s pass with no touch.
       if (auto) {
+        // Touches since this cue went up only (any earlier one made every later cue wait the 6 s).
+        const before = touches;
         let seen;
         do {
           seen = touches;
-          await Promise.race([wait(seen ? Math.max(delay, 6000) : delay, () => !auto || touches !== seen), until(done)]);
+          await Promise.race([wait(seen !== before ? Math.max(delay, 6000) : delay, () => !auto || touches !== seen), until(done)]);
           alive();
         } while (auto && !done() && touches !== seen);
         if (auto && !done()) { ctx.tap(cue); await wait(250); perform(); }

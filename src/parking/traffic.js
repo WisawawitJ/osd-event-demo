@@ -191,7 +191,9 @@ export function createTraffic({lot, sim, schedule, hooks}) {
     const car = createCar({plate, province, color});
     car.visible = false;
     lot.root.add(car);
-    const agent = {car, plate, province, type, color, lit: false};
+    // `lit` unknown at first, so the first lamp update sets its plate for the time of day too (shared plate materials
+    // kept their last brightness: a car appearing in a bay at night could show a bright plate).
+    const agent = {car, plate, province, type, color, lit: undefined};
     live.add(agent); updateLamps();
     return agent;
   }
@@ -441,6 +443,10 @@ export function createTraffic({lot, sim, schedule, hooks}) {
             }
             await raiseFor(gen);
           } catch (error) { if (stall.occupant === k) stall.occupant = null; throw error; }
+          // The arm is up and this car is on its way: the next car may drive up to the stop line now (it set off only
+          // once this one was past the arm, and got there as this one reached its aisle). It waits there for its own
+          // turn at the barrier, and brakes on the way for any car in its path.
+          releaseLane();
           // Given its bay (so parked, lamps off, once it stops) only now: given before the arm rose, it went dark at the barrier.
           Object.assign(agent, {type, stall, key: k});
           sim.recordEntry({plate, province, type, stallId: stall.id, color, manual});
@@ -524,14 +530,26 @@ export function createTraffic({lot, sim, schedule, hooks}) {
         // cleared by the time it reaches the barrier (it used to wait there 15–20 s for a gap).
         eastHold++; holding = true;
         await enterAisle(stall.aisleX, 'out', gen);
+        let inAisle = true;
+        const outOfAisle = () => { if (inAisle) { inAisle = false; leaveAisle(stall.aisleX, 'out', gen); } };
         try {
           agent.inBay = false;
           await drive(agent, stallBackOut(stall), {reverse: true}, gen);
-          await drive(agent, aisleToExit(stall), {}, gen);
+          const toExit = drive(agent, aisleToExit(stall), {}, gen);
+          toExit.catch(() => {}); // awaited below; a reset meanwhile rejects it first
+          // Out of a P2 aisle once it has turned onto the exit lane: a car waiting to go in may then (it waited until
+          // this one stood at the exit barrier). The exit lane past the mouth it still keeps clear (exitLaneClear).
+          // (P1 arrivals wait for a car driving out anyway, `outbound`.)
+          if (stall.zone !== 'P1') {
+            const turnedOut = Math.abs(LANE_OUT - stall.z) + Math.PI;
+            await waitFor(() => passed(agent, turnedOut), gen);
+            outOfAisle();
+          }
+          await toExit;
         // `outbound` ends at the exit's stop line, where the car still stands across the way into P1: a P1 arrival let
         // go then stops behind it until it has gone (each lane has its own turn at the barrier, so neither waits on the
         // other's).
-        } finally { leaveAisle(stall.aisleX, 'out', gen); endDrive(); }
+        } finally { outOfAisle(); endDrive(); }
         const {going} = await withGate('out', async () => {
           alive();
           // Signalling its turn from the stop line on, through the plate read (it lit only after the read).

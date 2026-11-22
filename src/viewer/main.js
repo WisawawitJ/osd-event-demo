@@ -132,8 +132,10 @@ try {
   if (debug) window.__controls = controls;
   controls.enableDamping = false;
   // Panning slides the view across the ground at the height it has (two fingers, a touchpad scroll, Shift-drag, the
-  // arrow keys): up and down on the screen go forward and back, not up and down in the air.
-  controls.screenSpacePanning = false;
+  // arrow keys): up and down on the screen go forward and back, not up and down in the air. Set for each pan only (in
+  // _pan below): left on, it also changed three.js's zoom toward the cursor, which at a view under 20° below the
+  // horizon (the overview) turned the building some 16° a pinch and slid it from under the fingers.
+  controls.screenSpacePanning = true;
   controls.zoomToCursor = true;
   controls.listenToKeyEvents(canvas);
   // OrbitControls zooms by a percentage of the distance to its pivot, so steps shrink as you close in and
@@ -147,7 +149,16 @@ try {
   // the view looks further down from higher up. Panning keeps the height; this is the way to change it directly. A step
   // is a third of the height above that point (at least a metre); the view's limits stop it (the camera never goes
   // below the point it looks at, nor further out than zooming).
-  const heightStep = sign => sign * Math.max(1, Math.abs(camera.position.y - controls.target.y) / 3);
+  // Clamped to the view's limits, so a press at one does nothing (OrbitControls put the camera back along another
+  // line: ▲ at the zoom-out limit swung it overhead, and ▼ there backed it away or dropped it into the building). ▼
+  // undoes ▲ (× 4/3 up, × 3/4 down).
+  function heightStep(sign) {
+    const t = controls.target, h = camera.position.y - t.y, r = Math.hypot(camera.position.x - t.x, camera.position.z - t.z);
+    const top = Math.sqrt(Math.max(0, controls.maxDistance ** 2 - r * r));
+    const bottom = Math.max(r * Math.tan(Math.PI / 2 - controls.maxPolarAngle) + .01, Math.sqrt(Math.max(0, controls.minDistance ** 2 - r * r)), CAMERA_FLOOR - t.y);
+    const to = sign > 0 ? Math.min(h + Math.max(1, h / 3), top) : Math.max(Math.min(h * 3 / 4, h - .75), bottom);
+    return sign > 0 ? Math.max(0, to - h) : Math.min(0, to - h);
+  }
   function pushForward(metres, clientX = null, clientY = null) {
     const rect = canvas.getBoundingClientRect();
     pushNdc.set(clientX == null ? 0 : (clientX - rect.left) / rect.width * 2 - 1, clientY == null ? 0 : -(clientY - rect.top) / rect.height * 2 + 1);
@@ -187,7 +198,9 @@ try {
   // touchpad, goes through _pan; the hard limits below catch every other way the view moves.
   const basePan = controls._pan.bind(controls), panBefore = new THREE.Vector3(), panStep = new THREE.Vector3();
   controls._pan = (deltaX, deltaY) => {
-    panBefore.copy(controls._panOffset); basePan(deltaX, deltaY); panStep.subVectors(controls._panOffset, panBefore);
+    panBefore.copy(controls._panOffset);
+    controls.screenSpacePanning = false; basePan(deltaX, deltaY); controls.screenSpacePanning = true;
+    panStep.subVectors(controls._panOffset, panBefore);
     // Measured on where the step lands, so a pan round the site (no outward part) cannot creep out either.
     const t = controls.target, x = t.x + panStep.x, z = t.z + panStep.z, r = Math.hypot(t.x, t.z), landed = Math.hypot(x, z);
     if (landed <= r || landed <= PAN_FREE) return;
@@ -344,7 +357,8 @@ try {
     camera.far = Math.max(distance * 10, 200);
     camera.updateProjectionMatrix();
     controls.minDistance = radius * 0.12;
-    controls.maxDistance = distance * 4;
+    // Not out to where the world is a disc floating in the sky (as on the showcase).
+    controls.maxDistance = Math.max(130, distance * 1.2);
     controls.update();
     schedule();
   }

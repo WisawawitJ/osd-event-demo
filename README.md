@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (178), about 125 s: run before a commit
+npm test                 # all behaviour checks (183), about 130 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -129,8 +129,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
   Unticking auto-advance mid-step stops right there, at the cue or the step's pause (and ends a Pause, since the bar
   then has Next). On auto-advance, a cue waits while the presenter works the console or the alert (Reject, a reason to
-  open with), until 6 s pass untouched. **Pause** stops the phone's typing too. A drag on the 3D view, Esc or
-  **Exit story** leaves the story.
+  open with), until 6 s pass untouched. **Pause** stops the phone's typing too. A drag on the 3D view, a view key on
+  it (arrows, + −, Page Up/Down, R), Esc or **Exit story** leaves the story.
 - **EN / TH** in the header switches the whole showcase page (building and parking) between Thai and English. Names, plates and provinces stay as entered. The `#explore` page opens in the language last chosen (room names included).
 - **Night** / **Day** in the header moves the world clock on to 20:00 or 07:30 (showcase and explore).
 - **Moving the view**: drag to rotate; Shift-drag (or Ctrl-drag), right-drag, the arrow keys or, on a touchpad, a
@@ -143,7 +143,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
   out stops a little past the whole-site view. The ground
   is a field of mown grass with light and dark patches (a grass texture sampled twice at different sizes and angles, blended with patches worked out per pixel, so it never repeats).
 - **View controls** at the bottom right of the 3D view: zoom in, zoom out, camera up and down (▲ ▼, or Page Up / Page
-  Down: the camera rises or drops, still looking at the same point; panning keeps the height), **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input (a flight to a stop the visitor picked counts as input) the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
+  Down: the camera rises or drops, still looking at the same point, and stops at the view's limits; panning keeps the
+  height), **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input (a flight to a stop the visitor picked counts as input) the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
 
 ### The parking story (10 steps, about 2½ minutes on auto)
 
@@ -162,7 +163,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 
 In the staff console:
 
-- **Gate → Send a car to the barrier**: a staff car, an approved visitor, an unknown car, or a car leaving.
+- **Gate → Send a car to the barrier**: a staff car, an approved visitor, an unknown car, or a car leaving (off while
+  the story plays: a car sent then got into its steps).
 - **Gate → Open the barrier manually**: needs a reason, and is audited.
 - **Requests**: approve, reject with a reason, or revoke.
 - **Vehicles**: add a staff car, import CSV, disable or enable a plate, retry a failed ATOM sync.
@@ -179,13 +181,15 @@ leaving turn right out to the far lane: at the barrier they signal right and wai
 on its way into the entry. Cars signal from 30 m before their turn off the street (queuing included), while waiting at
 the exit barrier or an aisle's mouth, and before every other turn (amber lenses at the four corners). Cars go in in the order they get to the entry,
 whichever lane they come along: a near-lane car is there a stopping distance before its place in the queue, a far-lane
-car at its turn (not when it appears, 50 m out, or is sent). The barrier's one
+car at its turn (not when it appears, 50 m out, or is sent). A queued car drives up to the stop line as soon as the
+arm rises for the car ahead, and waits there for its own turn at the barrier. The barrier's one
 arm serves both lanes, and each lane takes its own turn at it: a car going in does not wait for one going out. The arm
 is up while any car passes under it and stays down while an unknown car waits for staff (cars going out wait too). A
 car bound for P1 drives in along the exit lane, so it waits at the barrier while a car is driving out. No car drives
 through another: on the street a car keeps its distance to the one ahead, every car brakes for a car on its path, and an
 aisle takes cars in or out, not both at once (an arriving car rolls straight into a clear aisle, and stops at its mouth
-only when a car is coming out or along the exit lane) (a check watches every pair of cars in a busy car park).
+only when a car is coming out or along the exit lane; a car coming out frees its aisle once it has turned onto the exit
+lane, not at the exit barrier) (a check watches every pair of cars in a busy car park).
 
 ## Performance
 
