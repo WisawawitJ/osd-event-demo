@@ -313,6 +313,8 @@ const S = {
 };
 
 const fill = (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => vars?.[k] ?? '');
+// Every string, for tests (each key: [thai, english]).
+export const STRINGS = S;
 export function t(key, vars) {
   const entry = S[key];
   if (!entry) return key;
