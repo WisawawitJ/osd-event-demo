@@ -252,7 +252,8 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     resolveAlert(id, decision, reason) { sim.resolveAlert(id, decision === 'open' ? 'open' : 'deny', reason); },
     // While an unknown car's alert holds the barrier, the answer is Open/Deny on that alert, not a blind pulse.
     manualOpen(reason) { if (sim.state.gate !== 'closed' || sim.state.alerts.some(a => a.status === 'open')) return; sim.manualGate('open', reason); traffic.pulse(5000); },
-    simulate(kind, {fromX = -70, quiet = false} = {}) {
+    // `west`: the car comes along the far lane (by default a third do; the story's own steps keep the near lane).
+    simulate(kind, {fromX = -70, quiet = false, west = fromFarLane()} = {}) {
       const presence = sim.state.presence;
       // Every button press says what happens, including when the car has to queue.
       const say = (key, plate) => { if (!quiet) overlays.toast(`${icon('car')}<span>${esc(t(key, {plate}))}${traffic.queued > 1 ? ` · ${esc(t('gate.sim.queued'))}` : ''}</span>`, 'info'); };
@@ -271,7 +272,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
         const free = UNKNOWN_PLATES.filter(([p, pr]) => !traffic.isArriving(sim.key(p, pr)) && !presence.has(sim.key(p, pr)));
         if (!free.length) return;
         const [plate, province] = pickOne(free);
-        traffic.arrive({plate, province, color: Math.floor(Math.random() * 9), fromX, ambient: quiet, west: fromFarLane()});
+        traffic.arrive({plate, province, color: Math.floor(Math.random() * 9), fromX, ambient: quiet, west});
         say('gate.sim.coming', plate); blocked();
         return;
       }
@@ -282,7 +283,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
       // The newest approved visitor drives up first, so a request made on the phone can be followed to the gate.
       const v = kind === 'visitor' ? pool[pool.length - 1] : pickOne(pool);
       if (!v) { if (!quiet) overlays.toast(`${icon('user')}<span>${esc(t(kind === 'visitor' ? 'gate.sim.noVisitor' : 'gate.sim.noStaff'))}</span>`); return; }
-      traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX, west: fromFarLane()});
+      traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX, west});
       say('gate.sim.coming', v.plate); blocked();
     },
   };

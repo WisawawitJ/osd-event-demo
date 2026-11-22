@@ -124,7 +124,7 @@ export function createStory(ctx) {
       const k = ctx.traffic.parkedKeys().find(key => ctx.sim.state.presence.get(key)?.type === 'staff' && ctx.sim.state.presence.get(key)?.stallId?.startsWith('C'));
       if (k) ctx.traffic.leave(k);
       await s.wait(1500);
-      ctx.actions.simulate('registered', {fromX: -60, quiet: true});
+      ctx.actions.simulate('registered', {fromX: -60, quiet: true, west: false});
     }, hold: 6500},
     {key: 's9', cam: 'lot', async run(s) {
       ctx.panel.show('reports');

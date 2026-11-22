@@ -1,6 +1,6 @@
-// Low-poly cars, four draw calls each (six with headlights on, one more for a blinker) and no per-car geometry:
+// Low-poly cars, four draw calls each (six with headlights on, three more while a blinker flashes) and no per-car geometry:
 //   body (body + roof, one material per paint colour), details (glass + wheels, vertex colours),
-//   decals (both plates and the four lamps, unlit, one small texture per plate), a soft blob shadow, and at night the
+//   decals (both plates, the four lamps and the blinker lenses, unlit, one small texture per plate), a soft blob shadow, and at night the
 //   headlights' light on the road (see headlightPool) and their beams in the air (see headlightBeams), and a blinker
 //   on each side (front and rear corners, amber) that the traffic flashes before a turn (setCarBlinker).
 // A car faces local +Z and sits on y = 0.
@@ -55,7 +55,7 @@ function sharedParts() {
   const details = mergeGeometries([
     tint(flat(profileGeometry([[1.02, .83], [-1.44, .85], [-.97, 1.36], [.26, 1.38]], 1.48, .02)), '#1e2a33'),
     ...[[.8, 1.38], [-.8, 1.38], [.8, -1.38], [-.8, -1.38]].map(([x, z]) => tint(wheelFlat.clone().translate(x, .33, z), '#1b1d20')),
-    trim(1.78, .1, .12, 0, .34, 2.24), trim(1.78, .1, .12, 0, .34, -2.24), // bumpers
+    trim(1.78, .1, .12, 0, .34, 2.21), trim(1.78, .1, .12, 0, .34, -2.21), // bumpers, just behind the plates (in front, they hid the province line)
     trim(.62, .09, .04, 0, .53, FACE_Z), // grille, below the plate's top and between the head lamps
     trim(.08, .09, .16, .9, .93, .86), trim(.08, .09, .16, -.9, .93, .86), // mirrors
   ]);

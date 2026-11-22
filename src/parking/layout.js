@@ -10,9 +10,11 @@ export const RAMP = {west: -22.46, east: -11.16, north: 13.07, south: 14.6};
 
 // The driveway runs along the site's south edge and links the gate, the covered aisle and P2.
 export const DRIVE = {z: 16.2, north: 13.1, south: 19.3, west: -58, east: -11.2};
-// The near (eastbound) lane runs 0.6 m off its half's middle, away from the car park: a car waiting at the entry
-// barrier is longer than the room between the arm and the road, and its rear reached into a lane at 24.5.
-export const STREET = {north: 22.5, south: 29.5, laneEast: 25.1, laneWest: 27.5};
+// A car waiting at the entry barrier is longer than the room between the arm and the road: its rear reaches 24.1, so
+// the near (eastbound) lane runs at 25.1, clear of it. The centre line sits 0.5 m south of the street's middle so that
+// lane is the wider one (4 m against 3) and its cars keep half a metre off the line (at the middle they drove on it);
+// the far (westbound) lane runs in the middle of its own half.
+export const STREET = {north: 22.5, south: 29.5, centre: 26.5, laneEast: 25.1, laneWest: 28};
 // One barrier serves both directions, as on site: entry keeps left (west half), exit the east half.
 export const GATE = {z: 19.3, west: -24.9, east: -18.5, entryX: -23, exitX: -20.2, entryStopZ: 21.9, exitStopZ: 16.6};
 const P1_AISLE_X = -14.16;

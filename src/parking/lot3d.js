@@ -70,7 +70,7 @@ export function createLot({scene, stalls, schedule}) {
     line(front, s.z + 1.25, back, s.z + 1.25);
     line(back, s.z - 1.25, back, s.z + 1.25);
   }
-  for (let x = -96; x < 96; x += 6) line(x, (STREET.north + STREET.south) / 2, x + 3, (STREET.north + STREET.south) / 2, .12, lines, Y.road - .003);
+  for (let x = -96; x < 96; x += 6) line(x, STREET.centre, x + 3, STREET.centre, .12, lines, Y.road - .003);
   // Gate mouth: entry keeps to the west half, exit to the east half.
   const divide = (GATE.entryX + GATE.exitX) / 2;
   for (let z = DRIVE.north + 1.6; z < STREET.north - .4; z += 1.6) line(divide, z, divide, Math.min(z + .9, STREET.north - .4), .1);

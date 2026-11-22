@@ -14,7 +14,6 @@ const SCENES = [
   {name: 'meeting room', path: '?dest=meeting'},
   {name: 'fish pond', path: '?dest=pond', check: `__scene.getObjectByName('Courtyard_water_reflection').visible`},
   {name: 'energy', path: '?dest=energy'},
-  {name: 'entrance', path: '?dest=access'},
   {name: 'parking (traffic)', path: '?dest=parking'},
   // The unknown car waits for staff for 45 s of demo time, then is turned away and the pop-up closes: keep runs shorter.
   {name: 'parking + LPR pop-up', path: '?dest=parking', check: `!!document.querySelector('.pk-feed:not([hidden]) .pk-feed-img.live')`, async setup(p) {
@@ -26,7 +25,7 @@ const SCENES = [
     await p.click('#tour-night'); await p.sleep(800);
   }},
   {name: 'flights between stops', path: '?dest=overview', async during(p, end) {
-    const stops = ['pond', 'parking', 'meeting', 'energy', 'access', 'overview'];
+    const stops = ['pond', 'parking', 'meeting', 'energy', 'overview'];
     // Each flight runs to its end (some take ~2 s) before the next click, so final approaches are measured too.
     while (Date.now() < end) {
       await p.click(`[data-destination="${stops[flightStop++ % stops.length]}"]`); await p.sleep(100);

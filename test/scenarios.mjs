@@ -274,12 +274,13 @@ export const scenarios = [
     await p.goto(parking());
     await p.until(ready, {timeout: 40000});
     await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
-      window.__k=sim.key(v.plate,v.province);window.__plate=v.plate;window.__right=false;window.__farLane=false;
-      const t=setInterval(()=>{const c=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate);if(!c)return;if(Math.abs(c.position.z-27.5)<.3)__farLane=true;if(c.children[7]?.visible)__right=true;if(__parking.sim.state.presence.has(__k))clearInterval(t);},20);
+      window.__k=sim.key(v.plate,v.province);window.__plate=v.plate;window.__right=false;window.__farLane=false;window.__early=null;
+      const t=setInterval(()=>{const c=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate);if(!c)return;if(Math.abs(c.position.z-28)<.3)__farLane=true;if(c.getObjectByName('Demo_car_blinker_right')?.visible){__right=true;if(c.position.x>20)__early=c.position.x;}if(__parking.sim.state.presence.has(__k))clearInterval(t);},20);
       void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,west:true});})()`);
     await p.until('__parking.sim.state.presence.has(__k)', {timeout: 30000, what: 'the far-lane car through the barrier'});
     expect(await p.eval('__farLane'), 'it came along the far lane');
     expect(await p.eval('__right'), 'its right blinker flashed before the turn');
+    expect(await p.eval('__early') === null, `not while still far from the turn (lit at x ${await p.eval('__early')})`);
   }},
   {name: 'a car leaving for the far lane signals right and turns out across the near lane', async run(p, expect) {
     // Every car left along the near lane; none turned out to the far one.
@@ -287,7 +288,7 @@ export const scenarios = [
     await p.until(ready, {timeout: 40000});
     await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic,k=t.parkedKeys().find(k=>sim.state.presence.get(k)?.type==='staff');window.__k=k;
       const c=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+sim.state.presence.get(k).plate);window.__o={right:false,far:false,west:false};
-      const iv=setInterval(()=>{if(c.children[7]?.visible&&c.position.z<20)__o.right=true;if(Math.abs(c.position.z-27.5)<.2&&Math.sin(c.rotation.y)<-.99)__o.far=true;if(c.position.x<-45)__o.west=true;if(!c.parent)clearInterval(iv);},20);
+      const iv=setInterval(()=>{if(c.getObjectByName('Demo_car_blinker_right')?.visible&&c.position.z<20)__o.right=true;if(Math.abs(c.position.z-28)<.2&&Math.sin(c.rotation.y)<-.99)__o.far=true;if(c.position.x<-45)__o.west=true;if(!c.parent)clearInterval(iv);},20);
       void t.leave(k,{west:true});})()`);
     await p.until('!__parking.sim.state.presence.has(__k) && __o.west', {timeout: 30000, what: 'the car out along the far lane'});
     const o = JSON.parse(await p.eval('JSON.stringify(__o)'));
@@ -295,14 +296,18 @@ export const scenarios = [
     expect(o.far, 'it drove off westbound in the far lane');
   }},
   {name: 'a car from the near lane signals left before turning in', async run(p, expect) {
-    await p.goto(parking());
+    // speed 10: at 30 a flash lasts 13 ms and the car is on the street for ~170 ms, so the samples could miss them all.
+    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
     await p.until(ready, {timeout: 40000});
     await p.eval(`(()=>{const sim=__parking.sim,inside=new Set([...sim.state.presence.values()].map(p=>p.vehicleId));const v=sim.state.vehicles.find(v=>v.type==='staff'&&v.sync==='synced'&&!inside.has(v.id));
-      window.__k=sim.key(v.plate,v.province);window.__plate=v.plate;window.__left=false;
-      const t=setInterval(()=>{const c=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate);if(c?.children[6]?.visible&&c.position.z>24)__left=true;if(__parking.sim.state.presence.has(__k))clearInterval(t);},20);
-      void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-60});})()`);
+      window.__k=sim.key(v.plate,v.province);window.__plate=v.plate;window.__left=false;window.__early=null;
+      const t=setInterval(()=>{const c=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate);const lit=c?.getObjectByName('Demo_car_blinker_left')?.visible;
+        if(lit&&c.position.z>24){__left=true;if(c.position.x<-60)__early=c.position.x;}if(__parking.sim.state.presence.has(__k))clearInterval(t);},20);
+      void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color});})()`);
     await p.until('__parking.sim.state.presence.has(__k)', {timeout: 30000, what: 'the car through the barrier'});
     expect(await p.eval('__left'), 'its left blinker flashed on the street before the turn');
+    // It flashed all the way from the edge of the map; now from 30 m before the turn (x -56).
+    expect(await p.eval('__early') === null, `not while still far from the turn (lit at x ${await p.eval('__early')})`);
   }},
   {name: 'a near-lane car queuing for the barrier signals left while it waits', async run(p, expect) {
     // In the queue it showed no blinker, so it was not clear it was waiting to turn in.
@@ -315,7 +320,7 @@ export const scenarios = [
       window.__plate=v.plate;void __parking.traffic.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-60});})()`);
     const car = `__parking.lot.root.children.find(c=>c.name==='Demo_car_'+__plate)`;
     await p.until(`(c=>!!c&&c.visible&&Math.abs(c.position.x+33)<.3)(${car})`, {timeout: 20000, what: 'the car at its queue place'});
-    const seen = await p.eval(`new Promise(done=>{let left=false;const t=setInterval(()=>{if(${car}.children[6].visible)left=true;},15);setTimeout(()=>{clearInterval(t);done(left);},600);})`);
+    const seen = await p.eval(`new Promise(done=>{let left=false;const t=setInterval(()=>{if(${car}.getObjectByName('Demo_car_blinker_left')?.visible)left=true;},15);setTimeout(()=>{clearInterval(t);done(left);},600);})`);
     expect(seen, 'its left blinker flashed while it queued');
   }},
   {name: 'a busy car park: no car drives through another', async run(p, expect) {
@@ -324,7 +329,7 @@ export const scenarios = [
     // barrier, whose rear reached into the near lane. Every pair of cars, every frame, as rotated rectangles.
     await p.goto('?dest=parking&debug=1&speed=20&warm=0&time=08:00');
     await p.until(ready, {timeout: 40000});
-    await p.eval(`(()=>{const L=4.34/2,W=1.66/2;window.__hits=[];window.__frames=0;
+    await p.eval(`(()=>{const L=4.46/2,W=1.72/2;window.__hits=[];window.__frames=0;
  const corners=c=>{const h=c.rotation.y,f=[Math.sin(h),Math.cos(h)],s=[Math.cos(h),-Math.sin(h)],x=c.position.x,z=c.position.z;return [[1,1],[1,-1],[-1,-1],[-1,1]].map(([a,b])=>[x+f[0]*L*a+s[0]*W*b,z+f[1]*L*a+s[1]*W*b]);};
  const sep=(A,B)=>{for(const P of [A,B])for(let i=0;i<4;i++){const p=P[i],q=P[(i+1)%4],n=[q[1]-p[1],p[0]-q[0]];let a0=1e9,a1=-1e9,b0=1e9,b1=-1e9;for(const v of A){const d=v[0]*n[0]+v[1]*n[1];a0=Math.min(a0,d);a1=Math.max(a1,d);}for(const v of B){const d=v[0]*n[0]+v[1]*n[1];b0=Math.min(b0,d);b1=Math.max(b1,d);}if(a1<b0||b1<a0)return true;}return false;};
  const last=new Map();
@@ -333,6 +338,7 @@ export const scenarios = [
   for(let i=0;i<cars.length;i++)for(let j=i+1;j<cars.length;j++){const a=cars[i],b=cars[j];if(!moved.has(a)&&!moved.has(b))continue;
    if(Math.hypot(a.position.x-b.position.x,a.position.z-b.position.z)>5)continue;
    if(!sep(corners(a),corners(b))&&__hits.length<400)__hits.push(\`\${a.name.slice(9)||'street'}@\${a.position.x.toFixed(1)},\${a.position.z.toFixed(1)} x \${b.name.slice(9)||'street'}@\${b.position.x.toFixed(1)},\${b.position.z.toFixed(1)} t\${__world.minute().toFixed(0)}\`);}
+  window.__holders=Math.max(window.__holders||0,__parking.traffic.gateHolders);
   requestAnimationFrame(f);};requestAnimationFrame(f);})()`);
     await p.click('[data-tab="gate"]');
     // The morning rush at twice the usual pace: a car in or out every 0.7 s, and through-traffic both ways.
@@ -342,6 +348,49 @@ export const scenarios = [
     }
     const hits = await p.eval('__hits');
     expect(hits.length === 0, `no overlapping cars in ${await p.eval('__frames')} frames (${hits.slice(0, 3).join(' | ') || 'none'})`);
+    // One car at a time worked the barrier, so an arriving car waited behind a leaving one waiting for a gap.
+    expect(await p.eval('__holders') === 2, `a car going in and one going out at the barrier at once (most at a time: ${await p.eval('__holders')})`);
+  }},
+  {name: 'a VIP leaving P1 and one arriving for it at the same time both get through', async run(p, expect) {
+    // The way into P1 is the exit lane: the arrival waited at its aisle's mouth on the leaving car's path, and each
+    // stopped for the other for good (two runs in three). One VIP in P1, then two rounds: it leaves as the next arrives
+    // (the mock has three VIPs).
+    await p.goto('?dest=parking&debug=1&speed=10&warm=0&time=13:00');
+    await p.until(ready, {timeout: 40000});
+    const ok = await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic,p1=sim.state.stalls.filter(s=>s.zone==='P1');
+      for(const k of t.parkedKeys()){const q=sim.state.presence.get(k);if(p1.some(s=>s.id===q.stallId))t.vanish(k,()=>sim.recordExit({plate:q.plate,province:q.province}));}
+      window.__vips=sim.state.vehicles.filter(v=>v.type==='vip'&&v.enabled&&v.sync==='synced'&&!sim.state.presence.has(sim.key(v.plate,v.province)));
+      const a=__vips.shift();if(!a||__vips.length<2)return false;
+      sim.recordEntry({plate:a.plate,province:a.province,type:'vip',stallId:p1[0].id,color:a.color});window.__out=sim.key(a.plate,a.province);t.appear(__out);return true;})()`);
+    expect(ok, 'a VIP parked in P1 and two more to come');
+    for (let round = 1; round <= 2; round++) {
+      await p.eval(`(()=>{const t=__parking.traffic,v=__vips.shift();void t.leave(__out);void t.arrive({plate:v.plate,province:v.province,color:v.color,fromX:-40});window.__in=__parking.sim.key(v.plate,v.province);})()`);
+      await p.until(`!__parking.sim.state.presence.has(__out) && __parking.sim.state.presence.has(__in) && !__parking.traffic.isArriving(__in)`, {timeout: 20000, what: `round ${round}: the leaving VIP out and the arriving one in its bay`});
+      await p.eval('window.__out=window.__in');
+    }
+    expect(true, 'two rounds, no car stuck');
+  }},
+  {name: 'a reset while a car holds the barrier leaves no barrier holder counted', async run(p, expect) {
+    // The aborted holder's own count-down came after the reset had set the count to 0, leaving it at -1: with the next
+    // car at the barrier the gate read as free, and the arm was lowered between back-to-back cars.
+    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`void __parking.traffic.arrive({plate:'3ฆง 6047',province:'ชลบุรี',color:6,fromX:-40})`);
+    await p.until(`__parking.sim.state.alerts.some(a=>a.status==='open'&&a.plate==='3ฆง 6047') && __parking.traffic.gateHolders>=1`, {timeout: 30000, what: 'the unknown car holding the barrier'});
+    await p.eval('__parking.traffic.syncParked()');
+    await p.sleep(500); // the old flow's next poll finds it aborted
+    expect(await p.eval('__parking.traffic.gateHolders') === 0, `no holder counted after the reset (${await p.eval('__parking.traffic.gateHolders')})`);
+  }},
+  {name: 'a reset while a car leaving for the far lane reads its plate leaves far-lane traffic running', async run(p, expect) {
+    // The leaving car carried on after the reset and left its hold on new far-lane traffic counted for good.
+    await p.goto('?dest=parking&debug=1&speed=10&warm=0');
+    await p.until(ready, {timeout: 40000});
+    await p.eval(`(()=>{const sim=__parking.sim,t=__parking.traffic,k=t.parkedKeys().find(k=>sim.state.presence.get(k)?.type==='staff');
+      window.__car=__parking.lot.root.children.find(c=>c.name==='Demo_car_'+sim.state.presence.get(k).plate);void t.leave(k,{west:true});})()`);
+    await p.until(`Math.abs(__car.position.z-16.6)<.05 && Math.abs(__car.position.x+20.2)<.05 && __parking.traffic.gateHolders>0`, {timeout: 30000, what: 'the leaving car reading its plate at the exit'});
+    await p.eval('__parking.traffic.syncParked()');
+    await p.sleep(1500); // past the read's pauses
+    expect(await p.eval('__parking.traffic.inspect().westExitHold') === 0, `no hold on far-lane traffic left (${await p.eval('__parking.traffic.inspect().westExitHold')})`);
   }},
   {quick: true, name: 'unknown car: Open once disabled while waiting; Open with a reason is audited', async run(p, expect) {
     // speed 10: the guard turns unanswered cars away after 45 s of demo time, 1.5 s of real time at speed 30.
@@ -1539,6 +1588,22 @@ export const scenarios = [
     const mouse = await wheel({deltaY: 100});
     expect(mouse.zoom > 0, `a mouse wheel notch zooms (distance ${mouse.zoom})`);
   }},
+  {name: 'panning slows far from the site and comes back at full speed; the ground\'s edge is in the fog', async run(p, expect) {
+    // A touchpad scroll carried the view off without limit, past the end of the ground.
+    await p.goto(`?${FAST}`);
+    await p.until(IDLE, {timeout: 40000, what: 'showcase ready'});
+    const scroll = (deltaX, n) => p.eval(`(()=>{const c=document.querySelector('#viewport canvas');for(let i=0;i<${n};i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:400,clientY:300,deltaX:${deltaX},deltaY:0}));
+      const t=__controls.target;return Math.hypot(t.x,t.z);})()`);
+    const start = await scroll(0, 0);
+    const far = await scroll(40, 400);
+    expect(far <= 91, `400 big sideways scrolls leave the view's pivot ${far.toFixed(0)} m from the site's middle (started ${start.toFixed(0)} m)`);
+    const round = await p.eval(`(()=>{const c=document.querySelector('#viewport canvas');for(let i=0;i<200;i++)c.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:400,clientY:300,deltaX:0,deltaY:-8}));const t=__controls.target;return Math.hypot(t.x,t.z);})()`);
+    expect(round <= 91, `scrolling the other way round the site does not creep out either (${round.toFixed(0)} m)`);
+    const back = await scroll(-40, 40);
+    expect(back < far - 20, `scrolling back is not slowed (${far.toFixed(0)} m to ${back.toFixed(0)} m in 40 scrolls)`);
+    const fog = JSON.parse(await p.eval(`JSON.stringify({far:__scene.fog?.far,ground:__scene.getObjectByName('PresentationGround').geometry.parameters.width/2})`));
+    expect(fog.far < fog.ground, `the world is gone in the fog (${fog.far} m) before the ground ends (${fog.ground} m)`);
+  }},
   {name: 'the plate camera card sits up in the corner, below the corner\'s text only when there is some', async run(p, expect) {
     // It always left room for the corner's room-colours bar and flight status, so at the car park, where both are
     // usually empty, it hung below an empty gap.
@@ -1553,7 +1618,14 @@ export const scenarios = [
     await p.sleep(300);
     const r = JSON.parse(await p.eval(`JSON.stringify({feed:document.querySelector('.pk-feed').getBoundingClientRect().top,text:document.querySelector('#flight-status').getBoundingClientRect().bottom})`));
     expect(r.feed >= r.text, `below the corner's text when there is some (card ${Math.round(r.feed)}, text ends ${Math.round(r.text)})`);
-    await p.eval(`document.querySelector('#flight-status').textContent='';__world.setPaused(false)`);
+    await p.eval(`document.querySelector('#flight-status').textContent=''`);
+    // On a phone the two do not fit side by side: level with the title, the card covered it.
+    await viewport(p, 390, 844);
+    try {
+      await p.sleep(300);
+      const n = JSON.parse(await p.eval(`JSON.stringify({feed:document.querySelector('.pk-feed').getBoundingClientRect().top,title:document.querySelector('.scene-title').getBoundingClientRect().bottom})`));
+      expect(n.feed >= n.title, `below the title on a phone (card ${Math.round(n.feed)}, title ends ${Math.round(n.title)})`);
+    } finally { await viewport(p); await p.eval('__world.setPaused(false)'); }
   }},
   {name: 'metric pairs stay aligned when one label wraps', async run(p, expect) {
     await p.goto(`?${FAST}`);

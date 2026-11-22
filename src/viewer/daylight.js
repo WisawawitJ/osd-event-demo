@@ -46,4 +46,5 @@ export function applySky({minute, scene, renderer, hemisphere, key, fill, dayBac
   renderer.toneMappingExposure = 1;
   color.set(dayBackground).lerp(other.set('#efcfb4'), low * .8).lerp(other.set(NIGHT.background), 1 - light);
   scene.background.copy(color);
+  scene.fog?.color.copy(color); // the world fades into the sky's colour (main.js)
 }

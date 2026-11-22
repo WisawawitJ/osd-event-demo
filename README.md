@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (152), about 115 s: run before a commit
+npm test                 # all behaviour checks (156), about 115 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -125,6 +125,8 @@ Play; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 - **Night** / **Day** in the header moves the world clock on to 20:00 or 07:30 (showcase and explore).
 - **Moving the view**: drag to rotate; Shift-drag (or Ctrl-drag), right-drag, the arrow keys or, on a touchpad, a
   two-finger scroll to pan; the mouse wheel or a pinch to zoom. Close in, zooming in walks forward instead of stalling.
+  Panning slows the further the view goes from the site and stops 90 m out; coming back is never slowed. The world
+  fades into the background from 65 m to 95 m out from the site's middle, so the ground's edge never shows.
 - **View controls** at the bottom right of the 3D view: zoom in, zoom out, **Reset view** (back to the current stop's camera; the R key does the same) and **Idle orbit**. Idle orbit is on by default: after 20 s without input the camera slowly circles, and in the tour or loop it circles from the moment each building stop lands. The setting is remembered in the browser.
 
 ### The parking story (10 steps, about 2½ minutes on auto)
@@ -158,8 +160,11 @@ street whenever it is in view; it keeps to one speed per lane and gives way to c
 About a third of the cars coming in arrive along the far lane: the near lane has right of way, so they wait at the
 turn, signalling right, for a gap in it and a clear gate mouth, then turn in across it. About a third of the cars
 leaving turn right out to the far lane: at the barrier they signal right and wait for a gap in both lanes and for no car
-on its way into the entry. Near-lane cars bound for the car park signal left from the start, queuing included. Cars flash their blinkers (amber lenses at the four corners) before
-every turn. No car drives
+on its way into the entry. Cars signal from 30 m before their turn off the street (queuing included), while waiting at
+the exit barrier or an aisle's mouth, and before every other turn (amber lenses at the four corners). The barrier's one
+arm serves both lanes, and each lane takes its own turn at it: a car going in does not wait for one going out. The arm
+is up while any car passes under it and stays down while an unknown car waits for staff (cars going out wait too). A
+car bound for P1 drives in along the exit lane, so it waits at the barrier while a car is driving out. No car drives
 through another: on the street a car keeps its distance to the one ahead, every car brakes for a car on its path, and an
 aisle takes cars in or out, not both at once (a check watches every pair of cars in a busy car park).
 
