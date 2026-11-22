@@ -106,7 +106,7 @@ export function createPhone({root, sim, actions}) {
   root.addEventListener('click', e => {
     const b = e.target.closest('[data-ph]');
     if (!b) return;
-    actions.interact?.();
+    actions.interact?.(b);
     const what = b.dataset.ph;
     // A tap on the story's cued photo button is the presenter going along: the story reads its own plate next.
     if (what === 'photo' && ui.cue !== 'photo') readPhoto();

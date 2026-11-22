@@ -10,11 +10,16 @@ export const RAMP = {west: -22.46, east: -11.16, north: 13.07, south: 14.6};
 
 // The driveway runs along the site's south edge and links the gate, the covered aisle and P2.
 export const DRIVE = {z: 16.2, north: 13.1, south: 19.3, west: -58, east: -11.2};
-// A car waiting at the entry barrier is longer than the room between the arm and the road: its rear reaches 24.1, so
-// the near (eastbound) lane runs at 25.1, clear of it. The centre line sits 0.5 m south of the street's middle so that
-// lane is the wider one (4 m against 3) and its cars keep half a metre off the line (at the middle they drove on it);
-// the far (westbound) lane runs in the middle of its own half.
-export const STREET = {north: 22.5, south: 29.5, centre: 26.5, laneEast: 25.1, laneWest: 28};
+// The street is set back from the gate: a short two-way entrance road links them, meeting the street at a T. A car
+// waiting at the entry barrier stands wholly on it (its rear reaches 24.1; the street starts at 28), and each lane's
+// cars drive down its middle (with the street right at the gate, the near lane ran close to the centre line to clear
+// such a car's rear).
+export const STREET = {north: 28, south: 35, centre: 31.5, laneEast: 29.75, laneWest: 33.25};
+// The pavement along the street's kerb on the site's side; between it and the hedge, grass.
+export const PAVEMENT = 3.2;
+// Turns between the street and the entrance road: in from the near lane (left), in from the far lane (right, across the
+// near lane; wider, so a car leaving for the far lane passes in front of one waiting there).
+export const ENTRY_TURN = 4, FAR_TURN = 7;
 // One barrier serves both directions, as on site: entry keeps left (west half), exit the east half.
 export const GATE = {z: 19.3, west: -24.9, east: -18.5, entryX: -23, exitX: -20.2, entryStopZ: 21.9, exitStopZ: 16.6};
 const P1_AISLE_X = -14.16;

@@ -105,7 +105,7 @@ export function createPanel({root, sim, actions}) {
     return `${open.map(a => alertCard(a)).join('')}
     <div class="pk-gate-status ${g}"><div class="pk-gate-icon">${icon('gate')}</div><div><span class="metric-label">${t('gate.status')}</span><strong>${t(`gate.${g}`)}</strong><small><i class="pk-dot"></i>${t('gate.online')}</small></div>${pill(t(`gate.${g}`), tone)}</div>
     <div class="pk-cams">${['in', 'out'].map(k => `<figure>${ui.snapshots[k] ? `<img src="${ui.snapshots[k]}" alt="">` : `<div class="pk-cam-empty">${icon('camera')}</div>`}<figcaption>${t(k === 'in' ? 'gate.camIn' : 'gate.camOut')}</figcaption></figure>`).join('')}</div>
-    <div class="dashboard-section"><h3>${t('gate.manual')}</h3><p class="pk-hint">${t('gate.manual.note')}</p><div class="pk-manual"><select data-focus="manual-reason" aria-label="${t('gate.reason')}">${REASONS.map(r => `<option value="${r}"${ui.manualReason === r ? ' selected' : ''}>${t(r)}</option>`).join('')}</select><button class="pk-btn primary" data-act="manual-open"${g !== 'closed' || open.length ? ' disabled' : ''}>${t('gate.openOnce')}</button></div>${open.length ? `<p class="pk-hint">${t('gate.manual.alertFirst')}</p>` : ''}</div>
+    <div class="dashboard-section"><h3>${t('gate.manual')}</h3><p class="pk-hint">${t('gate.manual.note')}</p><div class="pk-manual"><select data-focus="manual-reason" aria-label="${t('gate.reason')}">${REASONS.map(r => `<option value="${r}"${ui.manualReason === r ? ' selected' : ''}>${t(r)}</option>`).join('')}</select><button class="pk-btn primary" data-act="manual-open"${g !== 'closed' || open.length || actions.storyRunning?.() ? ' disabled' : ''}>${t('gate.openOnce')}</button></div>${open.length ? `<p class="pk-hint">${t('gate.manual.alertFirst')}</p>` : ''}</div>
     <div class="dashboard-section"><h3>${t('gate.sim')} · ${t('sim')}</h3><div class="pk-sim-grid">${[['registered', 'car'], ['visitor', 'user'], ['unknown', 'alert'], ['exit', 'arrowOut']].map(([k, ic]) => `<button class="pk-btn" data-sim="${k}"${cue(`sim:${k}`)}${actions.storyRunning?.() ? ' disabled' : ''}>${icon(ic)}${t(`gate.sim.${k}`)}</button>`).join('')}</div></div>
     <div class="dashboard-section"><h3>${t('gate.log')}</h3>${sim.state.events.slice(0, 14).map(eventRow).join('')}</div>`;
   }
@@ -165,7 +165,7 @@ export function createPanel({root, sim, actions}) {
     if (e.target.closest('summary')) { e.preventDefault(); ui.addOpen = !ui.addOpen; render(); return; }
     const el = e.target.closest('button,[data-request]');
     if (!el || el.disabled) return;
-    actions.interact?.();
+    actions.interact?.(el);
     const d = el.dataset;
     if (d.tab) { ui.tab = d.tab; ui.selected = null; ui.rejecting = false; render(); root.scrollTop = 0; return; }
     if (d.reqFilter) { ui.reqFilter = d.reqFilter; render(); return; }

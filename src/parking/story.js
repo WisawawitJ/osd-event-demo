@@ -88,6 +88,10 @@ export function createStory(ctx) {
       ctx.phone.setForm({face: true}); await s.wait(700);
       ctx.phone.setForm({consent: true, notes: STORY.notes}); await s.wait(500);
       ctx.phone.setCue('submit'); await s.wait(900); ctx.phone.setCue(null);
+      // Its own details again before sending: a visitor clearing a field or the consent box meanwhile left the request
+      // unsent, and the rest of the story told of one that never was.
+      const v = STORY.visitor;
+      ctx.phone.setForm({name: v.name, email: v.email, contact: STORY.contact, company: v.company, phone: v.phone, plate: STORY.plate, province: STORY.province, consent: true});
       ctx.phone.setColor(STORY.color);
       const r = ctx.phone.submit();
       requestId = r?.id;
@@ -125,7 +129,9 @@ export function createStory(ctx) {
       let alertId = null;
       const off = ctx.sim.subscribe((kind, a) => { if (kind === 'alert' && a.plate === STORY.plate) alertId = a.id; });
       const arrival = ctx.traffic.arrive({plate: STORY.plate, province: STORY.province, color: STORY.color, fromX: -52});
-      try { await s.until(() => alertId || (approved && ctx.sim.state.gate === 'open'), 40000); } finally { off(); }
+      // In: its own entry, not the barrier being open (Open once sent the camera on while the car was still on the street).
+      const key = ctx.sim.key(STORY.plate, STORY.province);
+      try { await s.until(() => alertId || (approved && ctx.sim.state.presence.has(key)), 40000); } finally { off(); }
       if (alertId) {
         // The no-pass captions too (the pass may have stopped working after the step began, under the other ones).
         shownVariant = 'r'; ctx.caption(captionFor(index, 'r'));

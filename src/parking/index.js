@@ -14,7 +14,8 @@ import {CAR, disposeCars} from './cars.js';
 
 export const PARKING_POSES = {
   lot: {eye: [-4, 30, 52], target: [-33, .5, 3], fov: 42},
-  gate: {eye: [-10.5, 7.2, 33.5], target: [-22.4, 1, 18.6], fov: 40},
+  // From across the street: the road, its junction with the entrance road, and the barrier.
+  gate: {eye: [-4, 12, 45], target: [-24, 1, 21], fov: 40},
   rowA: {eye: [-14, 13, 24], target: [-30.5, .5, 7], fov: 44},
 };
 const STORY_START = bkk(2026, 11, 24, 9, 0);
@@ -252,7 +253,9 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
 
   const actions = {
     storyRunning: () => story.running,
-    interact: () => onInteract(),
+    // A tap on what the story cues (Approve, Deny, the photo button) is the presenter going along with it, not taking
+    // over: it ended the building tour or Follow the day the story was part of, and the story with it.
+    interact: el => { if (story.running && el?.closest?.('[data-cue="true"]')) return; onInteract(); },
     feedChanged: () => schedule(),
     toast: text => overlays.toast(esc(text)),
     approve(id) { sim.approve(id); },
@@ -378,7 +381,8 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     if (what === 'resume') story.resume();
     if (what === 'next') story.next();
     if (what === 'free') leaveStory();
-    if (what === 'phone') { onInteract(); phone.setOpen(!phone.isOpen); }
+    // The phone shown or hidden is part of the story's own bar (as in kiosk mode): it ended a tour's story.
+    if (what === 'phone') { if (!story.running) onInteract(); phone.setOpen(!phone.isOpen); }
     renderBar();
   });
   bar.addEventListener('change', e => { if (e.target.dataset.bar === 'auto') story.setAuto(e.target.checked); });

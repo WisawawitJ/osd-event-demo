@@ -1,7 +1,7 @@
 // Car movement and the gate sequence. Routes are built from straight lines and arcs ("turtle" style),
 // so turns look like real cornering. Heading h means forward = (sin h, cos h) in (x, z).
 import {createCar, setCarLamps, setCarBlinker} from './cars.js';
-import {DRIVE, GATE, STREET, groundY} from './layout.js';
+import {DRIVE, GATE, STREET, ENTRY_TURN, FAR_TURN, groundY} from './layout.js';
 import {SPEED, demoNow, isPaused} from './clock.js';
 
 const EAST = Math.PI / 2, WEST = -Math.PI / 2, NORTH = Math.PI, SOUTH = 0;
@@ -37,7 +37,7 @@ class Route {
 // A queued arrival waits on the street at holdX, clear of the turn into the gate.
 const streetToHold = (fromX, holdX) => new Route(fromX, STREET.laneEast, EAST).toX(holdX).build();
 // The turn between the near lane and the entry barrier's stop line (and back out of it, for a car turned away).
-const ENTRY_R = STREET.laneEast - GATE.entryStopZ;
+const ENTRY_R = ENTRY_TURN;
 // The queue for the entry on the near lane: its first place is just clear (0.8 m) of a car backing out of the entry,
 // turned away, which ends where the turn in starts; the places behind are a car and 2 m apart. (The first place was
 // x -33, leaving 7–8 m of empty road behind the car at the barrier.)
@@ -46,7 +46,8 @@ const QUEUE_HEAD = GATE.entryX - ENTRY_R - 2.23 - .8 - 2.2, QUEUE_GAP = 6.5;
 const AISLE_SPEED = 4.5;
 // How far before its turn off the street a car starts signalling.
 const SIGNAL_AHEAD = 30;
-const streetToGate = fromX => new Route(fromX, STREET.laneEast, EAST).toX(GATE.entryX - ENTRY_R).arc(ENTRY_R, Math.PI / 2).build();
+// Off the near lane into the entrance road, then up it to the stop line.
+const streetToGate = fromX => new Route(fromX, STREET.laneEast, EAST).toX(GATE.entryX - ENTRY_R).arc(ENTRY_R, Math.PI / 2).toZ(GATE.entryStopZ).build();
 // In two parts: from the barrier to the mouth of the bay's aisle, then (once the aisle has no car coming out of it, see
 // the arrival's rollOn) into the aisle and the bay.
 function gateToAisle(stall) {
@@ -77,13 +78,13 @@ const exitToStreet = () => new Route(GATE.exitX, GATE.exitStopZ, SOUTH).toZ(STRE
 // its own turn into the barrier (TURN_X below), with about 0.8 m to spare.
 const OUT_R = 4;
 const exitToFarLane = () => new Route(GATE.exitX, GATE.exitStopZ, SOUTH).toZ(STREET.laneWest - OUT_R).arc(OUT_R, -Math.PI / 2).toX(-98).build();
-const gateBackOut = () => new Route(GATE.entryX, GATE.entryStopZ, SOUTH).arc(ENTRY_R, -Math.PI / 2).build();
+const gateBackOut = () => new Route(GATE.entryX, GATE.entryStopZ, SOUTH).toZ(STREET.laneEast - ENTRY_R).arc(ENTRY_R, -Math.PI / 2).build();
 const awayEast = () => new Route(GATE.entryX - ENTRY_R, STREET.laneEast, EAST).toX(98).build();
 // From the far (westbound) lane: up to the turn, then a right turn across the near lane, ending at the barrier's stop
 // line like a turn from the near lane (its radius is the far lane's distance from that line).
-const TURN_R = STREET.laneWest - GATE.entryStopZ, TURN_X = GATE.entryX + TURN_R;
+const TURN_R = FAR_TURN, TURN_X = GATE.entryX + TURN_R;
 const westToTurn = fromX => new Route(fromX, STREET.laneWest, WEST).toX(TURN_X).build();
-const westTurnIn = () => new Route(TURN_X, STREET.laneWest, WEST).arc(TURN_R, -Math.PI / 2).build();
+const westTurnIn = () => new Route(TURN_X, STREET.laneWest, WEST).arc(TURN_R, -Math.PI / 2).toZ(GATE.entryStopZ).build();
 const passing = dir => (dir > 0 ? new Route(-98, STREET.laneEast, EAST).toX(98) : new Route(98, STREET.laneWest, WEST).toX(-98)).build();
 
 export function createTraffic({lot, sim, schedule, hooks}) {

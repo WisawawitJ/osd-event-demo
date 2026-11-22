@@ -37,7 +37,7 @@ Useful URLs:
 
 ```sh
 npm run test:quick       # the quick set while you work: 15 short checks, one or two per area, about 10 s
-npm test                 # all behaviour checks (187), about 130 s: run before a commit
+npm test                 # all behaviour checks (190), about 135 s: run before a commit
 npm test -- kiosk night  # only checks whose names match (add `quick` for only the quick ones among them)
 npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, draw calls
 ```
@@ -165,7 +165,7 @@ In the staff console:
 
 - **Gate → Send a car to the barrier**: a staff car, an approved visitor, an unknown car, or a car leaving (off while
   the story plays: a car sent then got into its steps).
-- **Gate → Open the barrier manually**: needs a reason, and is audited.
+- **Gate → Open the barrier manually**: needs a reason, and is audited (off while the story plays, like the test cars).
 - **Requests**: approve, reject with a reason, or revoke.
 - **Vehicles**: add a staff car, import CSV, disable or enable a plate, retry a failed ATOM sync.
 - **Reports**: download the event and audit CSVs. (The capacity is the car park's 50 bays; it is not a setting.)
@@ -173,7 +173,9 @@ In the staff console:
 The visitor's phone form can be filled in by hand. The car photo reads a sample plate. On the emailed ticket,
 **Add to calendar** downloads a simulated `.ics` invite for the visit.
 Each **Send a car** press shows a toast. Cars that have to wait queue visibly on the street (the first just clear of a car backing out of the entry, the rest a car and 2 m apart), and leaving cars wait in their bay until the one ahead is out.
-Cars also come and go by themselves, following the hour (see above). Through-traffic drives both lanes of the
+Cars also come and go by themselves, following the hour (see above). The car park is set back from the street: a
+short two-way entrance road links the barrier to the street at a T-junction, so a car waiting at the barrier stands
+wholly off the street, and through-traffic drives down the middle of each lane. Through-traffic drives both lanes of the
 street whenever it is in view; it keeps to one speed per lane and gives way to cars turning in or pulling out.
 About a third of the cars coming in arrive along the far lane: the near lane has right of way, so they wait at the
 turn, signalling right, for a gap in it and a clear gate mouth, then turn in across it. About a third of the cars

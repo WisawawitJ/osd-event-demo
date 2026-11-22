@@ -3,7 +3,7 @@
 // Presentation only: nothing here is bound to hardware.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries, mergeVertices} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
-import {DRIVE, GATE, STREET, SITE, Y, RAMP} from './layout.js';
+import {DRIVE, GATE, STREET, SITE, Y, RAMP, PAVEMENT} from './layout.js';
 import {createLightConeMaterial, createLightConeGeometry} from 'osd/viewer/light-cone.js';
 
 export function createLot({scene, stalls, schedule}) {
@@ -47,11 +47,11 @@ export function createLot({scene, stalls, schedule}) {
     ramp.computeVertexNormals();
     put(ramp, asphalt);
   }
-  // Pavement either side of the gate mouth
-  const pavementY = Y.road + .05;
+  // Pavement along the street's kerb, either side of the entrance road (grass between it and the hedge)
+  const pavementY = Y.road + .05, paveZ = STREET.north - PAVEMENT / 2;
   put(mergeGeometries([
-    new THREE.BoxGeometry(GATE.west - (-100), .1, STREET.north - DRIVE.south).translate((-100 + GATE.west) / 2, pavementY - .05, (DRIVE.south + STREET.north) / 2),
-    new THREE.BoxGeometry(100 - GATE.east, .1, STREET.north - DRIVE.south).translate((GATE.east + 100) / 2, pavementY - .05, (DRIVE.south + STREET.north) / 2),
+    new THREE.BoxGeometry(GATE.west - (-100), .1, PAVEMENT).translate((-100 + GATE.west) / 2, pavementY - .05, paveZ),
+    new THREE.BoxGeometry(100 - GATE.east, .1, PAVEMENT).translate((GATE.east + 100) / 2, pavementY - .05, paveZ),
     new THREE.BoxGeometry(200, .1, 1.6).translate(0, pavementY - .05, STREET.south + .8),
     // The site frontage east of the driveway, so the street edge reads as one continuous pavement.
     new THREE.BoxGeometry(SITE.east - DRIVE.east, .1, DRIVE.south - SITE.south).translate((DRIVE.east + SITE.east) / 2, pavementY - .05, (SITE.south + DRIVE.south) / 2),
@@ -230,7 +230,7 @@ export function createLot({scene, stalls, schedule}) {
 
   // Guard booth
   // On the pavement beside the gate, outside every lane (it used to stand on the driveway, in the entry route).
-  const booth = new THREE.Group(); booth.position.set(GATE.west - 2.2, Y.road + .05, (DRIVE.south + STREET.north) / 2); gate.add(booth);
+  const booth = new THREE.Group(); booth.position.set(GATE.west - 2.2, Y.road + .05, DRIVE.south + 1.6); gate.add(booth);
   put(new THREE.BoxGeometry(2, .9, 2).translate(0, .45, 0), mat({color: '#dfe3df'}), {parent: booth, shadow: true});
   put(new THREE.BoxGeometry(2, 1.2, 2).translate(0, 1.5, 0), mat({color: '#7fa3b5', roughness: .1, metalness: .3, transparent: true, opacity: .55}), {parent: booth});
   put(new THREE.BoxGeometry(2.5, .16, 2.5).translate(0, 2.18, 0), mat({color: '#465560'}), {parent: booth, shadow: true});

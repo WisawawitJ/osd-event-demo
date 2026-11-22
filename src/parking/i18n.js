@@ -47,7 +47,7 @@ const S = {
 
   // overview
   'ov.occupancy': ['จอดอยู่ตอนนี้', 'Parked now'],
-  'ov.free': ['ว่าง', 'free'],
+  'ov.free': ['ว่าง', 'Free'],
   'ov.capacity': ['ความจุ', 'Capacity'],
   'ov.entries': ['เข้าวันนี้', 'Entries today'],
   'ov.exits': ['ออกวันนี้', 'Exits today'],
@@ -63,7 +63,7 @@ const S = {
   'ov.lastReset': ['รีเซ็ตยอดคงค้าง 03:00', 'Presence reset at 03:00'],
 
   // attention items
-  'att.sync.failed': ['ส่งทะเบียนไป ATOM ไม่สำเร็จ', 'Plate not accepted by ATOM'],
+  'att.sync.failed': ['ส่งทะเบียนไป ATOM ไม่สำเร็จ', 'Sending the plate to ATOM failed'],
   'att.sync.pending': ['รอ ATOM ยืนยันทะเบียน', 'Waiting for ATOM to confirm'],
   'att.alert': ['รถไม่รู้จักรออยู่ที่ไม้กั้น', 'Unknown car waiting at the barrier'],
   'att.pending': ['คำขอใหม่รออนุมัติ', 'New request waiting for approval'],

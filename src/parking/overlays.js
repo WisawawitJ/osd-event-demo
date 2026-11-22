@@ -1,8 +1,11 @@
 // Overlays on the 3D view: the plate-camera feed, the unknown-car alert, story captions and toasts.
-import {t, fmtTime} from './i18n.js';
+import {t, fmtTime, fmtShortDate} from './i18n.js';
 import {esc, icon} from './dom.js';
 import {later, cancelLater} from './clock.js';
 import {GATE_REASONS as REASONS} from './sim.js';
+
+// A pass that ends on a later day shows its date too ("valid until 23:59" read as today for a two-day pass).
+const validUntil = (ms, now) => (fmtShortDate(ms) === fmtShortDate(now) ? fmtTime(ms) : `${fmtShortDate(ms)} ${fmtTime(ms)}`);
 
 export function createOverlays({layer, sim, actions}) {
   layer.innerHTML = `<div class="pk-feed" hidden></div><div class="pk-alert-pop" hidden></div><div class="pk-caption" hidden></div><div class="pk-toasts" aria-live="polite"></div>`;
@@ -23,7 +26,7 @@ export function createOverlays({layer, sim, actions}) {
     const box = f.live ? `<i class="pk-feed-box ${f.phase}"${place}${b ? '' : ' hidden'}></i>` : '';
     feed.innerHTML = `<div class="pk-feed-head"><span><i class="pk-rec"></i>${f.which === 'in' ? 'LPR-IN' : 'LPR-OUT'} · ${t('sim')}</span><time>${fmtTime(sim.now(), true)}</time></div>
       <div class="pk-feed-img${f.live ? ' live' : ''}">${!f.live && f.snapshot ? `<img src="${f.snapshot}" alt="">` : ''}${box}</div>
-      <div class="pk-feed-result"><div class="pk-feed-plate${f.phase === 'reading' ? ' reading' : ''}"><b>${f.phase === 'reading' ? '· · ·' : esc(f.plate)}</b><small>${f.phase === 'reading' ? t('lpr.read') + '…' : esc(f.province)}</small></div><div class="pk-feed-meta">${f.phase === 'reading' ? '' : `<small>${t('lpr.confidence')} ${Math.round(f.confidence * 100)}%</small>`}${verdict}${v.vehicle?.validTo && f.phase !== 'reading' && !v.exit ? `<small>${t('lpr.validUntil')} ${fmtTime(v.vehicle.validTo)}</small>` : ''}</div></div>`;
+      <div class="pk-feed-result"><div class="pk-feed-plate${f.phase === 'reading' ? ' reading' : ''}"><b>${f.phase === 'reading' ? '· · ·' : esc(f.plate)}</b><small>${f.phase === 'reading' ? t('lpr.read') + '…' : esc(f.province)}</small></div><div class="pk-feed-meta">${f.phase === 'reading' ? '' : `<small>${t('lpr.confidence')} ${Math.round(f.confidence * 100)}%</small>`}${verdict}${v.vehicle?.validTo && f.phase !== 'reading' && !v.exit ? `<small>${t('lpr.validUntil')} ${validUntil(v.vehicle.validTo, sim.now())}</small>` : ''}</div></div>`;
   }
 
   function renderAlert() {
@@ -38,7 +41,7 @@ export function createOverlays({layer, sim, actions}) {
   alertPop.addEventListener('click', e => {
     const b = e.target.closest('[data-pop]');
     if (!b || !state.alertId) return;
-    actions.interact?.();
+    actions.interact?.(b);
     actions.resolveAlert(state.alertId, b.dataset.pop, reasonOf(sim.state.alerts.find(x => x.id === state.alertId)));
   });
   alertPop.addEventListener('change', e => { if (e.target.matches('[data-pop-reason]') && state.alertId) sim.setAlertReason(state.alertId, e.target.value); });
