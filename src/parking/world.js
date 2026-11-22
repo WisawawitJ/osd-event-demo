@@ -48,7 +48,7 @@ export function createParkingWorld({lot, sim = createParkingSim(), camera = null
     manualOpen(reason) { if (sim.state.gate !== 'closed' || sim.state.alerts.some(a => a.status === 'open')) return; sim.manualGate(reason); traffic.pulse(5000); },
     // Sends a car: `registered` (staff), `visitor`, `unknown` or `exit`. `quiet`: the background life's own (no
     // message, any idle car incl. VIPs). `west`: along the far lane (by default a third do; the story's keep the near lane).
-    simulate(kind, {fromX = -70, quiet = false, west = fromFarLane()} = {}) {
+    simulate(kind, {fromX = -70, quiet = false, west = fromFarLane(traffic.queued > 1)} = {}) {
       const presence = sim.state.presence;
       // Every button press says what happens, including when the car has to queue.
       const say = (key, plate) => { if (!quiet) toast('car', key, {plate}, 'info', traffic.queued > 1); };
@@ -58,7 +58,7 @@ export function createParkingWorld({lot, sim = createParkingSim(), camera = null
         const keys = leavingCandidates(sim, traffic, {guests: !quiet});
         if (!keys.length) return;
         const k = pickOne(keys);
-        traffic.leave(k, {west: fromFarLane()});
+        traffic.leave(k, {west: fromFarLane(traffic.leaving > 1)});
         if (!quiet) toast('arrowOut', 'gate.sim.leaving', {plate: presence.get(k)?.plate}, 'info');
         blocked();
         return;

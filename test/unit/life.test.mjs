@@ -1,28 +1,27 @@
-// The car park's background life over a whole world day: the number of cars follows the hour.
+// The car park's background life over a whole world day, on screen (every car through the barrier, none made up in
+// the bays): the number of cars follows the hour, and no two cars ever touch.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {world} from 'osd/parking/clock.js';
-import {startLotLife, occupancyAt, idleCars, leavingCandidates, pickOne, fromFarLane} from 'osd/parking/life.js';
-import {carPark} from './world.mjs';
+import {occupancyAt} from 'osd/parking/life.js';
+import {parking, overlaps} from './world.mjs';
 
 const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
+// More seeds: SEEDS=1,2,3 npm test.
+const SEEDS = process.env.SEEDS ? process.env.SEEDS.split(',').map(Number) : [11, 4];
 
-// Known issue (left for now): on screen, cars come and go only through the barrier, one at a time, and in the
-// time-lapse it cannot keep up with the rushes: about 17 cars at 23:00 where 2 belong.
-test('a day of the car park on screen: the car count follows the hour (no full car park at 23:00)', {todo: 'the barrier cannot keep up with the rushes in the time-lapse'}, async () => {
-  const cp = carPark({time: '06:00', seed: 11});
-  const {sim, traffic, lot} = cp;
-  const stop = startLotLife({sim, traffic, lot,
-    arrive() { const v = pickOne(idleCars(sim, traffic)); if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70, west: fromFarLane()}); },
-    leave() { const keys = leavingCandidates(sim, traffic); if (keys.length) traffic.leave(pickOne(keys), {west: fromFarLane()}); }});
-  const off = [];
-  // Every world half hour from 06:30 round to 05:30 the next morning.
+for (const seed of SEEDS) test(`a day of the car park on screen: the car count follows the hour, no car touches another (seed ${seed})`, async () => {
+  const w = parking({time: '06:00', seed});
+  const off = [], touched = new Set();
+  // Every world half hour from 06:30 round to 05:30 the next morning; bodies checked every 0.25 s.
   for (let i = 1; i < 48; i++) {
     const target = (360 + i * 30) % 1440;
-    await cp.until(() => Math.abs(world.minute() - target) < 1, 3600000);
-    const cars = sim.state.presence.size, want = occupancyAt(world.minute());
+    let n = 0;
+    assert.ok(await w.until(() => { if (++n % 5 === 0) for (const hit of overlaps(w.lot)) touched.add(hit); return Math.abs(world.minute() - target) < 1; }, 3600000));
+    const cars = w.sim.state.presence.size, want = occupancyAt(world.minute());
     if (Math.abs(cars - want) > 5) off.push(`${hhmm(world.minute())}: ${cars} cars, ${want.toFixed(0)} expected`);
   }
-  stop(); cp.dispose();
+  w.dispose();
   assert.deepEqual(off, [], 'within 5 cars of the hour\'s count all day');
+  assert.deepEqual([...touched], [], 'no two cars touch');
 });

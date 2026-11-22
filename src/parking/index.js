@@ -232,8 +232,8 @@ export function createParkingScene({scene, schedule, camera = null}) {
   loop('street', () => { if (lotOnScreen(lot)) traffic.passBy(); }, () => streetGap(world.minute()));
   traffic.syncParked();
   const stopLife = startLotLife({sim, traffic, lot, camera, staffOnly: true,
-    arrive() { const v = pickOne(idleCars(sim, traffic, {staffOnly: true})); if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70, west: fromFarLane()}); },
-    leave() { const keys = leavingCandidates(sim, traffic, {staffOnly: true}); if (keys.length) traffic.leave(pickOne(keys), {west: fromFarLane()}); }});
+    arrive() { const v = pickOne(idleCars(sim, traffic, {staffOnly: true})); if (v) traffic.arrive({plate: v.plate, province: v.province, color: v.color, fromX: -70, west: fromFarLane(traffic.queued > 1)}); },
+    leave() { const keys = leavingCandidates(sim, traffic, {staffOnly: true}); if (keys.length) traffic.leave(pickOne(keys), {west: fromFarLane(traffic.leaving > 1)}); }});
   return {
     lot, sim, traffic,
     setNight(night) { lot.setNight(night); traffic.setNight(night); },

@@ -40,8 +40,10 @@ export function idleCars(sim, traffic, {staffOnly = false} = {}) {
   return sim.state.vehicles.filter(v => (v.type === 'staff' || (vip && v.type === 'vip')) && v.enabled && v.sync === 'synced' && !parkedPlate(sim, v) && !traffic.isAround(sim.key(v.plate, v.province)));
 }
 // About a third of the cars coming in arrive along the far lane and turn right across the near one (the story's own
-// cars keep the near lane, where its camera shots expect them).
-export const fromFarLane = () => rng() < .35;
+// cars keep the near lane, where its camera shots expect them). `busy`: a queue at the barrier (or cars already lining
+// up to leave): then they keep to the near lane, as the far lane takes one car at a time, each waiting at its turn
+// for a gap, and the queue behind it waited too.
+export const fromFarLane = (busy = false) => !busy && rng() < .35;
 // Parked cars that may drive out: VIPs only from the late afternoon, visitors' cars never by themselves (their visit
 // ends them), only when sent out by hand (`guests`). Unknown cars let in by hand (a delivery) leave too: left out, one
 // stayed in its bay until a reset.
@@ -71,6 +73,11 @@ export function startLotLife({sim, traffic, lot, camera = null, staffOnly = fals
   }
   const expected = () => sim.state.presence.size + traffic.queued - traffic.leaving;
   const gap = () => Math.round(occupancyAt(world.minute())) - expected();
+  // Through the barrier a car takes some 30 s (simulation time) from being sent to being parked or gone, half an hour
+  // of the time-lapse: the cars sent on screen aim at the hour it will be by then (aimed at the hour it was, the car
+  // park fell behind the rushes by most of an hour).
+  const LEAD_MS = 30000;
+  const aimed = () => Math.round(occupancyAt((world.minute() + world.rate * LEAD_MS / 60000) % 1440));
   function park(at, unseen) {
     const v = pickOne(idleCars(sim, traffic, {staffOnly})), stall = v && sim.freeStall(v.type, unseen);
     if (!stall) return;
@@ -143,13 +150,15 @@ export function startLotLife({sim, traffic, lot, camera = null, staffOnly = fals
       // Off screen everything is made up at once; on screen a few cars are left for the barrier to bring in or out.
       catchUp(!onScreen() ? 0 : watched() ? 6 : 2, from, now);
       if (!staffOnly) visits(from, now);
-      const g = gap(), m = world.minute();
+      const m = world.minute();
       if (onScreen()) {
-        // A gap of one car is the everyday coming and going below, not a rush: one car leaving does not send another in.
-        // The further behind the hour, the more at once (up to 4 coming, 5 going; those going wait in their bays and
-        // queue on the exit lane): two at a time, the barrier sat idle while the car park fell behind the rushes.
-        if (g >= 2 && traffic.queued < Math.min(4, 1 + Math.ceil(g / 3))) arrive();
-        else if (g <= -2 && traffic.leaving < Math.min(5, 1 + Math.ceil(-g / 3))) leave();
+        // Short of (or over) the hour by n cars, n are on their way in (or out) at once, up to 6 coming and 8 going
+        // (those going wait in their bays and queue on the exit lane): two at a time, the barrier sat idle while the
+        // car park fell behind the rushes. A gap of one car is the everyday coming and going below, not a rush: one
+        // car leaving does not send another in.
+        const short = aimed() - sim.state.presence.size, g = aimed() - expected();
+        if (g >= 2 && traffic.queued < Math.min(6, short)) arrive();
+        else if (g <= -2 && traffic.leaving < Math.min(8, -short)) leave();
         else if (!traffic.busy && rng() < (daytime(m) ? .07 : .01)) {
           if (unknown && daytime(m) && rng() < .12) unknown();
           else if (g >= 0) arrive(); else leave();

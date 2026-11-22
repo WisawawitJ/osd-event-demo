@@ -141,6 +141,8 @@ function createWorldClock() {
   return {
     // Real minutes a day takes (0: real speed, as with `?day=0`), and whether the clock is paused.
     get dayLength() { return dayLength; },
+    // World ms per simulation ms now.
+    get rate() { return rate(); },
     setDayLength(minutes) { dayLength = minutes; emit('rate'); },
     get paused() { return paused; },
     // Pauses (or resumes) everything, not only the clock: the engine stops stepping (see the driver below).

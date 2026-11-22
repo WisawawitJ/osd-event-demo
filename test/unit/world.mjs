@@ -25,6 +25,19 @@ export function standInLot() {
   };
 }
 
+// Every car's body against every other's (4.46 × 1.72 m), within 0.05 m: pairs that overlap now.
+export function overlaps(lot) {
+  const L = 2.23 - .05, W = .86 - .05, hits = [];
+  const list = lot.root.children.filter(c => c.name.startsWith('Demo_car_') && c.visible);
+  const corners = c => { const h = c.rotation.y, f = [Math.sin(h), Math.cos(h)], s = [Math.cos(h), -Math.sin(h)], {x, z} = c.position; return [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, b]) => [x + f[0] * L * a + s[0] * W * b, z + f[1] * L * a + s[1] * W * b]); };
+  const apart = (A, B) => { for (const P of [A, B]) for (let i = 0; i < 4; i++) { const p = P[i], q = P[(i + 1) % 4], n = [q[1] - p[1], p[0] - q[0]]; const proj = X => X.map(v => v[0] * n[0] + v[1] * n[1]); const a = proj(A), b = proj(B); if (Math.max(...a) < Math.min(...b) || Math.max(...b) < Math.min(...a)) return true; } return false; };
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+    const a = list[i], b = list[j];
+    if (Math.hypot(a.position.x - b.position.x, a.position.z - b.position.z) < 5 && !apart(corners(a), corners(b))) hits.push(`${a.name.slice(9) || 'street'} × ${b.name.slice(9) || 'street'}`);
+  }
+  return hits;
+}
+
 export function carPark({seed: s = 1, time} = {}) {
   seed(s);
   if (time) { const [h, m] = time.split(':').map(Number); world.jumpTo(h * 60 + m); }
@@ -45,17 +58,7 @@ export function carPark({seed: s = 1, time} = {}) {
     now: demoNow,
     run: ms => advance(Math.ceil(ms / TICK) * TICK),
     until: runUntil,
-    // Every car's body against every other's (4.46 × 1.72 m), within 0.05 m: pairs that overlap now.
-    overlaps() {
-      const L = 2.23 - .05, W = .86 - .05, list = cars(), hits = [];
-      const corners = c => { const h = c.rotation.y, f = [Math.sin(h), Math.cos(h)], s = [Math.cos(h), -Math.sin(h)], {x, z} = c.position; return [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, b]) => [x + f[0] * L * a + s[0] * W * b, z + f[1] * L * a + s[1] * W * b]); };
-      const apart = (A, B) => { for (const P of [A, B]) for (let i = 0; i < 4; i++) { const p = P[i], q = P[(i + 1) % 4], n = [q[1] - p[1], p[0] - q[0]]; const proj = X => X.map(v => v[0] * n[0] + v[1] * n[1]); const a = proj(A), b = proj(B); if (Math.max(...a) < Math.min(...b) || Math.max(...b) < Math.min(...a)) return true; } return false; };
-      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
-        const a = list[i], b = list[j];
-        if (Math.hypot(a.position.x - b.position.x, a.position.z - b.position.z) < 5 && !apart(corners(a), corners(b))) hits.push(`${a.name.slice(9) || 'street'} × ${b.name.slice(9) || 'street'}`);
-      }
-      return hits;
-    },
+    overlaps: () => overlaps(lot),
     // Counters that must all be back at 0 once nothing moves.
     settled() { const s = traffic.inspect(); return !traffic.busy && !traffic.leaving && !s.entryPending && !s.gateHolders && !s.inbound && !s.outWest && !s.outEast && !s.backingOut && !s.crossing && !s.p1In && !s.outbound && sim.state.gate === 'closed'; },
     dispose() { traffic.dispose(); },
