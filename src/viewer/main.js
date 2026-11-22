@@ -84,10 +84,16 @@ try {
   scene.background = new THREE.Color(dayBackground);
   // Fog of war: the world fades into the background from 65 m to 95 m out from the site's middle, measured across the
   // ground rather than from the camera, so the ground's edge (100 m out) and the street's ends never show from any view,
-  // and cars on the street come out of it. three.js measures fog from the camera; its vertex chunk is swapped for one
-  // that measures from the site's middle (the world position from the view-space one: the view matrix is a rotation
-  // and a move). The sky keeps its colour in step with the background (daylight.js).
-  THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n\tvFogDepth = length((transpose(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz)).xz);\n#endif';
+  // and cars on the street come out of it. three.js measures fog from the camera; its chunks are swapped for ones that
+  // measure from the site's middle: the vertex passes on its ground position (the world position from the view-space
+  // one: the view matrix is a rotation and a move) and each pixel takes its own distance. (The distance passed on per
+  // vertex blended wrongly across big triangles: the ground and the road, whose corners lie 100 m out, vanished.)
+  // The fog's colour keeps in step with the sky (daylight.js).
+  const fogChunk = (name, from, to) => { if (!THREE.ShaderChunk[name].includes(from)) throw new Error(`fog chunk ${name} changed`); THREE.ShaderChunk[name] = THREE.ShaderChunk[name].replaceAll(from, to); };
+  fogChunk('fog_pars_vertex', 'varying float vFogDepth;', 'varying vec2 vFogGround;');
+  fogChunk('fog_vertex', 'vFogDepth = - mvPosition.z;', 'vFogGround = (transpose(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz)).xz;');
+  fogChunk('fog_pars_fragment', 'varying float vFogDepth;', 'varying vec2 vFogGround;');
+  fogChunk('fog_fragment', 'vFogDepth', 'length(vFogGround)');
   scene.fog = new THREE.Fog(dayBackground, WORLD_CLEAR, WORLD_GONE);
   const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 1000);
   // ?render=0.5 (the test harness sets it): the 3D view at that fraction of its resolution, without antialiasing and

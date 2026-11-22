@@ -1603,6 +1603,16 @@ export const scenarios = [
     expect(back < far - 20, `scrolling back is not slowed (${far.toFixed(0)} m to ${back.toFixed(0)} m in 40 scrolls)`);
     const fog = JSON.parse(await p.eval(`JSON.stringify({far:__scene.fog?.far,ground:__scene.getObjectByName('PresentationGround').geometry.parameters.width/2})`));
     expect(fog.far < fog.ground, `the world is gone in the fog (${fog.far} m) before the ground ends (${fog.ground} m)`);
+    // Pixels: the road by the gate shows, its far end has faded into the sky. (Fog worked out per vertex blended
+    // across the road's few big triangles, whose corners lie 100 m out: the whole road and ground vanished.)
+    const px = JSON.parse(await p.eval(`JSON.stringify((()=>{__controls.target.set(0,0,0);__camera.position.set(60,90,140);__controls.update();
+      const r=__renderer,gl=r.getContext(),w=gl.drawingBufferWidth,h=gl.drawingBufferHeight;r.render(__scene,__camera);
+      const at=(x,z)=>{const v=new __camera.position.constructor(x,.3,z).project(__camera),b=new Uint8Array(4);gl.readPixels(Math.round((v.x+1)/2*w),Math.round((v.y+1)/2*h),1,1,gl.RGBA,gl.UNSIGNED_BYTE,b);return [...b].slice(0,3)};
+      const sky=new Uint8Array(4);gl.readPixels(2,h-3,1,1,gl.RGBA,gl.UNSIGNED_BYTE,sky);
+      return {near:at(-10,24),far:at(98,24),sky:[...sky].slice(0,3)}})())`));
+    const diff = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
+    expect(diff(px.near, px.sky) > 25, `the road by the gate shows (${px.near} against the sky ${px.sky})`);
+    expect(diff(px.far, px.sky) < 10, `the road's far end has faded into the sky (${px.far} against ${px.sky})`);
   }},
   {name: 'the plate camera card sits up in the corner, below the corner\'s text only when there is some', async run(p, expect) {
     // It always left room for the corner's room-colours bar and flight status, so at the car park, where both are
