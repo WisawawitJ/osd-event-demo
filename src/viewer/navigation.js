@@ -277,7 +277,7 @@ export function createNavigation({
         },
         onUpdate(t) {
           if (!approached && t >= SPLIT) approach();
-          sceneTransition.progress(approached ? THREE.MathUtils.clamp((t - SPLIT) / (0.95 - SPLIT), 0, 1) : t / SPLIT);
+          sceneTransition.progress(approached ? THREE.MathUtils.clamp((t - SPLIT) / (1 - SPLIT), 0, 1) : t / SPLIT);
           markerMaterial.opacity = 0.6 * Math.min(1, t * 4) * (1 - t);
         },
         onEnd() {

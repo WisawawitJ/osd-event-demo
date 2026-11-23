@@ -52,11 +52,11 @@ export function createSceneTransition({model, schedule, onFinish = () => {}, onP
     for (let p = o; p; p = p.parent) if (!p.visible) return false;
     return true;
   };
-  // A stop's presentation effects (tour-effects.js, userData.simulation) fade themselves in and out as the camera
+  // A stop's presentation effects (tour-effects.js, userData.tourEffect) fade themselves in and out as the camera
   // arrives and leaves: the change leaves them alone (drawn through its copies, their fade did not show, and the
   // meeting room's light cone popped up when the change ended).
   const effect = (o) => {
-    for (let p = o; p && p !== model; p = p.parent) if (p.userData?.simulation) return true;
+    for (let p = o; p && p !== model; p = p.parent) if (p.userData?.tourEffect) return true;
     return false;
   };
   // What is on screen: mid-change, an object being swept counts as shown while its cut keeps its middle, and its
@@ -104,18 +104,28 @@ export function createSceneTransition({model, schedule, onFinish = () => {}, onP
     const leaving = {plane: new THREE.Plane(new THREE.Vector3(0, -1, 0), 0), box: new THREE.Box3()},
       arriving = {plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), box: new THREE.Box3()};
     sweeps = [leaving, arriving];
+    const changes = [];
+    let high = -Infinity;
     for (const [o, end] of to.drawables) {
       const start = from.drawables.get(o) || end;
       o.visible = start.visible || end.visible;
-      const changed =
-        start.visible !== end.visible ||
-        start.materials.some((m, i) => JSON.stringify(m.planes) !== JSON.stringify(end.materials[i].planes));
-      if (!o.visible || !changed) continue;
+      const cut = start.materials.some((m, i) => JSON.stringify(m.planes) !== JSON.stringify(end.materials[i].planes));
+      if (!o.visible || (start.visible === end.visible && !cut)) continue;
+      const box = new THREE.Box3().setFromObject(o);
+      changes.push({o, start, end, box, cut});
+      if (cut) high = Math.max(high, box.max.y + 0.02);
+    }
+    // A floor not cut has its cut far above the building (main.js): for the change it is at the top of what it cuts, or
+    // the walls stood full height all the way and dropped in the last frame.
+    const within = (plane) => {
+      const p = plane ?? new THREE.Plane(new THREE.Vector3(0, -1, 0), high);
+      if (p.normal.y < 0 && p.constant > high) p.constant = high;
+      return p;
+    };
+    for (const {o, start, end, box, cut} of changes) {
       const material = o.material;
       originals.set(o, material);
-      const box = new THREE.Box3().setFromObject(o),
-        high = box.max.y + 1,
-        sweep = start.visible === end.visible ? null : start.visible ? leaving : arriving,
+      const sweep = start.visible === end.visible ? null : start.visible ? leaving : arriving,
         kind = !sweep ? 'none' : sweep === leaving ? 'leaving' : 'arriving';
       if (sweep) {
         sweep.box.union(box);
@@ -127,8 +137,8 @@ export function createSceneTransition({model, schedule, onFinish = () => {}, onP
         const count = Math.max(a.planes.length, b.planes.length),
           planes = [];
         for (let j = 0; j < count; j++) {
-          const pa = a.planes[j] || new THREE.Plane(new THREE.Vector3(0, -1, 0), high),
-            pb = b.planes[j] || new THREE.Plane(new THREE.Vector3(0, -1, 0), high);
+          const pa = cut ? within(a.planes[j]) : a.planes[j],
+            pb = cut ? within(b.planes[j]) : b.planes[j];
           planes.push({from: pa, to: pb, current: pa.clone()});
         }
         const m = copyOf(base, kind, [...planes.map((p) => p.current), ...(sweep ? [sweep.plane] : [])]);

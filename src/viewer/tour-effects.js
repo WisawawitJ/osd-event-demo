@@ -14,7 +14,7 @@ export function createTourEffects({model, schedule, meetingRoom, redrawShadows =
   const group = (id, n) => {
     const g = new T.Group();
     g.name = `Demo_${id}`;
-    g.userData = {simulation: true};
+    g.userData = {tourEffect: true};
     root(n).add(g);
     groups[id] = g;
     return g;

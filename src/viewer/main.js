@@ -20,6 +20,7 @@ import {createFpsMeter} from 'osd/viewer/fps-meter.js';
 import {createDebugEngine} from 'osd/viewer/debug-engine.js';
 import {warmUp} from 'osd/viewer/warm-up.js';
 import {mergeStaticMeshes} from 'osd/viewer/merge-static.js';
+import {roomOf, splitRim} from 'osd/viewer/room-devices.js';
 import {createRoomSchedule} from 'osd/viewer/building-day.js';
 import {createKoi} from 'osd/viewer/koi.js';
 import {createRenderKit} from 'osd/viewer/render-kit.js';
@@ -34,7 +35,7 @@ const status = document.querySelector('#status');
 const retry = document.querySelector('#retry');
 let renderKit, simulation, surfaceTextures;
 // What the model shows: a floor or all, split or cut, its facade and garden; `below`: with a floor, all that is under it; `interior`: the stop or room looked at;
-// `side`: from the other side; `close`: the lift or a room's view, which a resize keeps (a phone turned on its side threw
+// `devices`: the rooms whose ceiling lights and AC show (null: every room's, unless cut); `side`: from the other side; `close`: the lift or a room's view, which a resize keeps (a phone turned on its side threw
 // the visitor out).
 const view = {
   floor: 'all',
@@ -43,6 +44,7 @@ const view = {
   cutaway: false,
   exterior: true,
   side: false,
+  devices: null,
   interior: null,
   close: false,
 };
@@ -329,7 +331,9 @@ try {
         showExterior ||
         under(floorOf.get(roof)) ||
         (view.floor === '5' && !view.cutaway && !view.exploded && roof.name.endsWith('service_roof_caps'));
-    for (const device of deviceMeshes) device.visible = !view.cutaway || under(floorOf.get(device));
+    for (const device of deviceMeshes)
+      device.visible =
+        under(floorOf.get(device)) || (view.devices ? view.devices.includes(roomOf(device)) : !view.cutaway);
     for (const ceiling of ceilings)
       ceiling.visible =
         under(floorOf.get(ceiling)) ||
@@ -532,6 +536,11 @@ try {
           if (object.userData.type === 'ceiling') ceilings.push(object);
           if (object.userData.type === 'device') deviceMeshes.push(object);
         });
+      const light = deviceMeshes.find((o) => o.userData.roomId === MEETING_ROOM && o.userData.deviceKind === 'light'),
+        rim = deviceMeshes.find((o) => o.parent === light.parent && o.name.endsWith('_device_rim')),
+        ownRim = splitRim(rim, light);
+      floorOf.set(ownRim, floorOf.get(rim));
+      deviceMeshes.push(ownRim);
       // Static building: compose its ~900 matrices once here instead of every frame. Only the floors move (exploded
       // view; updateView recomposes them) and the door hinges swing; objects added later keep three.js's default update.
       model.updateMatrixWorld(true);
@@ -644,9 +653,9 @@ try {
               interior: id,
               exterior: true,
               side: false,
+              devices: stop.devices,
             });
             updateView({reframe: false});
-            if (stop.cutaway) for (const device of deviceMeshes) device.visible = true;
           },
           schedule,
           signal: abort.signal,
