@@ -1,9 +1,11 @@
 import * as T from 'osd/node_modules/three/build/three.module.js';
 import {realNow, ramp} from 'osd/core/clock.js';
 import {createLightConeMaterial, createLightConeGeometry} from 'osd/core/light-cone.js';
-import {MEETING_PEOPLE} from 'osd/viewer/building.js';
+import {SEATS} from 'osd/viewer/building.js';
+import {createPeople} from 'osd/viewer/people.js';
 // Presentation-only objects. No bindings to hardware or Home Assistant.
-export function createTourEffects({model, schedule, meetingRoom}) {
+// `redrawShadows()`: what throws a shadow has changed.
+export function createTourEffects({model, schedule, meetingRoom, redrawShadows = () => {}}) {
   const groups = {},
     owned = [],
     materials = [];
@@ -37,16 +39,9 @@ export function createTourEffects({model, schedule, meetingRoom}) {
     return o;
   };
   const meeting = group('meeting', meetingRoom.floor),
-    teal = mat('#299c94', 0.85),
     room = [meetingRoom.center[0], meetingRoom.center[2]];
-  const people = [];
-  for (let i = 0; i < MEETING_PEOPLE; i++) {
-    const x = room[0] + (i < 3 ? -1.1 : 1.1),
-      z = room[1] + ((i % 3) - 1) * 0.8;
-    const dot = mesh(meeting, new T.RingGeometry(0.11, 0.16, 28), teal, [x, 0.12, z]);
-    dot.rotation.x = -Math.PI / 2;
-    people.push(dot);
-  }
+  const people = createPeople({seats: SEATS});
+  for (const {figure} of people.figures) meeting.add(figure);
   // Air from the room's own AC unit (a two-way ceiling cassette, FCU 4-3 here): dashed curves leave both long
   // slots and fall outward. The unit is found in the model, so the air starts where the AC actually is.
   const air = [];
@@ -180,7 +175,7 @@ export function createTourEffects({model, schedule, meetingRoom}) {
   for (const [id, g] of Object.entries(groups)) {
     stops[id] = ramp(450, 0);
     g.traverse((o) => {
-      o.renderOrder = 1;
+      o.renderOrder ||= 1; // (the people's is their own)
       for (const m of [].concat(o.material || [])) {
         stopOf.set(m, id);
         own.set(m, m.opacity);
@@ -189,13 +184,14 @@ export function createTourEffects({model, schedule, meetingRoom}) {
     });
   }
   // The AC's air: fades in and out with the switch, and while it is on the dashes flow down from the unit. The room
-  // light's pool and beam, and the seat markers (the meeting ending or starting), fade in and out (~0.35 s).
+  // light's pool and beam fade in and out (~0.35 s), and the people come and go one after another (the meeting starting
+  // or ending).
   const air_ = ramp(350, 1),
     lampFade = ramp(350, 1),
-    peopleFade = ramp(350, 1);
+    peopleFade = ramp(1100, 1);
   const airBase = air.map((o) => o.material.opacity),
     lampBase = lamp.map((o) => own.get(o.material)),
-    peopleBase = own.get(teal);
+    peopleBase = people.figures.map((p) => p.materials.map((m) => own.get(m)));
   for (const line of air) line.userData.distances = Float32Array.from(line.geometry.attributes.lineDistance.array);
   let airShift = -1;
   function sync(now = realNow()) {
@@ -220,16 +216,22 @@ export function createTourEffects({model, schedule, meetingRoom}) {
       own.set(o.material, lampBase[i] * lampLevel);
       o.visible = lampLevel > 0.001;
     });
-    own.set(teal, peopleBase * peopleLevel);
-    for (const o of people) o.visible = peopleLevel > 0.001;
+    const meetingLevel = stops.meeting.value(now);
+    people.figures.forEach((person, i) => {
+      const level = Math.min(1, Math.max(0, peopleLevel * 2 - i * 0.2)); // one after another
+      person.figure.visible = level > 0.001;
+      person.materials.forEach((m, k) => own.set(m, peopleBase[i][k] * level));
+      if (people.castShadow(person, level * meetingLevel > 0.5)) redrawShadows();
+    });
+    people.pose(now / 1000);
     for (const [m, opacity] of own) m.opacity = opacity * stops[stopOf.get(m)].value(now);
     for (const [id, g] of Object.entries(groups)) g.visible = stops[id].value(now) > 0.001;
   }
-  // Frames keep coming while a fade runs, and while the meeting room's air flows.
+  // Frames keep coming while a fade runs, and while the meeting room's air flows or its people move.
   let frame = 0;
   const busy = (now) =>
     [...Object.values(stops), air_, lampFade, peopleFade].some((r) => !r.done(now)) ||
-    (current === 'meeting' && air_.value(now) > 0 && !document.hidden);
+    (current === 'meeting' && (air_.value(now) > 0 || peopleFade.value(now) > 0) && !document.hidden);
   function step() {
     frame = 0;
     const now = realNow();
@@ -256,7 +258,10 @@ export function createTourEffects({model, schedule, meetingRoom}) {
     peopleFade.set(state.occupied ? 1 : 0);
     lampFade.set(state.light !== false ? 1 : 0);
     air_.set(state.climate ? 1 : 0);
-    if (current !== 'meeting') air_.jump(state.climate ? 1 : 0);
+    if (current !== 'meeting') {
+      air_.jump(state.climate ? 1 : 0);
+      peopleFade.jump(state.occupied ? 1 : 0);
+    }
     pondMaterial.color.set(state.pondAlert ? '#d58c26' : '#1b9caa');
     packet.visible = state.solar > 0;
     own.set(energyMaterial, state.solar > 5 ? 0.8 : 0.35);
@@ -281,6 +286,7 @@ export function createTourEffects({model, schedule, meetingRoom}) {
     dispose() {
       cancelAnimationFrame(frame);
       for (const g of Object.values(groups)) g.removeFromParent();
+      people.dispose();
       for (const g of owned) g.dispose();
       for (const m of materials) {
         m.userData.glowMap?.dispose();

@@ -50,7 +50,9 @@ export function buildSessions() {
       `document.body.dataset.tourDestination===${JSON.stringify(id)} && ${STILL}${id === 'parking' ? ' && __parking.active' : ''}`,
       `landed at ${id}`,
     );
-    await p.step(id === 'overview' ? 400 : 900); // the stop's effects fade in; the car park's layout change animates
+    // The car park's layout change animates; the meeting room's light and people fade in over a second of the demo's real
+    // pace (these pages run at `speed=30`).
+    await p.step({overview: 400, meeting: 40000}[id] ?? 900);
   };
 
   // Showcase: every stop (and the explore page) by day and by night.
@@ -325,7 +327,7 @@ export function buildSessions() {
       step('modes', 'building-story-meeting', 'Building story: the meeting started', async (p) => {
         await storyNext(p);
         await p.reach(storyAt(2, false), 'the meeting started');
-        await p.step(6000, {hold: false});
+        await p.step(40000, {hold: false});
       }),
       step('modes', 'building-story-pond', 'Building story: the pond runs low', async (p) => {
         for (const n of [3, 4]) {

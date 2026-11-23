@@ -660,6 +660,9 @@ try {
           model,
           simulation,
           schedule,
+          redrawShadows: () => {
+            renderer.shadowMap.needsUpdate = true;
+          },
           parking,
           cancelFlight: navigation.cancel,
           onUserOrbit: (callback) => {

@@ -1,8 +1,13 @@
 // The building's facts that more than one module needs.
 
 // The meeting room the demo tells of ("Meeting room 2, floor 4"), by its device-map id, and how many people meet there.
-export const MEETING_ROOM = 'f4_meeting_2',
-  MEETING_PEOPLE = 6;
+export const MEETING_ROOM = 'f4_meeting_2';
+// Its chairs, as the model has them, in the floor's own space: three on each side of the table, facing it.
+export const SEATS = [10.41, 9.32, 8.23].flatMap((z) => [
+  {x: -5.06, z, yaw: Math.PI / 2},
+  {x: -2.95, z, yaw: -Math.PI / 2},
+]);
+export const MEETING_PEOPLE = SEATS.length;
 export const peopleIn = (occupied) => (occupied ? MEETING_PEOPLE : 0);
 // The pond's water, in %: as it should be, run low, and the level under which an alert goes up.
 export const WATER = {normal: 82, low: 58, alert: 65};

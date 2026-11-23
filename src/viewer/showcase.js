@@ -13,10 +13,24 @@ import {createDirector, onTouch} from 'osd/viewer/director.js';
 import {createBuildingStory} from 'osd/viewer/building-story.js';
 import {morph} from 'osd/core/dom.js';
 import {wireStoryBar, storyCaption, onViewTaken, tapCues} from 'osd/core/story-bar.js';
-export function createShowcase({model, simulation, navigate, cancelFlight, schedule, onUserOrbit, parking = null}) {
+export function createShowcase({
+  model,
+  simulation,
+  navigate,
+  cancelFlight,
+  schedule,
+  redrawShadows,
+  onUserOrbit,
+  parking = null,
+}) {
   const abort = new AbortController(),
     signal = abort.signal,
-    effects = createTourEffects({model, schedule, meetingRoom: simulation.rooms.find((r) => r.id === MEETING_ROOM)});
+    effects = createTourEffects({
+      model,
+      schedule,
+      redrawShadows,
+      meetingRoom: simulation.rooms.find((r) => r.id === MEETING_ROOM),
+    });
   const $ = (s) => document.querySelector(s),
     content = $('#dashboard-content');
   let story = null,

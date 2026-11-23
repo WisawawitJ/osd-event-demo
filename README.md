@@ -96,6 +96,8 @@ dock, a story's Play or Next (or its end), Follow the day, or a quiet minute; th
   water around 15:00) and the solar panels follow a daily schedule. A switch flipped by hand stays until the schedule next
   changes that room. Readings set by hand (Simulate low water, a meeting) stay until the schedule changes that
   reading itself; temperature and solar, which the schedule moves all the time, stay for an hour of world time.
+- **People:** while the meeting room is in use, six faceless figures sit on its chairs (`src/viewer/people.js`), as many as
+  the radar counts; they come and go one after another, look about a little, and throw shadows by sun and lamp.
 - **Car park:** cars come and go to match the hour: a long, gentle morning rush in from 05:45, a dip at lunch, an
   evening rush out from 16:00, two or three cars overnight. Visitors with a pass for the day (ten are booked) drop in between 09:30
   and 15:30, each at most once, stay 45 minutes to three hours, and drive out by themselves. On screen every car drives
