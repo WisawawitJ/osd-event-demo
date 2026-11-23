@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node scripts/serve.mjs 8080",
     "test": "vp test run",
+    "single": "node scripts/single.mjs",
     "shots": "node scripts/shots.mjs",
     "bench": "node test/bench.mjs",
     "lint": "vp lint",
