@@ -21,7 +21,7 @@ original free-exploration page, with the car park, staff cars coming and going a
 model download).
 
 `npm run single` (after `npm install`) puts the whole demo in one file, `dist/osd-demo.html` (about 4 MB): open it by
-double-clicking, with no server and no network. Run it again after a change.
+double-clicking, with no server and no network. The file is in git: run it again after a change and commit it.
 
 ## Testing
 

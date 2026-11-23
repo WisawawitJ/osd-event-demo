@@ -3,4 +3,3 @@ dev/
 node_modules/
 .DS_Store
 shots/
-dist/

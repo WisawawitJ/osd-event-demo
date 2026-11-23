@@ -5,7 +5,7 @@ import {defineConfig} from 'vite-plus';
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url));
 // Not ours, or not code: the vendored three.js, the building model, screenshots, reference material.
-const IGNORE = ['vendor/**', 'model/**', 'shots/**', 'reference/**', 'dev/**', 'node_modules/**'];
+const IGNORE = ['vendor/**', 'model/**', 'dist/**', 'shots/**', 'reference/**', 'dev/**', 'node_modules/**'];
 
 export default defineConfig({
   // The page's import map (index.html), for the tests: "osd/core/…", "osd/viewer/…" and "osd/parking/…" are src/, three.js is vendored.
