@@ -31,10 +31,7 @@ addTexts({
   'dock.energy': ['พลังงาน', 'Energy'],
   timeline: ['หนึ่งวันในอาคาร · เวลาจำลอง', 'A day in the building · simulated time'],
   'day.mode': ['เวลาจำลอง', 'Simulated time'],
-  'day.follow': [
-    'กล้องไปตามช่วงเวลาของวัน และหยุดเมื่อมีผู้ใช้งาน',
-    'The camera goes where the day goes, and stops while someone uses the screen',
-  ],
+  'day.follow': ['เปลี่ยนมุมกล้องตามช่วงเวลาของวัน', 'The camera goes where the day goes'],
   'day.pause': ['หยุด', 'Pause'],
   'day.speed': ['ความยาวหนึ่งวันจำลอง (เวลาจริง)', 'How long a simulated day takes (real time)'],
   'day.time': ['เวลาในโลกจำลอง · เลื่อนเพื่อข้ามไปเวลาอื่น', 'Simulated time · slide to move on to another time'],
