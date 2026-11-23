@@ -3,11 +3,11 @@
 // park's). In free play the camera can follow the day (the timeline's button): it goes to the stop of the moment
 // (dayEvents) and on to the next one's when its time comes, and does nothing else there. Any touch hands over to the
 // visitor. Left alone for a minute, the screen goes back to the start: whatever was left playing stops (a story playing
-// by itself is left to finish: either's on auto-advance, unless paused), a paused day runs again, and the camera follows
-// the day again if it was following, or flies back to the overview.
+// by itself is left to finish: either's on auto-advance, unless paused), a paused day runs again, and the story that was
+// looping plays again, or the camera follows the day again if it was following, or flies back to the overview.
 // The page (showcase.js) flies the camera, draws the panels and reports the visitor's touches. Node tests drive it
 // with a stand-in flight and the headless parking world.
-import {world, later, cancelLater} from 'osd/core/clock.js';
+import {world, later, cancelLater, demoNow} from 'osd/core/clock.js';
 import {dayEvents} from 'osd/viewer/building-day.js';
 
 // A quiet minute (real time on the page: a paused day still counts down).
@@ -27,7 +27,7 @@ export function onTouch(fn, options = {}) {
 }
 
 // `select(id, {guided})`: flies to a stop. `cancelFlight()`. `parking`: playStory/stopStory/story. `building`: the
-// building's story (running, auto, stop). `current()`: the stop on show. `ui`: stopScenario(), render(),
+// building's story (running, auto, loop, play, stop). `current()`: the stop on show. `ui`: stopScenario(), render(),
 // followChanged(), all optional. `landed()`: the last flight got all the way there. `hidden()`: the page is out of
 // sight (another tab). `followFromStart`: the day is followed from the page's opening, once the overview has been seen
 // a moment (OPENING_MS).
@@ -54,7 +54,9 @@ export function createDirector({
     following = followFromStart,
     fresh = false,
     flying = false,
-    lookTimer = null;
+    lookTimer = null,
+    // The story last seen playing with Loop on.
+    looping = null;
   const PLAN = [[0, 'overview'], ...dayEvents.map((e) => [e.minute, e.destination])];
 
   // `land`: a flight under way is left to land.
@@ -83,8 +85,14 @@ export function createDirector({
   // Looked at every second, on the engine's clock: the same in the browser and in tests. A flight cut short (the page
   // hidden on the way) is flown again.
   function look() {
-    follow();
+    noteLooping();
+    if (demoNow() >= opened) follow();
     lookTimer = later(look, 1000);
+  }
+
+  // Also at a touch, before it ends the story.
+  function noteLooping() {
+    for (const story of [building, parking?.story]) if (story?.running && story.loop) looping = story;
   }
 
   // Back to the start: what plays stops, the day runs, the camera goes to the overview.
@@ -100,7 +108,16 @@ export function createDirector({
     building?.stop();
     ui.stopScenario?.();
     if (world.paused) world.setPaused(false);
-    if (wanted) {
+    if (looping?.loop) {
+      // At the car park its story is started once the camera is there.
+      const story = looping;
+      if (story === building) story.play({auto: true});
+      else
+        void Promise.resolve(select('parking', {guided: true})).then((there) => {
+          if (there && !disposed && looping === story) void parking.playStory({auto: true});
+        });
+      arm();
+    } else if (wanted) {
       setFollowing(true);
       arm();
     } else if (current() !== 'overview') void select('overview', {guided: true});
@@ -111,13 +128,16 @@ export function createDirector({
     idleTimer = disposed ? null : after(rest, IDLE_MS);
   }
   arm();
-  lookTimer = later(look, followFromStart ? OPENING_MS : 1000);
+  const opened = demoNow() + (followFromStart ? OPENING_MS : 0);
+  lookTimer = later(look, 1000);
 
   return {
     // Any touch, key or wheel on the page: the visitor takes over from the day, and the quiet minute starts again.
-    // `own`: on a control that goes with following (the button itself, Pause, the day's length, the language).
+    // `own`: only reading (the page scrolled), or on a control that goes with following (the button itself, Pause, the
+    // day's length, the language).
     // `land`: on a story's bar (stopped on its way to the car park, the bar under the finger went away with the layout).
     touch({own = false, land = false} = {}) {
+      noteLooping();
       if (!own) setFollowing(false, {land});
       arm();
     },

@@ -286,19 +286,40 @@
   display: flex;
   gap: 5px;
   flex: 1;
-  max-width: 260px;
+  max-width: 400px;
+}
+/* Each step's segment, a button to go to it: a thin line in a target tall enough for a finger. */
+.parking-bar .pk-dots button,
+.parking-bar .pk-dots button:not(:disabled):hover {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  background: transparent;
 }
 .pk-dots i {
   flex: 1;
   height: 5px;
   border-radius: 3px;
   background: var(--dot);
+  transition: height 0.15s;
+}
+.pk-dots button:hover i {
+  height: 9px;
 }
 .pk-dots i.done {
   background: #8fb8e6;
 }
 .pk-dots i.now {
-  background: var(--pk-blue);
+  /* Filled so far (--progress, on auto-advance), the rest a tint of it. */
+  background: linear-gradient(
+    90deg,
+    var(--pk-blue) calc(var(--progress, 1) * 100%),
+    color-mix(in srgb, var(--pk-blue) 14%, var(--dot)) 0
+  );
 }
 .pk-switch {
   display: flex;
@@ -1477,49 +1498,62 @@
   left: 50%;
   bottom: 16px;
   transform: translateX(-50%);
-  width: min(660px, calc(100% - 40px));
+  width: max-content;
+  max-width: min(560px, calc(100% - 40px));
   background: var(--surface-caption);
-  border-radius: 14px;
-  padding: 14px 18px 15px;
-  box-shadow: 0 12px 34px #00033422;
+  border-radius: 12px;
+  padding: 9px 15px 10px;
+  box-shadow: 0 2px 10px #00033414;
   pointer-events: auto;
   animation: pk-in 0.3s ease-out;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+}
+/* The step's progress, on auto-advance: a thin line along the foot. */
+.pk-caption::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: calc(var(--progress, 0) * 100%);
+  height: 3px;
+  background: var(--pk-blue);
+  opacity: 0.75;
 }
 .parking-active.phone-open .pk-caption {
   left: calc(50% + 150px);
-  width: min(600px, calc(100% - 340px));
+  max-width: min(520px, calc(100% - 340px));
 }
 .pk-caption-step {
-  font-size: 11px;
-  color: var(--pk-blue);
+  font-size: 10.5px;
+  color: var(--pick);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
 .pk-caption strong {
   display: block;
   font-family: 'OSD Thai', sans-serif;
-  font-size: clamp(17px, 1.5vw, 22px);
+  font-size: clamp(14px, 1.05vw, 17px);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.4;
-  margin: 2px 0 4px;
+  margin: 0 0 1px;
 }
 .pk-caption p {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: 12.5px;
+  line-height: 1.6;
   color: var(--text-caption);
 }
 .pk-caption-hint {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-top: 8px;
-  font-size: 12px;
+  margin-top: 5px;
+  font-size: 11.5px;
   color: var(--link);
   background: var(--pk-blue-soft);
-  padding: 5px 10px;
+  padding: 3px 9px;
   border-radius: 7px;
 }
 .pk-caption-hint svg {
@@ -2092,7 +2126,7 @@ html[data-night='true'] .ph-caption {
   }
   .parking-active.phone-open .pk-caption {
     left: calc(50% + 125px);
-    width: calc(100% - 300px);
+    max-width: calc(100% - 300px);
   }
 }
 
@@ -2103,8 +2137,8 @@ html[data-night='true'] .ph-caption {
     left: 50%;
     top: 10px;
     bottom: auto;
-    width: calc(100% - 20px);
-    padding: 10px 14px 11px;
+    max-width: calc(100% - 20px);
+    padding: 8px 13px 9px;
     z-index: 6;
   }
 }

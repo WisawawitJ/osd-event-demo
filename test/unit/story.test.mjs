@@ -3,6 +3,7 @@ import {test, afterEach} from 'vitest';
 import assert from 'node:assert/strict';
 import {STORY} from 'osd/parking/sim.js';
 import {world, demoNow} from 'osd/core/clock.js';
+import {createDirector} from 'osd/viewer/director.js';
 import {parking} from './world.mjs';
 
 const noop = () => {};
@@ -263,4 +264,106 @@ test('a story stopped while it resets the world does not go on into its first st
   await w.run(5000);
   assert.equal(w.story.index, -1);
   assert.equal(w.phone.isOpen, false, 'step 1 never opened the phone');
+});
+
+test('looping, it plays from the start again, the car park as it was then; Loop off, it ends', async () => {
+  const {w} = start();
+  w.story.setLoop(true);
+  void w.playStory({auto: true});
+  for (let n = 0; n < 2; n++) {
+    assert.ok(await w.until(() => w.story.index === 9, 300000), 'the last step');
+    assert.ok(await w.until(() => w.story.index === 0, 120000), 'and round');
+    assert.ok(request(w) === undefined && w.sim.state.alerts.every((a) => a.status !== 'open'), 'afresh');
+  }
+  w.story.setLoop(false);
+  assert.ok(await w.until(() => !w.story.running, 400000));
+  assert.ok(!world.held);
+});
+
+test('a looping parking story left by a visitor plays again after a quiet minute, at the car park', async () => {
+  const {w} = start();
+  const stops = [];
+  const d = createDirector({
+    select: async (id) => {
+      stops.push(id);
+      return true;
+    },
+    parking: w,
+    current: () => stops.at(-1) ?? 'parking',
+  });
+  live.push(d);
+  w.story.setLoop(true);
+  void w.playStory({auto: true});
+  await w.until(() => w.story.index === 2, 60000);
+  d.touch();
+  w.stopStory();
+  assert.ok(await w.until(() => w.story.running, 70000));
+  assert.deepEqual(stops, ['parking']);
+});
+
+test("the step's progress, on auto-advance: from 0 up, to near 1 as it ends; none on Next", async () => {
+  const {w} = start();
+  void w.playStory({auto: true});
+  await w.until(() => w.story.index === 0, 5000);
+  let index = 0,
+    last = 0;
+  while (w.story.running) {
+    if (w.story.index !== index) {
+      assert.ok(last > 0.7, `step ${index + 1} ended at ${last}`);
+      index = w.story.index;
+      last = 0;
+    }
+    assert.ok(w.story.progress >= last && w.story.progress <= 1);
+    last = w.story.progress;
+    await w.run(200);
+  }
+  void w.playStory({auto: false});
+  await w.until(() => w.story.index === 0, 5000);
+  assert.equal(w.story.progress, null);
+});
+
+test('a step clicked: the story goes on from there, the steps before it done (request, approval, car parked, car denied)', async () => {
+  for (let i = 0; i < 10; i++) {
+    const {w} = start();
+    void w.playStory({auto: true});
+    await w.until(() => w.story.index === 0, 5000);
+    await w.run(1500);
+    w.story.goTo(i);
+    assert.ok(await w.until(() => w.story.index === i, 5000), `at step ${i + 1}`);
+    await w.run(100);
+    const q = request(w),
+      parked = [...w.sim.state.presence.values()].some((p) => p.plate === STORY.plate);
+    assert.equal(q?.status, i < 2 ? undefined : i < 4 ? 'pending' : 'approved', `step ${i + 1}: the request`);
+    assert.equal(parked, i >= 6, `step ${i + 1}: the car`);
+    assert.equal(events(w, STORY.unknown.plate).includes('denied'), i >= 7, `step ${i + 1}: the unknown car`);
+    if (i >= 6 && i < 9) assert.ok(w.traffic.parkedKeys().some((k) => k === w.sim.key(STORY.plate, STORY.province)));
+    const steps = new Set();
+    assert.ok(
+      await w.until(() => {
+        steps.add(w.story.index);
+        return !w.story.running;
+      }, 400000),
+      `from step ${i + 1} to the end`,
+    );
+    steps.delete(-1);
+    assert.deepEqual(
+      [...steps],
+      Array.from({length: 10 - i}, (_, k) => i + k),
+    );
+    assert.deepEqual(events(w, STORY.plate), ['exit', 'entry'], 'in and out, once');
+  }
+});
+
+test('a step clicked during a cue: the cue is the new step’s', async () => {
+  const {w, seen} = start();
+  void w.playStory({auto: true});
+  assert.ok(await w.until(() => seen.cue === 'approve', 60000));
+  w.story.goTo(8);
+  await w.until(() => w.story.index === 8, 5000);
+  await w.run(300);
+  assert.equal(seen.cue, null);
+  w.story.goTo(3);
+  assert.ok(await w.until(() => seen.cue === 'approve', 2000));
+  await w.run(1000);
+  assert.equal(seen.cue, 'approve', 'not cleared by the run it replaced');
 });

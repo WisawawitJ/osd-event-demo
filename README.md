@@ -118,32 +118,36 @@ dock, a story's Play or Next (or its end), Follow the day, or a quiet minute; th
 
 - Two ways to use it. **Free play**: the day always runs; visitors pick a stop on the dock, move the 3D view and try
   each stop's own buttons (a meeting, the pond's water, the energy flow, the Gate tab's test cars). **The stories**:
-  each stop outside the car park has a bar under the timeline like the car park's: **Play the story**, **Auto-advance**,
-  and while it plays Next (or Pause), Restart, Exit and the step. The building's story is the meeting day of the visitor
-  the parking story follows (about 1¾ minutes on auto): the room getting ready for six people and switching off after
-  them, the pond running low and refilled, a cloud over the solar panels and the sun back. At each of those the stop's
-  own button is cued (in the panel): pressed by the presenter, by Next, or by itself on auto-advance; the line on the 3D
-  view says what is about to happen, then what did. It sets each step's scene first, and outside 09:00–13:00 moves the
-  day on to 10:00 (for the sun, and clear of the day's own changes). Picking a stop, any other of a stop's buttons, a
-  device tapped in the 3D view, a jump in time, Night, Esc, Exit, or (on auto-advance) taking the 3D view ends it. What
-  it set then goes back to the day's schedule, unless the visitor took over there, by the 3D view or one of the stop's
-  controls (they go on from what they see). The parking story is on the Parking stop (below).
+  each stop outside the car park has a bar under the timeline like the car park's: **Play the story**,
+  **Auto-advance**, **Loop**, and while it plays Next (or Pause), Restart, Exit and the step (its segment fills as it
+  goes, on auto-advance, and so does a line at the foot of the text box; pressing a segment goes to that step). The
+  building's story is the meeting day of the visitor the parking story follows (about 1¾ minutes on auto): the room
+  getting ready for six people and switching off after them, the pond running low and refilled, a cloud over the solar
+  panels and the sun back. At each of those the stop's own button is cued (in the panel): pressed by the presenter, by
+  Next, or by itself on auto-advance; the line on the 3D view says what is about to happen, then what did. It sets
+  each step's scene first, and outside 09:00–13:00 moves the day on to 10:00 (for the sun, and clear of the day's own
+  changes). Picking a stop, any other of a stop's buttons, a device tapped in the 3D view, a jump in time, Night, Esc,
+  Exit, or (on auto-advance) taking the 3D view ends it. What it set then goes back to the day's schedule, unless the
+  visitor took over there, by the 3D view or one of the stop's controls (they go on from what they see). The parking
+  story is on the Parking stop (below).
 - **Follow the day** (timeline button, on from the page's opening, after 8 s on the overview) moves the camera to the
-  stop of the day's latest moment (07:30 car park, 09:00 meeting room, 12:00 roof, 14:30 meeting room, 15:00 pond, 17:00
-  car park, 18:00 overview until 07:30), 25 s to 2½ minutes apart in a 20-minute day, with about 11 minutes on the
-  overview overnight. It only moves the camera. Turned on during a story, it ends the story. Any touch (but for the
-  button itself, Pause, the day's length and the language) hands over and stops its flight (a touch on a story's bar
-  lets it land); after a quiet minute it follows again, until turned off with **Stop following** (a reload turns it on
-  again, and so does coming back from the `#explore` page).
+  stop of the day's latest moment (07:30 car park, 09:00 meeting room, 12:00 roof, 14:30 meeting room, 15:00 pond,
+  17:00 car park, 18:00 overview until 07:30), 25 s to 2½ minutes apart in a 20-minute day, with about 11 minutes on
+  the overview overnight. It only moves the camera. Turned on during a story, it ends the story. Touching the 3D view
+  or pressing a control (but for the button itself, Pause, the day's length and the language; scrolling the page is
+  neither) hands over and stops its flight (a touch on a story's bar lets it land); after a quiet minute it follows
+  again, until turned off with **Stop following** (a reload turns it on again, and so does coming back from the
+  `#explore` page).
 - **A 9:16 portrait screen** (at least 761 × 1500 CSS px, e.g. 1080×1920) has a layout of its own that fills it without
   scrolling: the 3D view across the top, then the dock, the timeline and the story bar, and the panel along the bottom
   in two columns (the car park's console scrolls). Nothing to set: turn the screen.
 - **Left alone for a minute** (no touch, key or wheel), the screen goes back to the start: what was playing stops (a
   story playing by itself is left to finish first: either's on auto-advance, unless paused), a paused day runs again,
-  and the camera follows the day again, if it was, or flies back to the overview, where the idle orbit takes over. The
-  `#explore` page, left alone for a minute, goes back to the showcase.
-- On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance** and
-  **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
+  and a story played with **Loop** on plays again (for an unattended screen: tick Loop and Play), or the camera
+  follows the day again, if it was, or flies back to the overview, where the idle orbit takes over. The `#explore`
+  page, left alone for a minute, goes back to the showcase.
+- On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance**,
+  **Loop** and **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
   Unticking auto-advance mid-step stops right there, at the cue or the step's pause. On auto-advance, a cue waits while the presenter works the console or the alert (Reject, a reason to
   open with), until 6 s pass untouched. **Pause** is the day's: the cars and

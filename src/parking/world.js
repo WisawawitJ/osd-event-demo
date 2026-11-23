@@ -176,12 +176,14 @@ export function createParkingWorld({
     },
     // The story starts from the seeded 09:00 car park, so the clock goes to 09:00 first (the seed would otherwise
     // leave out whatever lies after an earlier time).
-    async resetWorld() {
+    // `setUp()`: what the steps before the one it starts at did, with no messages of it.
+    async resetWorld(setUp) {
       sim.setNow(STORY_START);
       sim.reset();
+      phone?.reset();
+      setUp?.();
       traffic.syncParked();
       panel.reset();
-      phone?.reset();
       overlays.reset();
       await sleep(50);
     },

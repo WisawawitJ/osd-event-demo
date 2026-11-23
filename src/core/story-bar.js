@@ -2,22 +2,26 @@
 // how a visitor takes over from one. Each story has its own element for each; the markup and the styles are the same.
 import {t} from './texts.js';
 import {esc, icon, morph} from './dom.js';
-import {world} from './clock.js';
+import {world, onTick} from './clock.js';
 
-// `s`: running, auto, paused, waitingForNext, index, total. `idle`: the line shown before it plays. `more`: what else the
-// bar holds. Its controls carry data-bar: play, pause, resume, next, restart, free (exit), auto (the checkbox).
+// `s`: running, auto, loop, paused, waitingForNext, index, total, progress. `idle`: the line shown before it plays. `more`: what else the
+// bar holds. Its controls carry data-bar: play, pause, resume, next, restart, free (exit), step (one of
+// the segments, to go to it), auto and loop (checkboxes).
 function storyBar(s, {idle, more = ''}) {
-  const dots = Array.from(
-    {length: s.total},
-    (_, i) => `<i class="${i < s.index ? 'done' : i === s.index ? 'now' : ''}"></i>`,
-  ).join('');
+  const dots = Array.from({length: s.total}, (_, i) => {
+    const now = i === s.index,
+      progress = now && s.progress !== null ? ` style="--progress:${s.progress.toFixed(3)}"` : '',
+      label = esc(t('story.step', {n: i + 1, total: s.total}));
+    return `<button data-bar="step" data-step="${i}" aria-label="${label}" title="${label}"><i class="${i < s.index ? 'done' : now ? 'now' : ''}"${progress}></i></button>`;
+  }).join('');
   const main = !s.running
     ? `<button class="primary-button" data-bar="play">${icon('play')}<span>${t('story.play')}</span></button>`
     : s.auto
       ? `<button class="primary-button" data-bar="${s.paused ? 'resume' : 'pause'}">${icon(s.paused ? 'play' : 'pause')}<span>${t(s.paused ? 'story.resume' : 'story.pause')}</span></button>`
       : `<button class="primary-button" data-bar="next"${s.waitingForNext ? ' data-cue="true"' : ''}>${icon('next')}<span>${t('next')}</span></button>`;
   return `<div class="pk-bar-main">${main}${s.running ? `<button data-bar="restart">${icon('restart')}<span>${t('story.restart')}</span></button><button data-bar="free" class="pk-exit-story" title="Esc">${icon('x')}<span>${t('story.exit')}</span></button>` : ''}
-      <label class="pk-switch"><input type="checkbox" data-bar="auto"${s.auto ? ' checked' : ''}><span>${t('story.autoAdvance')}</span></label></div>
+      <label class="pk-switch"><input type="checkbox" data-bar="auto"${s.auto ? ' checked' : ''}><span>${t('story.autoAdvance')}</span></label>
+      <label class="pk-switch"><input type="checkbox" data-bar="loop"${s.loop ? ' checked' : ''}><span>${t('story.loop')}</span></label></div>
       <div class="pk-bar-progress">${s.running ? `<span>${t('story.step', {n: s.index + 1, total: s.total})}</span><div class="pk-dots">${dots}</div>` : `<span class="pk-bar-idle">${idle}</span>`}</div>${more}`;
 }
 
@@ -38,10 +42,11 @@ export function createPress() {
 }
 
 // A story's bar, working: `el`, its `story`, `idle()` and `more()` (texts and buttons as above, drawn each time), `leave()`
-// (Exit and Esc), `buttons` (what `more`'s own data-bar buttons do). Returns its redraw. Pause and Resume are the day's
+// (Exit and Esc), `buttons` (what `more`'s own data-bar buttons do), `caption` (its caption's element, which
+// shows the step's progress too). Returns its redraw. Pause and Resume are the day's
 // (the timeline's Pause too): everything stands still with the story. Playing or going on needs time to pass: it runs a
 // paused day again (a story that ends does too, by itself).
-export function wireStoryBar(el, {story, idle, more = () => '', leave, buttons = {}, signal}) {
+export function wireStoryBar(el, {story, idle, more = () => '', leave, buttons = {}, caption, signal}) {
   // In place (morph): rebuilt, the button just pressed lost its focus at every step, and a press under way its target.
   const render = () => {
     morph(el, storyBar(story, {idle: idle(), more: more()}));
@@ -52,6 +57,7 @@ export function wireStoryBar(el, {story, idle, more = () => '', leave, buttons =
     pause: () => world.setPaused(true),
     resume: () => world.setPaused(false),
     next: () => story.next(),
+    step: (button) => story.goTo(Number(button.dataset.step)),
     free: leave,
     ...buttons,
   };
@@ -59,7 +65,7 @@ export function wireStoryBar(el, {story, idle, more = () => '', leave, buttons =
   const press = createPress(),
     buttonOf = (event) => event.target.closest('[data-bar]'),
     // What a button does as it stands (the phone's shows or hides by its state).
-    actionOf = (button) => `${button?.dataset.bar} ${button?.getAttribute('aria-pressed')}`;
+    actionOf = (button) => `${button?.dataset.bar} ${button?.dataset.step} ${button?.getAttribute('aria-pressed')}`;
   listen(el, 'pointerdown', (event) => press.down('pointer', actionOf(buttonOf(event))));
   listen(el, 'pointercancel', () => press.cancel('pointer'));
   listen(el, 'focusout', () => press.cancel('key'));
@@ -67,12 +73,13 @@ export function wireStoryBar(el, {story, idle, more = () => '', leave, buttons =
     const button = buttonOf(event),
       what = button?.dataset.bar;
     if (!press.isClickOf(event.detail ? 'pointer' : 'key', actionOf(button)) || !act[what]) return;
-    if (['play', 'restart', 'next'].includes(what)) world.setPaused(false);
-    act[what]();
+    if (['play', 'restart', 'next', 'step'].includes(what)) world.setPaused(false);
+    act[what](button);
     render();
   });
   listen(el, 'change', (event) => {
     if (event.target.dataset.bar === 'auto') story.setAuto(event.target.checked);
+    if (event.target.dataset.bar === 'loop') story.setLoop(event.target.checked);
   });
   // Enter held down presses once (its repeats went on to press what the button had become).
   listen(el, 'keydown', (event) => {
@@ -87,6 +94,17 @@ export function wireStoryBar(el, {story, idle, more = () => '', leave, buttons =
     if (kind === 'rate') render();
   });
   signal?.addEventListener('abort', offRate, {once: true});
+  // The step on show fills up as it goes, on auto-advance.
+  const offTick = onTick(() => {
+    const progress = story.running ? story.progress : null;
+    if (progress === null) {
+      caption?.style.removeProperty('--progress');
+      return;
+    }
+    for (const shown of [el.querySelector('.pk-dots .now'), caption])
+      shown?.style.setProperty('--progress', progress.toFixed(3));
+  });
+  signal?.addEventListener('abort', offTick, {once: true});
   return render;
 }
 

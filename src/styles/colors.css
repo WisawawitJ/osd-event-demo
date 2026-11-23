@@ -7,7 +7,7 @@
   --osd-grey: #55565a;
   --osd-deep: #023e8a;
   --surface: #fff;
-  --surface-caption: #fffffff2;
+  --surface-caption: #ffffffc4;
   --surface-title: #fff;
   --surface-raised: #fff;
   --field: #fff;
@@ -68,7 +68,7 @@
 }
 html[data-night='true'] {
   --surface: #151f29;
-  --surface-caption: #151f29;
+  --surface-caption: #151f29c4;
   --surface-title: #151f29f0;
   --surface-raised: #253445;
   --field: #121b24;

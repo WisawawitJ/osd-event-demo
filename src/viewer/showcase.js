@@ -212,6 +212,7 @@ export function createShowcase({
     story,
     idle: () => t('story.idleBuilding'),
     leave: () => story.stop(),
+    caption,
     signal,
   });
   function renderStory() {
@@ -330,11 +331,18 @@ export function createShowcase({
     followState: () => director.follow,
     toggleFollow: () => director.toggleFollow(),
   });
-  // Every touch on the page starts the quiet minute again.
+  // Every touch on the page starts the quiet minute again. Outside the 3D view, one that presses or types into nothing is
+  // only reading (the page scrolled by a wheel, a finger or the keys), not taking over: a press counts at its click,
+  // which a finger that scrolls never gets to; the slider's at once.
+  const CONTROL = 'button, a, input, select, textarea, label, summary, [data-request]';
   onTouch(
     (event) => {
-      const on = (selector) => Boolean(event.target.closest?.(selector));
-      director.touch({own: on('#day-follow, #day-pause, #day-speed, #lang-toggle'), land: on('.parking-bar')});
+      const on = (selector) => Boolean(event.target.closest?.(selector)),
+        uses = on('#viewport, #day-time') || (on(CONTROL) && ['click', 'keydown'].includes(event.type));
+      director.touch({
+        own: !uses || on('#day-follow, #day-pause, #day-speed, #lang-toggle'),
+        land: on('.parking-bar'),
+      });
     },
     {signal},
   );

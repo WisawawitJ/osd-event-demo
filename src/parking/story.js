@@ -11,7 +11,9 @@ export function createStory(ctx) {
   let shownVariant,
     token = 0,
     index = -1,
+    began = 0,
     auto = true,
+    loop = false,
     running = false,
     nextWaiter = null,
     requestId = null,
@@ -49,7 +51,8 @@ export function createStory(ctx) {
     // A step the presenter can do by hand. In auto mode it is done for them after a pause.
     async function userAction({cue, hint, done, perform, delay = 2600}) {
       ctx.cue(cue);
-      ctx.hint(hint);
+      // The hint is the presenter's: on auto-advance it is done by itself.
+      if (!auto) ctx.hint(hint);
       // Auto-advance turned off while it waits: the presenter takes the step over (it was done for them anyway).
       // A touch on the console or the alert meanwhile (Reject, a reason to open with) waits on: done for them anyway,
       // the presenter's own choice was overridden. Until 6 s pass with no touch.
@@ -73,6 +76,7 @@ export function createStory(ctx) {
         }
       }
       if (!auto && !done()) {
+        ctx.hint(hint);
         // Next performs the action for the presenter; stopping the story (token bumped first) must not.
         await Promise.race([
           until(done, 1e9),
@@ -101,6 +105,45 @@ export function createStory(ctx) {
   };
   const storyRequest = () => ctx.sim.state.requests.find((q) => q.id === requestId);
   const noPass = () => storyRequest()?.status !== 'approved';
+  function sendRequest() {
+    const v = STORY.visitor;
+    ctx.phone.setForm({
+      name: v.name,
+      email: v.email,
+      contact: STORY.contact,
+      company: v.company,
+      phone: v.phone,
+      plate: STORY.plate,
+      province: STORY.province,
+      consent: true,
+    });
+    ctx.phone.setColor(STORY.color);
+    requestId = ctx.phone.submit()?.id;
+  }
+  // What the steps before `from` did, for a story that starts there: the form filled in, the request sent and approved,
+  // the visitor's car parked, the unknown car turned away.
+  function setUp(from) {
+    const {sim, phone} = ctx,
+      {name, email, company, phone: number} = STORY.visitor;
+    phone.setOpen(from < 5);
+    sim.setNow(at(9, 2));
+    if (from === 1) phone.setForm({name, email, contact: STORY.contact, company, phone: number});
+    if (from >= 2) {
+      phone.setForm({faceConsent: true, face: true, notes: STORY.notes});
+      sendRequest();
+    }
+    if (from >= 4) sim.approve(requestId, {instant: true});
+    if (from >= 6) {
+      sim.setNow(at(9, 41));
+      const {plate, province, color} = STORY;
+      sim.recordEntry({plate, province, color, type: 'guest', stallId: sim.freeStall('guest')?.id});
+    }
+    if (from >= 7) {
+      sim.setNow(at(9, 52));
+      sim.resolveAlert(sim.raiseAlert(STORY.unknown).id, 'deny');
+    }
+  }
+  // `takes`: about how long the step lasts on auto-advance (ms), its hold with it: for the bar (`progress`).
   const steps = [
     {
       key: 's1',
@@ -125,6 +168,7 @@ export function createStory(ctx) {
         s.alive();
       },
       hold: 1500,
+      takes: 5200,
     },
     {
       key: 's2',
@@ -147,22 +191,10 @@ export function createStory(ctx) {
         ctx.phone.setCue(null);
         // Its own details again before sending: a visitor clearing a field or the consent box meanwhile left the request
         // unsent, and the rest of the story told of one that never was.
-        const v = STORY.visitor;
-        ctx.phone.setForm({
-          name: v.name,
-          email: v.email,
-          contact: STORY.contact,
-          company: v.company,
-          phone: v.phone,
-          plate: STORY.plate,
-          province: STORY.province,
-          consent: true,
-        });
-        ctx.phone.setColor(STORY.color);
-        const r = ctx.phone.submit();
-        requestId = r?.id;
+        sendRequest();
       },
       hold: 1800,
+      takes: 7800,
     },
     {
       key: 's3',
@@ -173,6 +205,7 @@ export function createStory(ctx) {
         ctx.panel.show('requests', {request: requestId});
       },
       hold: 4500,
+      takes: 6100,
     },
     // Rejected already (at step 3, its Reject on screen there), or now: the rejected captions.
     {
@@ -195,12 +228,14 @@ export function createStory(ctx) {
         if (storyRequest()?.status === 'approved') await s.until(() => emailed(storyRequest()), 8000);
       },
       hold: 2500,
+      takes: 7000,
     },
     {
       key: 's5',
       cam: 'lot',
       variant: () => (!noPass() ? '' : storyRequest()?.status === 'revoked' ? 'v' : 'r'),
       async run(s) {
+        ctx.panel.show('requests', {request: requestId});
         ctx.phone.setOpen(true);
         // On the story's request (a tap on the phone's New request since then left it on an empty form).
         ctx.phone.follow(requestId);
@@ -210,6 +245,7 @@ export function createStory(ctx) {
         ctx.phone.setScreen('mail');
       },
       hold: 5500,
+      takes: 6800,
     },
     {
       key: 's6',
@@ -261,6 +297,7 @@ export function createStory(ctx) {
         ctx.panel.show('overview');
       },
       hold: 2500,
+      takes: 25000,
     },
     {
       key: 's7',
@@ -297,6 +334,7 @@ export function createStory(ctx) {
         s.alive();
       },
       hold: 1500,
+      takes: 24500,
     },
     {
       key: 's8',
@@ -316,6 +354,7 @@ export function createStory(ctx) {
         ctx.actions.simulate('registered', {fromX: -60, quiet: true, west: false});
       },
       hold: 6500,
+      takes: 8000,
     },
     {
       key: 's9',
@@ -326,6 +365,7 @@ export function createStory(ctx) {
         ctx.panel.flash(ctx.sim.state.audit[0]);
       },
       hold: 7000,
+      takes: 7600,
     },
     // Skipped when the visitor never parked (turned away at step 6): nothing to drive out.
     {
@@ -345,11 +385,15 @@ export function createStory(ctx) {
         ctx.panel.show('overview');
       },
       hold: 3000,
+      takes: 18500,
     },
   ];
 
-  async function run() {
+  // From step `from` (the steps before it taken as done), then, looping, from the first.
+  async function run(from = 0) {
     const my = ++token;
+    ctx.cue(null);
+    ctx.hint(null);
     // A run restarted while it waited for Next lets that wait go (its Next pulsed on, and it never settled).
     if (nextWaiter) {
       const waiting = nextWaiter;
@@ -359,34 +403,39 @@ export function createStory(ctx) {
     running = true;
     emit();
     try {
-      await ctx.resetWorld();
-      for (let i = 0; i < steps.length; i++) {
-        // Stopped meanwhile (while the world reset, or a step's hold): no further step, which would set the clock (nor
-        // its number: stopped during the reset, the story was left at step 1).
-        const step = steps[i],
-          s = api(my);
-        s.alive();
-        index = i;
-        if (step.skip?.()) continue;
-        shownVariant = undefined;
-        ctx.caption(captionFor(index));
-        emit();
-        ctx.fly(step.cam, 1600);
-        await step.run(s);
-        s.alive();
-        // Auto-advance turned off during the hold: it waits for Next from there (it went on to the next step).
-        if (auto) await s.wait(step.hold, () => !auto);
-        // The bar redrawn as Next starts and stops waiting: its pulse showed only while the next step ran.
-        if (!auto) {
-          await new Promise((r) => {
-            nextWaiter = r;
-            emit();
-          });
-          nextWaiter = null;
-          emit();
+      do {
+        const first = from;
+        from = 0;
+        await ctx.resetWorld(first ? () => setUp(first) : undefined);
+        for (let i = first; i < steps.length; i++) {
+          // Stopped meanwhile (while the world reset, or a step's hold): no further step, which would set the clock (nor
+          // its number: stopped during the reset, the story was left at step 1).
+          const step = steps[i],
+            s = api(my);
           s.alive();
+          index = i;
+          began = demoNow();
+          if (step.skip?.()) continue;
+          shownVariant = undefined;
+          ctx.caption(captionFor(index));
+          emit();
+          ctx.fly(step.cam, 1600);
+          await step.run(s);
+          s.alive();
+          // Auto-advance turned off during the hold: it waits for Next from there (it went on to the next step).
+          if (auto) await s.wait(step.hold, () => !auto);
+          // The bar redrawn as Next starts and stops waiting: its pulse showed only while the next step ran.
+          if (!auto) {
+            await new Promise((r) => {
+              nextWaiter = r;
+              emit();
+            });
+            nextWaiter = null;
+            emit();
+            s.alive();
+          }
         }
-      }
+      } while (loop);
       running = false;
       index = -1;
       ctx.caption(null);
@@ -404,8 +453,11 @@ export function createStory(ctx) {
       }
       return 'stopped';
     } finally {
-      ctx.cue(null);
-      ctx.hint(null);
+      // (A run that replaced this one has its own by now.)
+      if (my === token) {
+        ctx.cue(null);
+        ctx.hint(null);
+      }
     }
   }
 
@@ -416,6 +468,14 @@ export function createStory(ctx) {
     get auto() {
       return auto;
     },
+    // At the end it plays again from the start, the car park as it was then.
+    get loop() {
+      return loop;
+    },
+    setLoop(on) {
+      loop = on;
+      emit();
+    },
     // Pause is the day's: everything stands still, the story with it.
     get paused() {
       return world.paused;
@@ -425,6 +485,10 @@ export function createStory(ctx) {
     },
     get total() {
       return steps.length;
+    },
+    // How far the step on show is, 0 to 1, on auto-advance (one that takes longer waits near the end), else null.
+    get progress() {
+      return running && auto && index >= 0 ? Math.min(0.97, (demoNow() - began) / steps[index].takes) : null;
     },
     get waitingForNext() {
       return Boolean(nextWaiter);
@@ -437,6 +501,10 @@ export function createStory(ctx) {
       auto = a;
       if (a && nextWaiter) nextWaiter();
       emit();
+    },
+    // Straight to a step, its scene set up as the story would have left it.
+    goTo(i) {
+      if (running && steps[i]) void run(i);
     },
     next() {
       if (nextWaiter) nextWaiter();

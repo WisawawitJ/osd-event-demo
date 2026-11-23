@@ -281,17 +281,11 @@ addTexts({
   'ph.plateHelp': ['ตัวเลข 0–9 และอักษรไทย เช่น 7กข 4821', 'Digits 0–9 and Thai letters, e.g. 7กข 4821'],
 
   // story
-  'story.idle': [
-    'กด “เริ่มสาธิต” เพื่อดูขั้นตอนของผู้มาติดต่อ หรือทดลองเองได้ทุกส่วน',
-    'Choose “Play the story” to follow one visitor, or try any part yourself',
-  ],
-  'story.freeMode': [
-    'จบการสาธิตแล้ว · ทดลองเองได้ทุกส่วน ทั้งคอนโซลเจ้าหน้าที่ มือถือ หรือส่งรถไปที่ไม้กั้น',
-    'Story stopped · try anything: the staff console, the phone, or send cars to the barrier',
-  ],
+  'story.idle': ['กด “เริ่มสาธิต” เพื่อดูขั้นตอนของผู้มาติดต่อ', 'Choose “Play the story” to follow one visitor'],
+  'story.freeMode': ['จบการสาธิตแล้ว', 'Story stopped'],
 
-  'story.hint.approve': ['ลองกด “อนุมัติ” ในคอนโซลเจ้าหน้าที่', 'Try “Approve” in the staff console'],
-  'story.hint.alert': ['เลือก “เปิดให้เข้า” หรือ “ไม่ให้เข้า” ได้เลย', 'Choose “Open” or “Deny”'],
+  'story.hint.approve': ['กด “อนุมัติ” ในคอนโซลเจ้าหน้าที่', 'Press “Approve” in the staff console'],
+  'story.hint.alert': ['เลือก “เปิดให้เข้า” หรือ “ไม่ให้เข้า”', 'Choose “Open” or “Deny”'],
   'story.hint.noPass': [
     'ทะเบียนนี้ไม่มีสิทธิ์จอดที่ใช้ได้ ไม้กั้นจึงไม่เปิด และรถถอยออกไป',
     'This plate has no valid pass: the barrier stays shut and the car backs out',

@@ -10,5 +10,6 @@ addTexts({
   'story.restart': ['เริ่มใหม่', 'Restart'],
   'story.exit': ['จบการสาธิต', 'Exit story'],
   'story.autoAdvance': ['เล่นอัตโนมัติ', 'Auto-advance'],
+  'story.loop': ['เล่นวนซ้ำ', 'Loop'],
   'story.step': ['ขั้นที่ {n} / {total}', 'Step {n} / {total}'],
 });

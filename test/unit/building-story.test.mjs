@@ -208,3 +208,75 @@ test('a press in the panel: auto-advance waits on, and does nothing in between, 
   await advance(hold - 100);
   assert.equal(story.index, 1);
 });
+
+test('looping, it plays from the start again, over and over, until Loop is off', async () => {
+  const {story, log} = page();
+  story.setLoop(true);
+  story.play();
+  assert.ok(await runUntil(() => log.acts.length === ACTS.length * 3, 600000), 'three times round');
+  assert.deepEqual(log.acts, [...ACTS, ...ACTS, ...ACTS]);
+  assert.ok(story.running && world.held);
+  story.setLoop(false);
+  assert.ok(await runUntil(() => !story.running, 200000), 'the last time');
+  assert.ok(!world.held);
+});
+
+test('a looping story a visitor took over plays again after a quiet minute', async () => {
+  const {w, story, log, select} = page();
+  const d = createDirector({
+    select,
+    parking: w,
+    building: story,
+    current: () => log.stops.at(-1) ?? 'overview',
+    followFromStart: true,
+  });
+  live.push(d);
+  story.setLoop(true);
+  story.play();
+  await w.run(500); // as the page opens
+  d.touch();
+  story.stop({keep: true});
+  await w.run(50000);
+  assert.ok(!story.running, 'the visitor has it');
+  assert.ok(await runUntil(() => story.running, 30000));
+  story.setLoop(false);
+  story.stop();
+  await w.run(90000);
+  assert.ok(!story.running, 'not once Loop is off');
+});
+
+test("the step's progress, on auto-advance: from 0 up to 1, never back; none on Next", async () => {
+  const {story} = page();
+  story.play();
+  let index = 0,
+    last = 0;
+  while (story.running) {
+    if (story.index !== index) {
+      assert.ok(last > 0.85, `step ${index + 1} ended at ${last}`);
+      index = story.index;
+      last = 0;
+    }
+    assert.ok(story.progress >= last && story.progress <= 1, `${story.progress} after ${last}`);
+    last = story.progress;
+    await advance(200);
+  }
+  assert.equal(story.progress, null);
+  story.play({auto: false});
+  assert.equal(story.progress, null);
+});
+
+test('a step clicked: it goes there from wherever it is, in flight too, and on from there', async () => {
+  const {story, log} = page();
+  story.play();
+  await advance(1000); // on the way
+  story.goTo(3);
+  assert.equal(story.index, 3);
+  assert.ok(await runUntil(() => story.cue === 'pond-low', 10000));
+  world.setPaused(true);
+  story.goTo(5);
+  assert.ok(!world.paused);
+  assert.ok(await runUntil(() => !story.running, 100000));
+  assert.deepEqual(log.acts, ['cloud', 'sun']);
+  story.goTo(2);
+  assert.ok(!story.running, 'not when it is not playing');
+});

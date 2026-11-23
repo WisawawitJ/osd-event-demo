@@ -38,12 +38,12 @@ export const panels = {
     return `<p class="dashboard-intro">${L('ดูสถานะทั้งอาคาร และเลือกไปยังจุดที่สนใจ', 'See the status of the whole building and pick a spot to visit')}</p><div class="metric-pair">${metric(L('พลังงานจากโซลาร์', 'Solar power'), state.solar.toFixed(1), 'kW', timeLabel())}${metric(L('ห้องประชุม', 'Meeting room'), state.occupied ? L('ใช้งาน', 'In use') : L('ว่าง', 'Free'), '', L('จากเซนเซอร์เรดาร์', 'From the radar'))}</div><div class="dashboard-section"><h3>${L('ระบบในอาคาร', 'Building systems')}</h3>${system('light', L('แสงสว่าง', 'Lighting'), L('จำนวนไฟที่เปิด', 'Lights that are on'), L(`${lights} เปิด`, `${lights} on`))}${system('air', L('เครื่องปรับอากาศ', 'Air conditioning'), L('จำนวนแอร์ที่เปิด', 'AC units that are on'), L(`${ac} เปิด`, `${ac} on`))}${system('drop', L('บ่อปลา', 'Fish pond'), state.pondAlert ? L('ระดับน้ำต่ำกว่าค่าที่ตั้ง', 'Water below the set level') : L('ระดับน้ำปกติ', 'Water within the set range'), state.water + '%')}</div><div class="dashboard-section"><h3>${L('จุดที่น่าสนใจ', 'Places to visit')}</h3>${events(
       getLang() === 'en'
         ? [
-            ['Meeting room', 'Tap the meeting room to try the lights and AC'],
+            ['Meeting room', 'Lights and AC follow how the room is used'],
             ['Rooftop', 'See the power the solar panels make'],
             ['Car park', 'Watch plates read at the barrier and cars find their bays'],
           ]
         : [
-            ['ห้องประชุม', 'แตะห้องประชุมเพื่อทดลองไฟและแอร์'],
+            ['ห้องประชุม', 'ไฟและแอร์ทำงานตามการใช้ห้อง'],
             ['ดาดฟ้า', 'ดูการผลิตไฟจากแผงโซลาร์'],
             ['ลานจอดรถ', 'ดูการอ่านทะเบียนที่ไม้กั้นและรถเข้าช่องจอด'],
           ],

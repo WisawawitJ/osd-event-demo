@@ -4,7 +4,7 @@
 // did. Runs as the car park's story does (Next by Next, or on auto-advance) and without a page, on the engine's clock:
 // the page (showcase.js) flies the camera (`select`), sets a step's scene (`prepare`), works the buttons (`act`) and
 // draws the bar and the caption (`changed`). Node tests give it stand-ins.
-import {world, later, cancelLater} from 'osd/core/clock.js';
+import {world, later, cancelLater, demoNow} from 'osd/core/clock.js';
 
 // `hold`: how long the step stays, on auto-advance, after its button is pressed (or after the camera arrives, at a step
 // with none), in simulation time. `act`: what the button does; `text`: before it, `done`: after it; `hint`: the cue's.
@@ -31,7 +31,7 @@ export const STEPS = [
       'เรดาร์ตรวจพบ 6 คน ระบบเปิดไฟและแอร์ให้อัตโนมัติ และทำความเย็นลงสู่ 24 °C',
       'The radar detects six people. The lights and AC come on automatically and the room cools towards 24 °C',
     ],
-    hint: ['ลองกด “จำลองเริ่มประชุม”', 'Try “Simulate a meeting”'],
+    hint: ['กด “จำลองเริ่มประชุม”', 'Press “Simulate a meeting”'],
   },
   {
     stop: 'meeting',
@@ -43,7 +43,7 @@ export const STEPS = [
       'เมื่อไม่มีคนในห้อง ระบบปิดไฟและแอร์ให้อัตโนมัติ ช่วยประหยัดพลังงาน',
       'With nobody in the room, the lights and AC switch off automatically, saving energy',
     ],
-    hint: ['ลองกด “จำลองเลิกประชุม”', 'Try “End the meeting”'],
+    hint: ['กด “จำลองเลิกประชุม”', 'Press “End the meeting”'],
   },
   {
     stop: 'pond',
@@ -52,7 +52,7 @@ export const STEPS = [
     title: ['บ่อปลาส่งสัญญาณเตือน', 'The fish pond raises an alert'],
     text: ['ระดับน้ำในบ่อปลาชั้น 1 ค่อย ๆ ลดลง', 'The water level in the floor 1 pond is slowly dropping'],
     done: ['ระดับน้ำต่ำกว่า 65% ระบบแจ้งเตือนทันที', 'The level falls below 65% and the system raises an alert at once'],
-    hint: ['ลองกด “จำลองระดับน้ำต่ำ”', 'Try “Simulate low water”'],
+    hint: ['กด “จำลองระดับน้ำต่ำ”', 'Press “Simulate low water”'],
   },
   {
     stop: 'pond',
@@ -64,7 +64,7 @@ export const STEPS = [
       'ระดับน้ำกลับมาที่ 82% ระบบยกเลิกการแจ้งเตือนให้อัตโนมัติ',
       'The level is back at 82% and the alert clears automatically',
     ],
-    hint: ['ลองกด “คืนค่าระดับน้ำ”', 'Try “Restore water level”'],
+    hint: ['กด “คืนค่าระดับน้ำ”', 'Press “Restore water level”'],
   },
   {
     stop: 'energy',
@@ -79,7 +79,7 @@ export const STEPS = [
       'กำลังผลิตลดลง อาคารใช้ไฟจากกริดเสริมโดยไม่สะดุด',
       'Solar output drops and the grid makes up the difference without interruption',
     ],
-    hint: ['ลองกด “จำลองเมฆบังแผง”', 'Try “Simulate clouds over the panels”'],
+    hint: ['กด “จำลองเมฆบังแผง”', 'Press “Simulate clouds over the panels”'],
   },
   {
     stop: 'energy',
@@ -91,21 +91,22 @@ export const STEPS = [
       'แผงโซลาร์กลับมาผลิตไฟได้มากขึ้น อาคารใช้ไฟจากกริดน้อยลง',
       'The panels produce more again, and the building uses less from the grid',
     ],
-    hint: ['ลองกด “จำลองแดดกลับมา”', 'Try “Simulate the sun returning”'],
+    hint: ['กด “จำลองแดดกลับมา”', 'Press “Simulate the sun returning”'],
   },
   {
     stop: 'overview',
     hold: 8000,
-    title: ['ลองใช้งานด้วยตัวเอง', 'Try it yourself'],
+    title: ['ระบบอาคารทำงานร่วมกันตลอดวัน', 'The building’s systems, working together all day'],
     text: [
-      'เลือกจุดใดก็ได้เพื่อทดลอง หรือไปที่ “ที่จอดรถ” เพื่อดูการขอสิทธิ์และเข้าจอดของคุณชูใจ',
-      'Pick any spot to try it, or go to Parking to see how Chujai requested a pass and parked',
+      'เปิดปิดไฟและแอร์ตามการใช้งาน แจ้งเตือนเมื่อมีสิ่งผิดปกติ และใช้ไฟจากแสงอาทิตย์',
+      'Lights and AC follow how rooms are used, alerts go up when something is wrong, and the sun supplies power',
     ],
   },
 ];
 // On auto-advance: how long a cue waits for the presenter before the step is done for them, and the tap that shows it.
 const CUE_MS = 3600,
-  TAP_MS = 250;
+  TAP_MS = 250,
+  FLIGHT_MS = 2000; // about how long the camera takes to a stop
 // A story started outside these hours moves the day on to START first: there is daylight for the solar panels, and an
 // hour (the clock runs at real speed) before the day's schedule next touches the rooms or the pond (14:00, 14:50; a cue
 // left waiting as it did had its button turn into the opposite one).
@@ -127,9 +128,11 @@ export function createBuildingStory({
 }) {
   let running = false,
     auto = true,
+    loop = false,
     index = -1,
     // 'flying' to the stop, 'cue': its button waits to be pressed, 'hold': done here.
     phase = 'flying',
+    since = 0,
     acted = false,
     generation = 0,
     timer = null,
@@ -162,11 +165,13 @@ export function createBuildingStory({
     const mine = ++generation;
     cancelLater(timer);
     if (i >= STEPS.length) {
-      end();
+      if (loop) play();
+      else end();
       return;
     }
     index = i;
     phase = 'flying';
+    since = demoNow();
     acted = false;
     changed();
     const {stop, act: kind} = STEPS[i];
@@ -186,6 +191,7 @@ export function createBuildingStory({
   }
   function wait() {
     cancelLater(timer);
+    since = demoNow();
     if (!auto) return;
     if (phase === 'hold') after(() => void go(index + 1), step().hold);
     else if (phase === 'cue')
@@ -202,12 +208,32 @@ export function createBuildingStory({
     wait();
     changed();
   }
+  // From the start. It needs time to pass (a paused day runs again) and daylight; while it plays the clock runs at
+  // real speed, so the building's schedule does not take back what a step did.
+  function play({auto: a = auto} = {}) {
+    if (running) end();
+    auto = a;
+    running = true;
+    world.setPaused(false);
+    const minute = world.minute();
+    if (minute < DAY_FROM || minute >= DAY_TO) world.jumpTo(START);
+    release = world.hold();
+    void go(0);
+  }
   return {
     get running() {
       return running;
     },
     get auto() {
       return auto;
+    },
+    // At the end it plays again from the start.
+    get loop() {
+      return loop;
+    },
+    setLoop(on) {
+      loop = on;
+      changed();
     },
     get paused() {
       return world.paused;
@@ -221,35 +247,40 @@ export function createBuildingStory({
     get waitingForNext() {
       return running && !auto && phase !== 'flying';
     },
+    // How far the step is, 0 to 1, on auto-advance (near the end it waits for what takes longer), else null.
+    get progress() {
+      if (!running || !auto || !step()) return null;
+      const cue = step().act ? CUE_MS + TAP_MS : 0,
+        parts = {flying: [0, FLIGHT_MS], cue: [FLIGHT_MS, cue], hold: [FLIGHT_MS + cue, step().hold]},
+        [before, length] = parts[phase];
+      return (before + Math.min(demoNow() - since, length)) / (FLIGHT_MS + cue + step().hold);
+    },
     // The button the step waits for.
     get cue() {
       return running && phase === 'cue' ? step().act : null;
     },
-    // [thai, english] each: the step's title, its line as things stand, and the cue's hint.
+    // [thai, english] each: the step's title, its line as things stand, and the cue's hint (on Next:
+    // on auto-advance it is pressed by itself).
     get caption() {
       const s = step();
       return running && s
-        ? {title: s.title, body: (acted && s.done) || s.text, hint: phase === 'cue' ? s.hint : null}
+        ? {title: s.title, body: (acted && s.done) || s.text, hint: phase === 'cue' && !auto ? s.hint : null}
         : null;
     },
-    // From the start. It needs time to pass (a paused day runs again) and daylight; while it plays the clock runs at
-    // real speed, so the building's schedule does not take back what a step did.
-    play({auto: a = auto} = {}) {
-      if (running) end();
-      auto = a;
-      running = true;
-      world.setPaused(false);
-      const minute = world.minute();
-      if (minute < DAY_FROM || minute >= DAY_TO) world.jumpTo(START);
-      release = world.hold();
-      void go(0);
-    },
+    play,
     // Presses the cued button, or goes on to the next step (a paused day runs again). Not while the camera flies.
     next() {
       if (!running || phase === 'flying') return;
       world.setPaused(false);
       if (phase === 'cue') press();
       else void go(index + 1);
+    },
+    // Straight to a step: what the one on show set goes back to the day's schedule first (each sets its own scene).
+    goTo(i) {
+      if (!running || !STEPS[i]) return;
+      world.setPaused(false);
+      restore();
+      void go(i);
     },
     // The presenter pressed the cued button.
     press,

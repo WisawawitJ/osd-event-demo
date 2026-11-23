@@ -714,7 +714,9 @@ export function createParkingSim() {
       flags.push('req.flag.overlap');
     return flags;
   }
-  function approve(id) {
+  // `instant`: ATOM confirmed and the ticket sent at once (the story set up at a later step).
+  function approve(id, {instant = false} = {}) {
+    const soon = instant ? (fn) => fn() : current;
     const req = state.requests.find((q) => q.id === id);
     if (!req || req.status !== 'pending') return;
     req.status = 'approved';
@@ -739,13 +741,13 @@ export function createParkingSim() {
     audit('staff.name', 'a.approve', {target: req.plate});
     emit('request', req);
     // Simulated ATOM confirms the vehicle and person, then the ticket goes out (not if revoked in the meantime).
-    current(() => {
+    soon(() => {
       if (req.status !== 'approved') return; // revoked before ATOM confirmed: the add was withdrawn (see revoke)
       vehicle.sync = 'synced';
       req.syncing = false;
       req.history.push({at: now(), key: 'h.atom'});
       emit('vehicle', vehicle);
-      current(() => {
+      soon(() => {
         if (req.status !== 'approved') return;
         req.history.push({at: now(), key: 'h.email'});
         sendEmail(req, 'approved');

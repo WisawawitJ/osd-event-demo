@@ -32,8 +32,8 @@ addTexts({
   timeline: ['หนึ่งวันในอาคาร · เวลาจำลอง', 'A day in the building · simulated time'],
   'day.mode': ['เวลาจำลอง', 'Simulated time'],
   'day.follow': [
-    'กล้องไปตามช่วงเวลาของวัน แตะที่ใดก็ได้เพื่อสำรวจเอง',
-    'The camera goes where the day goes; touch anything to explore yourself',
+    'กล้องไปตามช่วงเวลาของวัน และหยุดเมื่อมีผู้ใช้งาน',
+    'The camera goes where the day goes, and stops while someone uses the screen',
   ],
   'day.pause': ['หยุด', 'Pause'],
   'day.speed': ['ความยาวหนึ่งวันจำลอง (เวลาจริง)', 'How long a simulated day takes (real time)'],
@@ -99,8 +99,8 @@ addTexts({
   'stop.meeting.panel': ['ห้องประชุม', 'Meeting room'],
   'stop.meeting.floor': ['ชั้น 4', 'Floor 4'],
   'stop.meeting.chip': [
-    'ห้องประชุมย่อย 2 ชั้น 4 · แตะไฟ แอร์ หรือประตูเพื่อทดลอง',
-    'Meeting room 2, floor 4 · tap a light, the AC or a door to try it',
+    'ห้องประชุมย่อย 2 ชั้น 4 · แตะไฟ แอร์ หรือประตูเพื่อเปิดปิด',
+    'Meeting room 2, floor 4 · tap a light, the AC or a door to control it',
   ],
   'stop.pond.panel': ['บ่อปลาและสวน', 'Fish pond and garden'],
   'stop.pond.floor': ['ชั้น 1', 'Floor 1'],
@@ -112,8 +112,8 @@ addTexts({
   'stop.parking.chip': ['ลานจอด 50 คัน · ไม้กั้นและกล้องอ่านทะเบียน', '50-space car park · barrier and plate cameras'],
   'stop.parking.floor': ['ลานจอดรถ', 'Car park'],
   'story.idleBuilding': [
-    'กด “เริ่มสาธิต” เพื่อดูระบบอาคารในวันประชุม หรือเลือกทดลองเองได้ทุกจุด',
-    'Choose “Play the story” to follow a visitor’s meeting day through the building, or try any stop yourself',
+    'กด “เริ่มสาธิต” เพื่อดูระบบอาคารในวันประชุม',
+    'Choose “Play the story” to follow a visitor’s meeting day through the building',
   ],
   demo: ['ข้อมูลจำลอง', 'Simulated data'],
   disclosure: ['ข้อมูลจำลองเพื่อการสาธิต ไม่ได้เชื่อมต่ออุปกรณ์จริง', 'Simulated data for this demo · no real devices connected'],

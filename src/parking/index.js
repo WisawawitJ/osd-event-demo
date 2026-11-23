@@ -212,6 +212,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
       `<button class="pk-phone-toggle" data-bar="phone" aria-pressed="${phone.isOpen}">${icon('phone')}<span>${phone.isOpen ? t('ph.hide') : t('ph.show')}</span></button>`,
     leave: leaveStory,
     buttons: {phone: () => phone.setOpen(!phone.isOpen)},
+    caption: $('#pk-overlays .pk-caption'),
     signal: abort.signal,
   });
 
