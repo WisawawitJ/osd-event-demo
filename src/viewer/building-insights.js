@@ -91,19 +91,19 @@ export function createBuildingInsights({
       L(`${formatTime(minute)} นาฬิกา · เวลาจำลอง`, `${formatTime(minute)} · simulated time`),
     );
     $('#replay-mode').textContent = world.held
-      ? L('เวลาจริง · เรื่องราวกำลังเล่น', 'Real time · story playing')
+      ? L('กำลังสาธิต', 'Real time · story playing')
       : world.paused
-        ? L('หยุดชั่วคราว · ทุกอย่างหยุดนิ่ง', 'Paused · everything stands still')
+        ? L('หยุดชั่วคราว', 'Paused · everything stands still')
         : {
-            on: L('กล้องตามวันในอาคาร', 'The camera follows the day'),
-            waiting: L('ตามวันต่อเมื่อไม่มีใครแตะ 1 นาที', 'Follows the day again after a quiet minute'),
-            off: L('เวลาจำลอง · เดินตลอด', 'Simulated time · always running'),
+            on: L('เปลี่ยนมุมกล้องตามช่วงเวลา', 'The camera follows the day'),
+            waiting: L('จะตามวันต่อเองหลังไม่มีการแตะ 1 นาที', 'Follows the day again after a quiet minute'),
+            off: L('เวลาจำลอง', 'Simulated time · always running'),
           }[followState()];
     const following = followState() === 'on';
     button(
       $('#day-follow'),
       following ? 'x' : 'camera',
-      following ? L('หยุดตามวัน', 'Stop following') : L('ตามวันในอาคาร', 'Follow the day'),
+      following ? L('หยุดกล้องตามวัน', 'Stop following') : L('กล้องตามวัน', 'Follow the day'),
     );
     $('#day-follow').setAttribute('aria-pressed', String(following));
     button($('#day-pause'), world.paused ? 'play' : 'pause', world.paused ? L('เล่นต่อ', 'Resume') : L('หยุด', 'Pause'));
@@ -192,7 +192,7 @@ export function createBuildingInsights({
               `<button class="incident-item" data-key="${i.id}" data-incident="${i.id}" data-target="${i.destination}" data-insight-layer="${i.layer}"><span class="incident-mark" aria-hidden="true">!</span><span><strong>${i.title}</strong><small>${i.detail}</small><small>${i.hint}</small></span><span aria-hidden="true">↗</span></button>`,
           )
           .join('')
-      : `<p class="incident-clear"><span aria-hidden="true">✓</span> ${L('สถานะอยู่ในช่วงปกติ', 'Readings are within normal range')}</p>`;
+      : `<p class="incident-clear"><span aria-hidden="true">✓</span> ${L('ไม่พบความผิดปกติ', 'Readings are within normal range')}</p>`;
     morph(incidentList, html);
     $('#insight-room').hidden = layer === 'none' || destination !== 'meeting';
     $('#insight-room').textContent =

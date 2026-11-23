@@ -42,7 +42,7 @@ export const dayEvents = [
     'meeting',
     'temperature',
     ['ห้องว่าง แต่แอร์ยังเปิด', 'Room empty, AC still on'],
-    ['ดูสถานะคนและแอร์ประกอบกัน', 'Compare occupancy with the AC'],
+    ['ตรวจสอบสถานะห้องและเครื่องปรับอากาศ', 'Compare occupancy with the AC'],
   ),
   event(
     900,

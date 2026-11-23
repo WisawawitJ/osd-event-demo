@@ -34,7 +34,7 @@ const S = {
   'parking.chip': ['ลานจอด 50 คัน · ไม้กั้นและกล้องอ่านทะเบียน', '50-space car park · barrier and plate cameras'],
   'parking.floor': ['ลานจอดรถ', 'Car park'],
   'sim.data': ['ข้อมูลจำลอง', 'Simulated data'],
-  'sim.disclosure': ['ข้อมูลและเหตุการณ์เพื่อสาธิต · ไม่เชื่อมต่ออุปกรณ์จริง', 'Demo data and events · no real devices connected'],
+  'sim.disclosure': ['ข้อมูลจำลองเพื่อการสาธิต ไม่ได้เชื่อมต่ออุปกรณ์จริง', 'Demo data and events · no real devices connected'],
   back: ['ย้อนกลับ', 'Back'],
   next: ['ถัดไป', 'Next'],
   cancel: ['ยกเลิก', 'Cancel'],
@@ -62,7 +62,7 @@ const S = {
   'ov.entries': ['เข้าวันนี้', 'Entries today'],
   'ov.exits': ['ออกวันนี้', 'Exits today'],
   'ov.pending': ['คำขอรออนุมัติ', 'Pending requests'],
-  'ov.unknown': ['รถไม่รู้จักวันนี้', 'Unknown cars today'],
+  'ov.unknown': ['รถไม่มีสิทธิ์วันนี้', 'Unknown cars today'],
   'ov.hourly': ['รถเข้าออกแต่ละชั่วโมง · วันนี้', 'Entries and exits per hour · today'],
   'ov.attention': ['ต้องดูแล', 'Needs attention'],
   'ov.zones': ['โซนที่จอด', 'Zones'],
@@ -75,7 +75,7 @@ const S = {
   // attention items
   'att.sync.failed': ['ส่งทะเบียนไป ATOM ไม่สำเร็จ', 'Sending the plate to ATOM failed'],
   'att.sync.pending': ['รอ ATOM ยืนยันทะเบียน', 'Waiting for ATOM to confirm'],
-  'att.alert': ['รถไม่รู้จักรออยู่ที่ไม้กั้น', 'Unknown car waiting at the barrier'],
+  'att.alert': ['รถไม่มีสิทธิ์เข้ารออยู่ที่ไม้กั้น', 'Unknown car waiting at the barrier'],
   'att.pending': ['คำขอใหม่รออนุมัติ', 'New request waiting for approval'],
 
   // requests
@@ -160,16 +160,16 @@ const S = {
   'gate.reason.guest': ['แขกที่ยืนยันตัวตนทางโทรศัพท์แล้ว', 'Guest verified by phone'],
   'gate.reason.other': ['อื่น ๆ', 'Other'],
   'gate.manual.alertFirst': [
-    'มีรถไม่รู้จักรออยู่ · ตอบการแจ้งเตือนด้านบนก่อน',
+    'มีรถรอการตัดสินใจที่ไม้กั้น · ตอบการแจ้งเตือนด้านบนก่อน',
     'An unknown car is waiting · answer the alert above first',
   ],
-  'gate.full': ['ที่จอดเต็ม · {plate} ถูกแจ้งให้กลับรถ', 'Car park full · {plate} was turned away'],
-  'gate.openOnce': ['เปิดหนึ่งครั้ง', 'Open once'],
+  'gate.full': ['ที่จอดเต็ม · แจ้ง {plate} ให้กลับรถ', 'Car park full · {plate} was turned away'],
+  'gate.openOnce': ['เปิดไม้กั้น', 'Open once'],
   'gate.log': ['บันทึกการเข้าออก', 'Entry and exit log'],
   'gate.sim': ['ส่งรถมาที่ไม้กั้น', 'Send a car to the barrier'],
   'gate.sim.registered': ['รถพนักงาน', 'Staff car'],
   'gate.sim.visitor': ['รถผู้มาติดต่อ', 'Approved visitor'],
-  'gate.sim.unknown': ['รถไม่รู้จัก', 'Unknown car'],
+  'gate.sim.unknown': ['รถไม่มีสิทธิ์', 'Unknown car'],
   'gate.sim.exit': ['รถออก', 'A car leaves'],
   'gate.sim.coming': ['{plate} กำลังขับมาที่ไม้กั้น', '{plate} is driving to the barrier'],
   'gate.sim.leaving': ['{plate} กำลังออกจากที่จอด', '{plate} is leaving its bay'],
@@ -180,24 +180,24 @@ const S = {
   ],
   'gate.sim.noStaff': ['รถพนักงานทุกคันจอดอยู่แล้ว', 'Every staff car is already parked'],
   'gate.sim.waitingAlert': [
-    'มีรถไม่รู้จักรอการตัดสินใจที่ไม้กั้น · เลือกเปิดหรือไม่ให้เข้าก่อน',
+    'มีรถรอการตัดสินใจที่ไม้กั้น · เลือกเปิดหรือไม่ให้เข้าก่อน',
     'An unknown car is waiting at the barrier · choose Open or Deny first',
   ],
 
   // events
   'ev.entry': ['เข้า', 'In'],
   'ev.exit': ['ออก', 'Out'],
-  'ev.unknown': ['ไม่รู้จัก · รอตัดสินใจ', 'Unknown · waiting'],
+  'ev.unknown': ['ไม่มีสิทธิ์ · รอตัดสินใจ', 'Unknown · waiting'],
   'ev.denied': ['ไม่ให้เข้า', 'Denied'],
   'ev.manual': ['เปิดด้วยตนเอง', 'Opened manually'],
   'ev.exitNoEntry': ['ออกโดยไม่พบรายการเข้า', 'Exit with no entry'],
   'type.staff': ['พนักงาน', 'Staff'],
   'type.vip': ['VIP', 'VIP'],
   'type.guest': ['ผู้มาติดต่อ', 'Visitor'],
-  'type.unknown': ['ไม่รู้จัก', 'Unknown'],
+  'type.unknown': ['ไม่มีสิทธิ์', 'Unknown'],
 
   // alert
-  'alert.title': ['รถไม่รู้จักที่ไม้กั้น', 'Unknown car at the barrier'],
+  'alert.title': ['พบรถไม่มีสิทธิ์เข้า', 'Unknown car at the barrier'],
   'alert.body': [
     'ไม่พบทะเบียนในรายการที่อนุญาต · ไม้กั้นยังปิดอยู่',
     'Plate is not on the allowed list · the barrier stays closed',
@@ -241,11 +241,11 @@ const S = {
   'rep.exits': ['รถออก', 'Exits'],
   'rep.peak': ['สูงสุด', 'Peak'],
   'rep.requests': ['คำขอ ได้รับ / อนุมัติ / ไม่อนุมัติ', 'Requests received / approved / rejected'],
-  'rep.unknown': ['รถไม่รู้จัก / เปิดด้วยตนเอง', 'Unknown cars / manual opens'],
+  'rep.unknown': ['รถไม่มีสิทธิ์ / เปิดด้วยตนเอง', 'Unknown cars / manual opens'],
   'rep.syncFailed': ['ทะเบียนที่ซิงก์ไม่สำเร็จ', 'Plates that failed to sync'],
   'rep.byType': ['รถเข้าแยกตามประเภท', 'Entries by type'],
   'rep.audit': ['บันทึกการตรวจสอบ', 'Audit log'],
-  'rep.audit.note': ['บันทึกแบบเพิ่มอย่างเดียว · แก้ไขหรือลบไม่ได้', 'Append-only · cannot be edited or deleted'],
+  'rep.audit.note': ['ข้อมูลที่บันทึกแล้วไม่สามารถแก้ไขหรือลบได้', 'Append-only · cannot be edited or deleted'],
   'rep.csv.events': ['ดาวน์โหลดเหตุการณ์ CSV', 'Download events CSV'],
   'rep.csv.audit': ['ดาวน์โหลดบันทึก CSV', 'Download audit CSV'],
 
@@ -255,7 +255,7 @@ const S = {
   'a.reject': ['ไม่อนุมัติคำขอ', 'Rejected a request'],
   'a.revoke': ['ยกเลิกสิทธิ์', 'Revoked access'],
   'a.manual': ['เปิดไม้กั้นด้วยตนเอง', 'Opened the barrier manually'],
-  'a.deny': ['ไม่ให้รถไม่รู้จักเข้า', 'Denied an unknown car'],
+  'a.deny': ['ปฏิเสธรถที่ไม่มีสิทธิ์', 'Denied an unknown car'],
   'a.plateAdd': ['เพิ่มทะเบียนรถ', 'Added a plate'],
   'a.plateDisable': ['ปิดสิทธิ์ทะเบียน', 'Disabled a plate'],
   'a.plateEnable': ['เปิดสิทธิ์ทะเบียน', 'Enabled a plate'],
@@ -312,23 +312,23 @@ const S = {
   'ph.plateHelp': ['ตัวเลข 0–9 และอักษรไทย เช่น 7กข 4821', 'Digits 0–9 and Thai letters, e.g. 7กข 4821'],
 
   // story
-  'story.play': ['เล่นเรื่องราว', 'Play the story'],
+  'story.play': ['เริ่มสาธิต', 'Play the story'],
   'story.pause': ['หยุดชั่วคราว', 'Pause'],
   'story.resume': ['เล่นต่อ', 'Resume'],
   'story.restart': ['เริ่มใหม่', 'Restart'],
-  'story.exit': ['ออกจากเรื่องราว', 'Exit story'],
-  'story.autoAdvance': ['เดินเรื่องอัตโนมัติ', 'Auto-advance'],
+  'story.exit': ['จบการสาธิต', 'Exit story'],
+  'story.autoAdvance': ['เล่นอัตโนมัติ', 'Auto-advance'],
   'story.step': ['ขั้นที่ {n} / {total}', 'Step {n} / {total}'],
   'story.idle': [
-    'เลือก “เล่นเรื่องราว” เพื่อดูการเดินทางของผู้มาติดต่อ หรือทดลองกดเองได้ทุกส่วน',
+    'กด “เริ่มสาธิต” เพื่อดูขั้นตอนของผู้มาติดต่อ หรือทดลองเองได้ทุกส่วน',
     'Choose “Play the story” to follow one visitor, or try any part yourself',
   ],
   'story.idleBuilding': [
-    'เลือก “เล่นเรื่องราว” เพื่อตามวันประชุมของผู้มาติดต่อไปทั่วอาคาร หรือทดลองกดเองได้ทุกจุด',
+    'กด “เริ่มสาธิต” เพื่อดูระบบอาคารในวันประชุม หรือเลือกทดลองเองได้ทุกจุด',
     'Choose “Play the story” to follow a visitor’s meeting day through the building, or try any stop yourself',
   ],
   'story.freeMode': [
-    'ออกจากเรื่องราวแล้ว · ทดลองเองได้ทุกส่วน: แผงเจ้าหน้าที่ มือถือ หรือส่งรถไปที่ไม้กั้น',
+    'จบการสาธิตแล้ว · ทดลองเองได้ทุกส่วน ทั้งคอนโซลเจ้าหน้าที่ มือถือ หรือส่งรถไปที่ไม้กั้น',
     'Story stopped · try anything: the staff console, the phone, or send cars to the barrier',
   ],
 
@@ -345,20 +345,20 @@ const S = {
   ],
   's2.t': ['ถ่ายรูปรถ ระบบกรอกทะเบียนให้', 'Snap the car and the plate fills itself'],
   's2.b': [
-    'รูปถูกส่งไปอ่านทะเบียนครั้งเดียวและไม่ถูกเก็บ ใบหน้าเป็นทางเลือก และต้องยินยอมก่อนเสมอ',
+    'รูปถูกส่งไปอ่านทะเบียนครั้งเดียวและไม่ถูกเก็บ รูปใบหน้าไม่บังคับ และต้องให้ความยินยอมก่อน',
     'The photo is read once and never stored. A face photo is optional and needs consent',
   ],
-  's3.t': ['คำขอเด้งขึ้นที่คอนโซลเจ้าหน้าที่ทันที', 'The request appears in the staff console at once'],
+  's3.t': ['เจ้าหน้าที่เห็นคำขอทันที', 'The request appears in the staff console at once'],
   's3.b': [
     'เจ้าหน้าที่เห็นรายละเอียด ข้อสังเกต และผลตรวจทะเบียนใน ATOM ก่อนตัดสินใจ',
     'Staff see the details, any flags and the ATOM plate lookup before deciding',
   ],
-  's4.t': ['อนุมัติด้วยการแตะครั้งเดียว', 'Approve in one tap'],
+  's4.t': ['อนุมัติได้ในคลิกเดียว', 'Approve in one tap'],
   's4.b': [
     'ระบบลงทะเบียนรถและบุคคลใน ATOM ตามวันที่อนุมัติ ออก QR และส่งอีเมลยืนยันพร้อมปฏิทิน',
     'The car and person are registered in ATOM for the approved dates, a QR code is issued and a ticket with a calendar invite is emailed',
   ],
-  's5.t': ['บัตรจอดรถถึงมือถือ', 'The ticket lands on her phone'],
+  's5.t': ['ส่งบัตรจอดรถเข้ามือถือ', 'The ticket lands on her phone'],
   's5.b': [
     'ไม่ต้องพิมพ์ ไม่ต้องแลกบัตร วันนัดแค่ขับรถมาที่ไม้กั้น',
     'Nothing to print or exchange. On the day she simply drives up to the barrier',
@@ -388,12 +388,12 @@ const S = {
     'ทะเบียนตรงกับสิทธิ์ที่อนุมัติ ไม้กั้นเปิดให้อัตโนมัติ และนับเข้าที่จอดทันที',
     'The plate matches the approved access, so the barrier opens and the car is counted in',
   ],
-  's7.t': ['รถไม่รู้จัก · ไม้กั้นไม่เปิด แต่แจ้งเตือนทันที', 'An unknown car: the barrier stays shut and staff are alerted'],
+  's7.t': ['รถไม่มีสิทธิ์ · ไม้กั้นไม่เปิดและแจ้งเตือนทันที', 'An unknown car: the barrier stays shut and staff are alerted'],
   's7.b': [
-    'เจ้าหน้าที่เห็นภาพจากกล้องและตัดสินใจ เปิดหรือไม่ให้เข้าได้ในแตะเดียว ทุกการเปิดต้องมีเหตุผล',
+    'เจ้าหน้าที่เห็นภาพจากกล้องและตัดสินใจ กดเปิดหรือปฏิเสธได้ทันที โดยต้องระบุเหตุผลเมื่อเปิด',
     'Staff see the camera snapshot and decide, Open or Deny, in one tap. Every manual open needs a reason',
   ],
-  's8.t': ['เห็นภาพรวมลานจอดแบบสด', 'The whole car park, live'],
+  's8.t': ['ดูภาพรวมลานจอดแบบเรียลไทม์', 'The whole car park, live'],
   's8.b': [
     'จำนวนรถที่จอดเทียบกับความจุ รถเข้าออกรายชั่วโมง และสิ่งที่ต้องดูแล',
     'Occupancy against capacity, hourly entries and exits, and what needs attention',
@@ -403,9 +403,9 @@ const S = {
     'สรุปประจำวันทางอีเมล บันทึกทุกการอนุมัติและการเปิดไม้กั้น ส่งออก CSV ได้',
     'A daily summary email, every approval and manual open recorded, and CSV export',
   ],
-  's10.t': ['ขาออก · เปิดให้เสมอ', 'On the way out the barrier always opens'],
+  's10.t': ['ขาออก ไม้กั้นเปิดให้ทุกคัน', 'On the way out the barrier always opens'],
   's10.b': [
-    'สิทธิ์หมดเวลาก็ไม่ขังรถไว้ ระบบบันทึกเวลาออกและคืนที่จอดว่าง',
+    'แม้สิทธิ์หมดอายุ รถก็ออกได้ ระบบบันทึกเวลาออกและคืนช่องจอด',
     'An expired pass never traps a car. The exit is logged and the space is freed',
   ],
 };
