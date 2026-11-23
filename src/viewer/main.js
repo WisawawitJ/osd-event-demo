@@ -33,11 +33,12 @@ const viewport = document.querySelector('#viewport');
 const status = document.querySelector('#status');
 const retry = document.querySelector('#retry');
 let renderKit, simulation, surfaceTextures;
-// What the model shows: a floor or all, split or cut, its facade and garden; `interior`: the stop or room looked at;
+// What the model shows: a floor or all, split or cut, its facade and garden; `below`: with a floor, all that is under it; `interior`: the stop or room looked at;
 // `side`: from the other side; `close`: the lift or a room's view, which a resize keeps (a phone turned on its side threw
 // the visitor out).
 const view = {
   floor: 'all',
+  below: false,
   exploded: false,
   cutaway: false,
   exterior: true,
@@ -71,6 +72,7 @@ const parkingCode = import('osd/parking/index.js');
 let frame = 0,
   disposed = false;
 const floorRoots = [],
+  floorOf = new Map(), // an object's floor number, for the ones shown and hidden by themselves
   basePositions = new Map(),
   cutMeshes = [],
   roofs = [];
@@ -306,8 +308,10 @@ try {
   }
 
   function updateView({reframe = true} = {}) {
+    // Under the floor on show, with `below`: as it is in the whole building.
+    const under = (floor) => view.below && floor < Number(view.floor);
     for (const [index, root] of floorRoots.entries()) {
-      root.visible = view.floor === 'all' || view.floor === String(index + 1);
+      root.visible = view.floor === 'all' || view.floor === String(index + 1) || under(index + 1);
       root.position.copy(basePositions.get(root));
       if (view.exploded && view.floor === 'all') root.position.y += index * 2.5;
       root.updateMatrix(); // floors do not update their own matrix (see loadModel)
@@ -316,23 +320,26 @@ try {
     // Cutaway only moves each floor's clipping plane (far above the model when off). Swapping planes in and
     // out changed every wall's shader and froze the view for ~0.7 s on each switch to or from the meeting room.
     for (const {root, plane} of cutMeshes)
-      plane.constant = view.cutaway ? root.getWorldPosition(new THREE.Vector3()).y + 1.2 : 1e5;
+      plane.constant =
+        view.cutaway && !under(floorRoots.indexOf(root) + 1) ? root.getWorldPosition(new THREE.Vector3()).y + 1.2 : 1e5;
     const showExterior = view.exterior && view.floor === 'all' && !view.exploded && !view.cutaway;
-    for (const object of presentationMeshes) object.visible = showExterior;
+    for (const object of presentationMeshes) object.visible = showExterior || under(floorOf.get(object));
     for (const roof of roofs)
       roof.visible =
         showExterior ||
+        under(floorOf.get(roof)) ||
         (view.floor === '5' && !view.cutaway && !view.exploded && roof.name.endsWith('service_roof_caps'));
-    for (const device of deviceMeshes) device.visible = !view.cutaway;
+    for (const device of deviceMeshes) device.visible = !view.cutaway || under(floorOf.get(device));
     for (const ceiling of ceilings)
       ceiling.visible =
-        !view.cutaway &&
-        !view.exploded &&
-        (view.floor === 'all' ||
-          ceiling.userData.ceilingScope === 'stair' ||
-          ['courtyard', 'arrival', 'reception'].includes(view.interior));
+        under(floorOf.get(ceiling)) ||
+        (!view.cutaway &&
+          !view.exploded &&
+          (view.floor === 'all' ||
+            ceiling.userData.ceilingScope === 'stair' ||
+            ['courtyard', 'arrival', 'reception'].includes(view.interior)));
     explore?.show({showExterior});
-    renderKit.ground.visible = view.floor === 'all' || view.floor === '1';
+    renderKit.ground.visible = floorRoots[0].visible;
     if (parking) parking.lot.root.visible = renderKit.ground.visible;
     renderKit.setReflectionLive(view.floor === '1' && !view.cutaway && !view.exploded);
     renderer.shadowMap.needsUpdate = true;
@@ -485,6 +492,7 @@ try {
               }
             }
           }
+          floorOf.set(object, floorRoots.indexOf(root) + 1);
           if (object.userData.exterior) presentationMeshes.push(object);
           if (object.isMesh) {
             object.castShadow = !['glass', 'water', 'facade_screen'].includes(object.userData.type);
@@ -630,6 +638,7 @@ try {
             const stop = stops[id];
             Object.assign(view, {
               floor: stop.view,
+              below: stop.below,
               exploded: false,
               cutaway: stop.cutaway,
               interior: id,
@@ -638,7 +647,6 @@ try {
             });
             updateView({reframe: false});
             if (stop.cutaway) for (const device of deviceMeshes) device.visible = true;
-            renderKit.ground.visible = true;
           },
           schedule,
           signal: abort.signal,

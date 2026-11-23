@@ -250,7 +250,8 @@ lane, not at the exit barrier) (a check watches every pair of cars in a busy car
 - Dock switches are one continuous camera move of 1.3–1.9 s that speeds up and slows down once (eased on the distance
   covered, not on the curve's own uneven parameter), with no first-visit stall, by day or night. On the way the current
   stop's floors are sliced away from the top down and the next stop's appear from the top down too (the slab over a
-  ground-floor view comes last), solid throughout, with the sun's shadows redrawn to follow the cut, using copies of
+  ground-floor view comes last; at the meeting room everything below floor 4 and the
+  site stay, so nothing under it comes or goes), solid throughout, with the sun's shadows redrawn to follow the cut, using copies of
   the materials that are kept between flights. A stop picked mid-change starts from what is on screen. The car park's
   own layout (wider panel, taller view) changes as a 0.35 s view transition instead of in one frame: the 3D view stays
   live as it resizes, and a second switch waits for the first instead of cutting it short. The pond's reflection fades
