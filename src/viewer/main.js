@@ -6,6 +6,7 @@ import {createExplorePage} from 'osd/viewer/explore-page.js';
 import {L, t, translatePage} from 'osd/viewer/texts.js';
 import {SPEED, world, onTick} from 'osd/core/clock.js';
 import {options} from 'osd/core/options.js';
+import {createQuality, drawsInSoftware} from 'osd/viewer/quality.js';
 import {MEETING_ROOM, NIGHT_AT, DAY_AT} from 'osd/viewer/building.js';
 import {stops} from 'osd/viewer/stops.js';
 import {viewKey, maxZoomOut} from 'osd/viewer/view-math.js';
@@ -100,18 +101,19 @@ try {
   // The `render: 0.5` option (the test harness sets it): the 3D view at that fraction of its resolution, without antialiasing and
   // with smaller shadow maps, so software WebGL keeps up (test/browser.mjs). The booth never sets it.
   const renderScale = Math.min(1, Math.max(0.25, Number(options.render) || 1));
-  renderer = new THREE.WebGLRenderer({antialias: renderScale === 1, powerPreference: 'default'});
-  // Resolution adapts to the machine: start at up to 1.5x device pixels (2x only cost frames on laptops)
-  // and step down (never back up) towards 1x while continuous rendering stays under ~38 fps.
-  const maxPixelRatio = Math.min(devicePixelRatio, 1.5) * renderScale,
-    minPixelRatio = Math.min(renderScale, maxPixelRatio);
-  let pixelRatio = maxPixelRatio,
-    slowFrames = 0,
-    lastFrameAt = 0;
+  // Stepped and half-resolution pages (the test harness's) draw the same whatever the computer.
+  const fixed = 'manual' in options || renderScale < 1;
+  const light = 'light' in options || (!fixed && drawsInSoftware());
+  renderer = new THREE.WebGLRenderer({
+    antialias: renderScale === 1 && !light,
+    powerPreference: 'high-performance', // on a laptop with two graphics cards, the fast one
+  });
+  // Resolution adapts to the machine (quality.js): it starts at up to 1.5x device pixels (2x only cost frames on laptops).
+  const quality = createQuality({devicePixels: devicePixelRatio, light, scale: renderScale, fixed});
   let warming = false;
   const afterRender = new Set(); // extra views drawn into the same canvas after each frame (the live LPR feed)
   if (debug) Object.assign(window, {__renderer: renderer, __scene: scene, __camera: camera});
-  renderer.setPixelRatio(pixelRatio);
+  renderer.setPixelRatio(quality.ratio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1;
@@ -145,6 +147,17 @@ try {
   const {hemisphere, key, fill, fitShadow} = createSunLight(scene, {
     shadowSize: (innerWidth < 700 ? 1024 : 4096) * (renderScale < 1 ? 0.5 : 1),
   });
+  // Light: smaller sun shadows, drawn less often (followClock, the flights), no pond mirror, no blur over the 3D view.
+  function applyLight() {
+    if (!quality.light) return;
+    document.documentElement.dataset.light = '';
+    key.shadow.mapSize.setScalar(Math.min(2048, key.shadow.mapSize.x));
+    key.shadow.map?.dispose();
+    key.shadow.map = null;
+    renderer.shadowMap.needsUpdate = true;
+    renderKit.setReflectionLive(false);
+  }
+  applyLight();
 
   const fpsMeter = 'fps' in options ? createFpsMeter() : null;
   // Every draw of the main view also draws the extra views, or the LPR pop-up would show the main scene for a frame.
@@ -157,21 +170,32 @@ try {
   }
   // `holdDraws`: a screenshot's frame is on screen (__engine.settle): nothing draws over it until the next step.
   let holdDraws = false;
+  let drawnAt = 0;
+  // `asked`: the start of the frame it was asked for in (its drawing is part of the wait).
   function schedule() {
+    requestDraw(document.timeline.currentTime ?? performance.now());
+  }
+  function requestDraw(asked) {
     if (frame || disposed || document.hidden || holdDraws) return;
     frame = requestAnimationFrame((time) => {
       frame = 0;
       if (disposed || warming || holdDraws) return;
+      // Light: 30 frames a second, evenly, not as many as it can, unevenly.
+      if (quality.light && time - drawnAt < 26) return requestDraw(asked);
+      drawnAt = time;
       draw();
       fpsMeter?.();
-      adaptResolution(time);
+      if (quality.frame(time - asked)) {
+        applyLight();
+        applyPixelRatio();
+      }
     });
   }
   // While the camera flies, draw at ~70% resolution and pause the pond mirror (it would re-render the scene every
   // frame) until the camera stops. Motion hides the softness; full sharpness comes back on the last frame.
   let inMotion = false;
   function applyPixelRatio() {
-    renderer.setPixelRatio(inMotion ? Math.max(0.6 * renderScale, pixelRatio * 0.7) : pixelRatio);
+    renderer.setPixelRatio(inMotion ? quality.motionRatio : quality.ratio);
     renderer.setSize(Math.max(viewport.clientWidth, 1), Math.max(viewport.clientHeight, 1), false);
     draw(); // resizing clears the canvas: redraw at once so no blank frame shows
   }
@@ -189,20 +213,6 @@ try {
       };
       requestAnimationFrame(pump);
     }
-  }
-  function adaptResolution(time) {
-    const gap = time - lastFrameAt;
-    lastFrameAt = time;
-    if (gap > 200) return; // an idle pause, not a slow frame
-    if (gap > 26) slowFrames++;
-    else if (gap < 18.5) slowFrames = Math.max(0, slowFrames - 1);
-    // Only ever step down: stepping back up made the picture go sharp and soft while orbiting.
-    if (slowFrames <= 45) return;
-    slowFrames = 0;
-    const next = Math.max(minPixelRatio, pixelRatio - 0.25);
-    if (next === pixelRatio) return;
-    pixelRatio = next;
-    applyPixelRatio();
   }
   controls.addEventListener('change', schedule);
   // Near plane follows the viewing distance. A fixed 1 cm near plane left ~1.5 cm of depth precision at 50 m,
@@ -345,7 +355,7 @@ try {
     explore?.show({showExterior});
     renderKit.ground.visible = floorRoots[0].visible;
     if (parking) parking.lot.root.visible = renderKit.ground.visible;
-    renderKit.setReflectionLive(view.floor === '1' && !view.cutaway && !view.exploded);
+    renderKit.setReflectionLive(!quality.light && view.floor === '1' && !view.cutaway && !view.exploded);
     renderer.shadowMap.needsUpdate = true;
     if (reframe) frameVisible();
     simulation?.setView({currentFloor: view.floor, cutaway: view.cutaway, exploded: view.exploded});
@@ -586,7 +596,7 @@ try {
       let skyStep = null;
       const followClock = () => {
         const minute = world.minute(),
-          step = Math.round(minute * 10);
+          step = Math.round(minute * (quality.light ? 2 : 10));
         if (step !== skyStep) {
           skyStep = step;
           applySky({minute, scene, hemisphere, key, fill, dayBackground});
@@ -627,7 +637,7 @@ try {
             renderer.shadowMap.needsUpdate = true;
           },
           onProgress: () => {
-            renderer.shadowMap.needsUpdate = true;
+            if (!quality.light) renderer.shadowMap.needsUpdate = true;
           },
         });
         // The parking access demo adds its own lot, cars and UI to this scene (src/parking).

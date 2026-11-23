@@ -75,5 +75,16 @@ html = swap(
   `<script type="text/plain" id="model">${model}</script>\n<script type="module">${script}</script>`,
 );
 mkdirSync(file('dist'), {recursive: true});
-writeFileSync(file('dist/osd-demo.html'), html);
-console.log(`dist/osd-demo.html, ${(Buffer.byteLength(html) / 1e6).toFixed(1)} MB`);
+// And one for a laptop with weak graphics (quality.js).
+const light = swap(
+  html,
+  '<script type="module">',
+  '<script>window.__demoOptions = {light: ""};</script>\n<script type="module">',
+);
+for (const [name, content] of [
+  ['osd-demo', html],
+  ['osd-demo-light', light],
+]) {
+  writeFileSync(file(`dist/${name}.html`), content);
+  console.log(`dist/${name}.html, ${(Buffer.byteLength(content) / 1e6).toFixed(1)} MB`);
+}

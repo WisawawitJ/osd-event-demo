@@ -21,7 +21,8 @@ original free-exploration page, with the car park, staff cars coming and going a
 model download).
 
 `npm run single` (after `npm install`) puts the whole demo in one file, `dist/osd-demo.html` (about 4 MB): open it by
-double-clicking, with no server and no network. The file is in git: run it again after a change and commit it.
+double-clicking, with no server and no network. `dist/osd-demo-light.html` is the same for a laptop with weak graphics.
+Both are in git: run it again after a change and commit them.
 
 ## Testing
 
@@ -227,7 +228,10 @@ lane, not at the exit barrier) (a check watches every pair of cars in a busy car
 ## Performance
 
 - The 3D view renders at up to 1.5× device pixels and steps down towards 1× by itself when the frame rate stays under
-  ~38 fps. It never steps back up, and every step redraws in the same frame, so the picture never pops.
+  ~38 fps (`src/viewer/quality.js`). Still slow there, it goes **light**: 30 fps, smaller sun shadows drawn less often,
+  no pond mirror. Still under ~24 fps, it steps on down to 0.5×. It never steps back up, and every step redraws in the
+  same frame, so the picture never pops. `dist/osd-demo-light.html`, and any browser drawing WebGL on the processor,
+  starts light, at 0.85× and without edge smoothing.
 - The frame cost is mostly CPU: three.js's work per draw call. So the scene keeps draw calls and per-draw work down:
   - cars come in five models: two instanced draw calls per model, however many cars, and one for each car's plates and
     lamps (a few more while its lights are on); trees, shrubs and bay lights are instanced;

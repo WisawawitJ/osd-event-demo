@@ -1509,6 +1509,9 @@
   backdrop-filter: blur(10px);
   overflow: hidden;
 }
+:root[data-light] .pk-caption {
+  backdrop-filter: none;
+}
 /* The step's progress, on auto-advance: a thin line along the foot. */
 .pk-caption::after {
   content: '';
