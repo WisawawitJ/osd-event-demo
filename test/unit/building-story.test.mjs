@@ -1,7 +1,7 @@
 // The building's story (building-story.js) on the engine's clock, with a stand-in camera flight.
 import {test, afterEach} from 'vitest';
 import assert from 'node:assert/strict';
-import {world, sleep, runUntil, advance, demoNow} from 'osd/parking/clock.js';
+import {world, sleep, runUntil, advance, demoNow} from 'osd/core/clock.js';
 import {createBuildingStory, STEPS} from 'osd/viewer/building-story.js';
 import {parking} from './world.mjs';
 import {createDirector} from 'osd/viewer/director.js';
@@ -128,8 +128,9 @@ test('Pause (the day paused) holds it; Next runs the day again; Exit stops it', 
   assert.equal(story.index, 1);
   story.next();
   assert.ok(!world.paused && story.index === 2, 'Next runs the day again');
-  story.stop();
-  assert.ok(!story.running && !world.held);
+  world.setPaused(true);
+  story.stop({keep: true});
+  assert.ok(!story.running && !world.held && !world.paused, 'a story ended runs the day again');
 });
 
 test('a flight cut short (the visitor took the view) ends it', async () => {

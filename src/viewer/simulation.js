@@ -1,7 +1,7 @@
 // This module is deliberately local: device state never leaves this page.
 // spotLights / shadowSpots: the night room light pool and how many of it cast shadows.
-import {L} from 'osd/parking/i18n.js';
-import {realNow, ramp} from 'osd/parking/clock.js';
+import {L} from 'osd/viewer/texts.js';
+import {realNow, ramp} from 'osd/core/clock.js';
 
 // Texts follow the saved TH/EN choice. The device map names rooms in Thai; English names are kept here by room id.
 const ROOM_EN = {
@@ -42,6 +42,13 @@ const ROOM_EN = {
   roof_stair: 'Stair hall',
   roof_gym: 'Gym',
 };
+// A floor's name ('all': the whole building).
+export const floorLabel = (floor) =>
+  floor === 'all'
+    ? L('ทั้งอาคาร', 'Whole building')
+    : String(floor) === '5'
+      ? L('ดาดฟ้า', 'Rooftop')
+      : L(`ชั้น ${floor}`, `Floor ${floor}`);
 const roomName = (room) => L(room.label, ROOM_EN[room.id] || room.label);
 const deviceName = {light: () => L('ไฟ', 'Light'), climate: () => L('แอร์', 'AC'), door: () => L('ประตู', 'Door')};
 const nightText = (night) => (night ? L('กลางคืน · เปิดอยู่', 'Night · on') : L('กลางคืน', 'Night'));
@@ -137,7 +144,6 @@ export async function createSimulation({
   const summary = panel.querySelector('.simulation-room-summary');
   const feedback = panel.querySelector('.simulation-feedback');
   const nightButton = panel.querySelector('.simulation-night');
-  const floorLabel = (floor) => (String(floor) === '5' ? L('ดาดฟ้า', 'Rooftop') : L(`ชั้น ${floor}`, `Floor ${floor}`));
   for (const room of rooms) {
     const option = document.createElement('option');
     option.value = room.id;

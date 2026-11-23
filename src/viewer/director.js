@@ -7,12 +7,24 @@
 // the day again if it was following, or flies back to the overview.
 // The page (showcase.js) flies the camera, draws the panels and reports the visitor's touches. Node tests drive it
 // with a stand-in flight and the headless parking world.
-import {world, later, cancelLater} from 'osd/parking/clock.js';
+import {world, later, cancelLater} from 'osd/core/clock.js';
 import {dayEvents} from 'osd/viewer/building-day.js';
 
 // A quiet minute (real time on the page: a paused day still counts down).
 export const IDLE_MS = 60000;
 const OPENING_MS = 8000;
+// What counts as a touch on either page: every press, key or wheel, a drag all along (one longer than a minute had the
+// page leave under the finger) and every click (a screen reader sends only that).
+export function onTouch(fn, options = {}) {
+  for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'click'])
+    document.addEventListener(
+      type,
+      (event) => {
+        if (type !== 'pointermove' || event.buttons) fn(event);
+      },
+      {...options, capture: true, passive: true},
+    );
+}
 
 // `select(id, {guided})`: flies to a stop. `cancelFlight()`. `parking`: playStory/stopStory/story. `building`: the
 // building's story (running, auto, stop). `current()`: the stop on show. `ui`: stopScenario(), render(),
@@ -80,7 +92,7 @@ export function createDirector({
     idleTimer = null;
     if (disposed) return;
     const s = parking?.story;
-    if (hidden() || (s?.running && s.auto && !s.paused) || (building?.running && building.auto && !world.paused)) {
+    if (hidden() || (!world.paused && ((s?.running && s.auto) || (building?.running && building.auto)))) {
       arm();
       return;
     }

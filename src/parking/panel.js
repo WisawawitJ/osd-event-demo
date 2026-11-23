@@ -1,8 +1,8 @@
 // The staff console shown in the side panel: overview, requests, gate, vehicles and reports.
-import {t, tx, fmtTime, fmtDate, fmtShortDate, fmtDateTime, getLang} from './i18n.js';
-import {esc, icon, patch, fakeQr, download} from './dom.js';
+import {t, tx, fmtTime, fmtDate, fmtShortDate, fmtDateTime, getLang} from './texts.js';
+import {esc, icon, patch, fakeQr, download} from 'osd/core/dom.js';
 import {PROVINCES, normalizePlate, GATE_REASONS as REASONS, openReasonOf, emailed} from './sim.js';
-import {later} from './clock.js';
+import {later} from 'osd/core/clock.js';
 
 const TABS = [
   ['overview', 'chart'],

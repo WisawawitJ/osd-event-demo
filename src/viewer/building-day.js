@@ -1,6 +1,7 @@
-import {L} from 'osd/parking/i18n.js';
+import {L} from 'osd/viewer/texts.js';
 import {sunAt} from 'osd/viewer/daylight.js';
-// The building's day on the world clock (src/parking/clock.js): what the rooms, the meeting room, the pond and the
+import {MEETING_PEOPLE, MEETING_ROOM, WATER, loadFor, peopleIn} from 'osd/viewer/building.js';
+// The building's day on the world clock (src/core/clock.js): what the rooms, the meeting room, the pond and the
 // solar panels do at each time of day. A deterministic schedule that repeats every day: no real sensors, device
 // calls or random values. Titles and details follow the TH/EN switch (getters), so a re-render picks up the language.
 const event = (minute, destination, layer, title, detail) => ({
@@ -28,7 +29,7 @@ export const dayEvents = [
     'meeting',
     'occupancy',
     ['เริ่มประชุม ชั้น 4', 'Meeting starts, floor 4'],
-    ['มีคน 6 คน · เปิดไฟและแอร์', '6 people · lights and AC on'],
+    [`มีคน ${MEETING_PEOPLE} คน · เปิดไฟและแอร์`, `${MEETING_PEOPLE} people · lights and AC on`],
   ),
   event(
     720,
@@ -42,7 +43,7 @@ export const dayEvents = [
     'meeting',
     'temperature',
     ['ห้องว่าง แต่แอร์ยังเปิด', 'Room empty, AC still on'],
-    ['ตรวจสอบสถานะห้องและเครื่องปรับอากาศ', 'Compare occupancy with the AC'],
+    ['ตรวจสอบสถานะห้องและเครื่องปรับอากาศ', 'Check the room and its AC'],
   ),
   event(
     900,
@@ -79,7 +80,7 @@ export const formatTime = (minute) => {
 const solarAt = (minute) => round(9.4 * Math.pow(sunAt(minute).height, 1.15));
 export function incidentsFor(telemetry, rooms) {
   const incidents = [];
-  if (!telemetry.occupied && rooms['f4_meeting_2']?.climate)
+  if (!telemetry.occupied && rooms[MEETING_ROOM]?.climate)
     incidents.push({
       id: 'empty-ac',
       destination: 'meeting',
@@ -88,14 +89,14 @@ export function incidentsFor(telemetry, rooms) {
       hint: L('ตรวจสอบตารางใช้ห้องก่อนปิดแอร์', 'Check the room booking before turning the AC off'),
       layer: 'occupancy',
     });
-  if (telemetry.water < 65)
+  if (telemetry.water < WATER.alert)
     incidents.push({
       id: 'pond-low',
       destination: 'pond',
       title: L('ระดับน้ำบ่อต่ำ', 'Pond water low'),
       detail: L(
-        `บ่อปลา ชั้น 1 · ${telemetry.water}% / เกณฑ์ 65%`,
-        `Fish pond, floor 1 · ${telemetry.water}% / threshold 65%`,
+        `บ่อปลา ชั้น 1 · ${telemetry.water}% / เกณฑ์ ${WATER.alert}%`,
+        `Fish pond, floor 1 · ${telemetry.water}% / threshold ${WATER.alert}%`,
       ),
       hint: L('ตรวจสอบบ่อและระบบเติมน้ำ', 'Check the pond and the refill system'),
       layer: 'none',
@@ -109,7 +110,7 @@ export function daySnapshot(value, roomMap) {
     working = minute >= 510 && minute < 1050;
   const meetingAC = minute >= 530 && minute < 885,
     meetingLight = minute >= 535 && minute < 850;
-  const water = minute >= 890 && minute < 960 ? 58 : 82;
+  const water = minute >= 890 && minute < 960 ? WATER.low : WATER.normal;
   const temp = round(
     lerp(
       [
@@ -132,10 +133,10 @@ export function daySnapshot(value, roomMap) {
   const rooms = {},
     roomData = {};
   for (const [index, room] of roomMap.entries()) {
-    const meeting = room.id === 'f4_meeting_2';
+    const meeting = room.id === MEETING_ROOM;
     const light = room.capabilities?.light !== false && (meeting ? meetingLight : working || room.id === 'f1_lobby');
     const climate = room.capabilities?.climate !== false && (meeting ? meetingAC : working && index % 3 !== 0);
-    const people = meeting ? (occupied ? 6 : 0) : working && room.capabilities?.climate !== false ? 1 + (index % 4) : 0;
+    const people = meeting ? peopleIn(occupied) : working && room.capabilities?.climate !== false ? 1 + (index % 4) : 0;
     rooms[room.id] = {
       light,
       climate,
@@ -150,10 +151,10 @@ export function daySnapshot(value, roomMap) {
     occupied,
     temp,
     target: 24,
-    pondAlert: water < 65,
+    pondAlert: water < WATER.alert,
     water,
     solar,
-    load: Math.max(load, solar + 0.5),
+    load: loadFor(load, solar),
     energy: round(energy),
     roomData,
   };

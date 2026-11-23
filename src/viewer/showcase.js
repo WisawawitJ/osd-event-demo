@@ -1,195 +1,22 @@
 import {createBuildingInsights} from 'osd/viewer/building-insights.js';
 import {createTourEffects} from 'osd/viewer/tour-effects.js';
-import {t as pt, onLang, getLang, L} from 'osd/parking/i18n.js';
-import {world, realNow, later} from 'osd/parking/clock.js';
-import {options} from 'osd/parking/options.js';
-import {createDirector} from 'osd/viewer/director.js';
+import {t, onLang, getLang, L, translatePage} from 'osd/viewer/texts.js';
+import {later, world} from 'osd/core/clock.js';
+import {options} from 'osd/core/options.js';
+import {createParkingLayout} from 'osd/viewer/parking-layout.js';
+import {placeCornerCard} from 'osd/viewer/corner-card.js';
+import {panels} from 'osd/viewer/panels.js';
+import {createScenarios} from 'osd/viewer/scenarios.js';
+import {stops} from 'osd/viewer/stops.js';
+import {MEETING_ROOM, NIGHT_AT, DAY_AT} from 'osd/viewer/building.js';
+import {createDirector, onTouch} from 'osd/viewer/director.js';
 import {createBuildingStory} from 'osd/viewer/building-story.js';
-import {morph} from 'osd/parking/dom.js';
-import {storyBar, storyCaption, onViewTaken, tapCues} from 'osd/parking/story-bar.js';
-const icons = {
-  building: 'M3 21V5h12v16M15 11h6v10M7 9h4M7 13h4M7 17h4',
-  light: 'M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0l-1 2H9Z',
-  air: 'M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h5',
-  water: 'M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z',
-  solar: 'm5 9-2 10h18L19 9ZM8 9l-1 10m9-10 1 10M4 14h16M12 19v3M12 2v3M5 3l2 2m12-2-2 2',
-  door: 'M4 21h16M7 21V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v17M13.5 12.5v-1',
-  leave: 'M13 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h7M10 12h11m-4-4 4 4-4 4',
-  arrow: 'M4 12h16m-5-5 5 5-5 5',
-  play: 'm8 5 11 7-11 7Z',
-  pause: 'M8 5v14M16 5v14',
-  check: 'm5 12 4 4L19 6',
-};
-const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[name] || icons.building}"/></svg>`;
-// Thai (default) or English, picked when the text is drawn; applyLanguage() redraws on a switch.
-// Each field is a getter, so a destination's texts follow the TH/EN switch.
-const texts = (fields) =>
-  Object.defineProperties(
-    {},
-    Object.fromEntries(
-      Object.entries(fields).map(([key, [th, en]]) => [key, {get: () => L(th, en), enumerable: true}]),
-    ),
-  );
-const destinations = {
-  overview: texts({
-    panel: ['ภาพรวมอาคาร', 'Building overview'],
-    floor: ['ทั้งอาคาร', 'Whole building'],
-    chip: ['โมเดลอาคาร OSD · 5 ระดับ', 'OSD building model · 5 levels'],
-  }),
-  meeting: texts({
-    panel: ['ห้องประชุม', 'Meeting room'],
-    floor: ['ชั้น 4', 'Floor 4'],
-    chip: [
-      'ห้องประชุมย่อย 2 ชั้น 4 · แตะไฟ แอร์ หรือประตูเพื่อทดลอง',
-      'Meeting room 2, floor 4 · tap a light, the AC or a door to try it',
-    ],
-  }),
-  pond: texts({
-    panel: ['บ่อปลาและสวน', 'Fish pond and garden'],
-    floor: ['ชั้น 1', 'Floor 1'],
-    chip: ['บ่อปลาริมห้องประชุม', 'Fish pond by the meeting room'],
-  }),
-  energy: texts({
-    panel: ['พลังงานอาคาร', 'Building energy'],
-    floor: ['ดาดฟ้า', 'Rooftop'],
-    chip: ['แผงโซลาร์ 24 แผง', '24 solar panels'],
-  }),
-  // Parking access demo (src/parking): its texts follow the TH/EN switch.
-  parking: {
-    get panel() {
-      return pt('parking.panel');
-    },
-    get floor() {
-      return pt('parking.floor');
-    },
-    get chip() {
-      return pt('parking.chip');
-    },
-  },
-};
-// Text in the static markup (src/pages/showcase.html), as [th,en] or a parking i18n lookup.
-// data-i18n fills the text, data-i18n-label the aria-label, data-i18n-title the title.
-// data-i18n-init marks text the showcase redraws itself; it is only filled in before the showcase starts.
-const pageText = {
-  brand: ['ระบบอาคารอัจฉริยะ', 'Smart building system'],
-  demo: () => pt('sim.data'),
-  explore: ['สำรวจอาคาร', 'Explore'],
-  'night.title': ['สลับกลางวันและกลางคืน', 'Switch between day and night'],
-  night: ['กลางคืน', 'Night'],
-  toolbar: ['ข้อมูลบนโมเดล', 'Data on the model'],
-  'layer.heading': ['แสดงสีตาม', 'Room colours'],
-  'layer.group': ['เลือกข้อมูลแสดงด้วยสี', 'Choose the data shown as colour'],
-  'layer.none': ['ปกติ', 'Plain'],
-  'layer.temperature': ['อุณหภูมิ', 'Temperature'],
-  'layer.occupancy': ['การใช้ห้อง', 'Occupancy'],
-  'layer.lights': ['ไฟ', 'Lights'],
-  viewport: ['โมเดลอาคาร OSD แบบโต้ตอบ', 'Interactive OSD building model'],
-  canvas: [
-    'โมเดลอาคาร OSD ลากเพื่อหมุน กด Shift ค้างแล้วลาก หรือใช้ปุ่มลูกศร เพื่อเลื่อน ปุ่มบวกหรือลบเพื่อซูม Page Up หรือ Page Down เพื่อยกหรือลดกล้อง และ R เพื่อคืนมุมมอง',
-    'OSD building model. Drag to rotate, Shift-drag or the arrow keys to pan, plus or minus to zoom, Page Up or Page Down to raise or lower the camera, and R to reset the view',
-  ],
-  'scene.heading': ['ภาพรวมอาคาร', 'Building overview'],
-  'scene.floor': ['ทั้งอาคาร', 'Whole building'],
-  'scene.chip': ['โมเดลอาคาร OSD · 5 ระดับ', 'OSD building model · 5 levels'],
-  loading: ['กำลังเตรียมอาคาร…', 'Preparing the building…'],
-  retry: ['ลองโหลดใหม่', 'Reload'],
-  dock: ['เลือกจุดพาชม', 'Choose a tour stop'],
-  'dock.overview': ['ภาพรวม', 'Overview'],
-  'dock.meeting': ['ห้องประชุม', 'Meeting room'],
-  'dock.pond': ['บ่อปลา', 'Fish pond'],
-  'dock.energy': ['พลังงาน', 'Energy'],
-  timeline: ['หนึ่งวันในอาคาร · เวลาจำลอง', 'A day in the building · simulated time always running'],
-  'day.mode': ['เวลาจำลอง', 'Simulated time · always running'],
-  'day.follow': [
-    'กล้องไปตามช่วงเวลาของวัน แตะที่ใดก็ได้เพื่อสำรวจเอง',
-    'The camera goes where the day goes; touch anything to explore yourself',
-  ],
-  'day.pause': ['หยุดชั่วคราว', 'Pause'],
-  'day.speed': ['ความยาวหนึ่งวันจำลอง (เวลาจริง)', 'How long a simulated day takes (real time)'],
-  'day.time': ['เวลาในโลกจำลอง · เลื่อนเพื่อข้ามไปเวลาอื่น', 'Simulated time · slide to move on to another time'],
-  'day.events': ['ช่วงเวลาที่น่าสนใจ', 'Moments worth a look'],
-  panel: ['ข้อมูลประกอบจุดที่เลือก', 'Details for the selected spot'],
-  'panel.title': ['ภาพรวมอาคาร', 'Building overview'],
-  'panel.status': ['พร้อมพาชม', 'Ready to tour'],
-  incidents: ['จุดที่ควรดู', 'Worth a look'],
-  'incidents.loading': ['กำลังเตรียมเหตุการณ์…', 'Preparing events…'],
-  'panel.loading': ['กำลังเตรียมข้อมูล…', 'Preparing data…'],
-  'view.group': ['ควบคุมมุมมอง', 'View controls'],
-  'building.storyBar': ['การสาธิตระบบอาคาร', 'Building story'],
-  'parking.storyBar': ['การสาธิตระบบที่จอดรถ', 'Parking story'],
-  'view.zoomIn': ['ซูมเข้า', 'Zoom in'],
-  'view.zoomOut': ['ซูมออก', 'Zoom out'],
-  'view.up': ['ยกกล้องขึ้น', 'Camera up'],
-  'view.down': ['ลดกล้องลง', 'Camera down'],
-  'view.reset': ['มุมเริ่มต้น', 'Reset view'],
-  'view.orbit': ['หมุนอัตโนมัติ', 'Idle orbit'],
-  'view.orbit.title': ['หมุนมุมกล้องช้า ๆ เมื่อไม่มีการใช้งาน', 'Slowly circle the view when nobody is using it'],
-  disclosure: () => pt('sim.disclosure'),
-  // The exploration page (src/pages/explore.html).
-  'x.back': ['กลับหน้าพาชม', 'Back to the showcase'],
-  'x.floors': ['เลือกชั้น', 'Choose a floor'],
-  'x.all': ['ทั้งอาคาร', 'Whole building'],
-  'x.f1': ['ชั้น 1', 'Floor 1'],
-  'x.f2': ['ชั้น 2', 'Floor 2'],
-  'x.f3': ['ชั้น 3', 'Floor 3'],
-  'x.f4': ['ชั้น 4', 'Floor 4'],
-  'x.f5': ['ดาดฟ้า', 'Rooftop'],
-  'x.tools': ['รูปแบบการดู', 'View options'],
-  'x.exterior': ['เปลือกอาคารและสวน', 'Facade and garden'],
-  'x.explode': ['แยกชั้น', 'Split floors'],
-  'x.cutaway': ['ตัดผนัง', 'Cut walls'],
-  'x.reset': ['คืนมุมมอง', 'Reset view'],
-  'x.cameras': ['มุมกล้อง', 'Camera views'],
-  'x.explore': ['สำรวจอาคาร', 'Explore'],
-  'x.front': ['มุมหลัก', 'Front'],
-  'x.side': ['อีกมุม', 'Side'],
-  'x.lift': ['ดูลิฟต์', 'Lift'],
-  'x.courtyard': ['บ่อปลา', 'Fish pond'],
-  'x.office': ['สำนักงาน', 'Offices'],
-  'x.arrival': ['ลานวนรถ', 'Drop-off'],
-  'x.reception': ['ต้อนรับ', 'Reception'],
-  'x.services': ['ห้องบริการ', 'Service rooms'],
-  'x.parking': ['ที่จอดรถ', 'Parking'],
-  'x.stairs': ['บันได', 'Stairs'],
-  'x.loading': ['กำลังโหลดโมเดลอาคาร…', 'Loading the building model…'],
-  'x.help': [
-    'ลากเพื่อหมุน · ลากสองนิ้ว กด Shift ค้างแล้วลาก หรือปัดสองนิ้วบนทัชแพด เพื่อเลื่อน · ถ่างนิ้วหรือหมุนล้อเมาส์เพื่อซูม · Page Up/Down ยกหรือลดกล้อง',
-    'Drag to rotate · two-finger drag, Shift-drag or a two-finger touchpad scroll to pan · pinch or mouse wheel to zoom · Page Up/Down to raise or lower the camera',
-  ],
-  'x.footer': ['โมเดลสำหรับนำเสนอ', 'Presentation model'],
-  'x.footnote': [
-    'อ้างอิงแปลนและภาพถ่าย · วัสดุ เปลือกอาคาร และสวนเป็นภาพจำลอง',
-    'Based on plans and photos · materials, facade and garden are illustrative',
-  ],
-};
-export const pageString = (key) => {
-  const text = pageText[key];
-  return typeof text === 'function' ? text() : L(...text);
-};
-export function translatePage({initial = false} = {}) {
-  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = pageString(el.dataset.i18n);
-  for (const el of document.querySelectorAll('[data-i18n-label]'))
-    el.setAttribute('aria-label', pageString(el.dataset.i18nLabel));
-  for (const el of document.querySelectorAll('[data-i18n-title]')) el.title = pageString(el.dataset.i18nTitle);
-  if (initial)
-    for (const el of document.querySelectorAll('[data-i18n-init]')) el.textContent = pageString(el.dataset.i18nInit);
-}
-const meetingId = 'f4_meeting_2';
-const initial = () => ({
-  occupied: true,
-  temp: 25.6,
-  target: 24,
-  pondAlert: false,
-  water: 82,
-  solar: 8.4,
-  load: 12.6,
-  energy: 37.8,
-  scenario: null,
-});
+import {morph} from 'osd/core/dom.js';
+import {wireStoryBar, storyCaption, onViewTaken, tapCues} from 'osd/core/story-bar.js';
 export function createShowcase({model, simulation, navigate, cancelFlight, schedule, onUserOrbit, parking = null}) {
   const abort = new AbortController(),
     signal = abort.signal,
-    effects = createTourEffects({model, schedule, meetingRoom: simulation.rooms.find((r) => r.id === meetingId)});
+    effects = createTourEffects({model, schedule, meetingRoom: simulation.rooms.find((r) => r.id === MEETING_ROOM)});
   const $ = (s) => document.querySelector(s),
     content = $('#dashboard-content');
   let story = null,
@@ -200,51 +27,40 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
   let traveling = false,
     landed = false;
   let destination = 'overview',
-    state = initial(),
-    scenarioFrame = 0,
-    scenarioStart = 0,
     disposed = false,
-    sequence = 0,
-    lastTick = 0;
+    sequence = 0;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const listen = (el, event, fn, options) => el.addEventListener(event, fn, {...options, signal});
-  const actual = () => simulation.getState().rooms[meetingId];
-  function row(label, value) {
-    return `<div class="data-row"><span>${label}</span><strong>${value}</strong></div>`;
-  }
-  function metric(label, value, unit, note = '') {
-    return `<div><span class="metric-label">${label}</span><div class="metric-value">${value}<small>${unit}</small></div>${note ? `<span class="metric-note">${note}</span>` : ''}</div>`;
-  }
-  function system(name, title, desc, value) {
-    return `<div class="system-row"><div class="system-icon">${icon(name)}</div><div class="system-copy"><strong>${title}</strong><span>${desc}</span></div><span class="system-value">${value}</span></div>`;
-  }
-  function chart(values, labels, unit, historyKey) {
-    const history = historyKey && insights?.history(historyKey);
-    if (history) {
-      values = history.values;
-      labels = history.labels;
-    }
-    const min = Math.min(...values) - 1,
-      max = Math.max(...values) + 1;
-    const points = values.map((v, i) => [(i * 280) / (values.length - 1), 74 - ((v - min) / (max - min)) * 60]);
-    return `<svg class="chart" viewBox="0 0 280 100" role="img" aria-label="${L('กราฟ', 'Chart:')} ${unit}"><path class="chart-grid" d="M0 18h280M0 46h280M0 74h280"/><path d="M${points.map((p) => p.join(',')).join(' L')} L280,82 L0,82Z" fill="#eaf1fb" stroke="none"/><path class="chart-line" d="M${points.map((p) => p.join(',')).join(' L')}"/>${labels.map((l, i) => `<text x="${(i * 280) / (labels.length - 1)}" y="98" text-anchor="${i === 0 ? 'start' : i === labels.length - 1 ? 'end' : 'middle'}">${l}</text>`).join('')}</svg>`;
-  }
-  function events(items) {
-    return items.map(([time, text]) => `<div class="event-row"><time>${time}</time><p>${text}</p></div>`).join('');
-  }
-  function controls() {
-    const s = actual(),
-      door = Object.values(s.doors).some(Boolean);
-    return `<div class="local-controls"><button data-control="light" aria-pressed="${s.light}">${icon('light')}${L(`ไฟ ${s.light ? 'เปิด' : 'ปิด'}`, `Light ${s.light ? 'on' : 'off'}`)}</button><button data-control="climate" aria-pressed="${s.climate}">${icon('air')}${L(`แอร์ ${s.climate ? 'เปิด' : 'ปิด'}`, `AC ${s.climate ? 'on' : 'off'}`)}</button><button data-control="door" aria-pressed="${door}">${icon('door')}${L(`ประตู ${door ? 'เปิด' : 'ปิด'}`, `Door ${door ? 'open' : 'closed'}`)}</button></div>`;
-  }
+  const actual = () => simulation.getState().rooms[MEETING_ROOM];
+  const scenarios = createScenarios({
+    simulation,
+    hold: (keys) => insights?.hold(keys),
+    changed: () => render(),
+    running: () => !disposed && !document.hidden,
+    animate(elapsed, time) {
+      if (reduced.matches || time - lastVisual < 50) return;
+      effects.animate(elapsed);
+      effects.update({...state, climate: actual().climate, light: actual().light});
+      lastVisual = time;
+    },
+  });
+  const {state} = scenarios,
+    stopScenario = scenarios.stop;
+  let lastVisual = 0;
+  // What a stop's panel shows (panels.js).
+  const shown = {state, history: (key) => insights.history(key), timeLabel: () => insights?.timeLabel() ?? ''};
+  const setParkingLayout = createParkingLayout({
+    parking,
+    // Screenshots (`manual`): at once, as a view transition runs on real time and was caught part way.
+    instant: () => reduced.matches || document.hidden || 'manual' in options,
+    disposed: () => disposed,
+  });
   function render() {
     if (disposed) return;
     const s = actual(),
       sim = simulation.getState(),
-      d = destinations[destination];
+      d = stops[destination];
     const focused = document.activeElement?.dataset?.control || document.activeElement?.dataset?.action;
-    const lights = Object.values(sim.rooms).filter((r) => r.light).length,
-      ac = Object.values(sim.rooms).filter((r) => r.climate).length;
     effects.update({...state, climate: s.climate, light: s.light});
     $('#panel-title').textContent = d.panel;
     $('#panel-status').textContent =
@@ -256,30 +72,9 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
             : L('ห้องว่าง', 'Vacant')
           : L('ปกติ', 'Normal'); // simulated data is said once, in the header
     $('#panel-status').classList.toggle('attention', destination === 'pond' && state.pondAlert);
-    let html = '';
-    if (destination === 'overview')
-      html = `<p class="dashboard-intro">${L('ดูสถานะทั้งอาคาร และเลือกไปยังจุดที่สนใจ', 'See what is happening in the building, then go straight to any spot')}</p><div class="metric-pair">${metric(L('พลังงานจากโซลาร์', 'Solar power'), state.solar.toFixed(1), 'kW', insights?.timeLabel() || '')}${metric(L('ห้องประชุม', 'Meeting room'), state.occupied ? L('ใช้งาน', 'In use') : L('ว่าง', 'Free'), '', L('จากเซนเซอร์เรดาร์', 'From the radar'))}</div><div class="dashboard-section"><h3>${L('ระบบในอาคาร', 'Building systems')}</h3>${system('light', L('แสงสว่าง', 'Lighting'), L('จำนวนไฟที่เปิด', 'Light circuits in the model'), L(`${lights} เปิด`, `${lights} on`))}${system('air', L('เครื่องปรับอากาศ', 'Air conditioning'), L('จำนวนแอร์ที่เปิด', 'Units in the room'), L(`${ac} เปิด`, `${ac} on`))}${system('water', L('บ่อปลา', 'Fish pond'), state.pondAlert ? L('ระดับน้ำต่ำกว่าค่าที่ตั้ง', 'Water below the set level') : L('ระดับน้ำปกติ', 'Water within the set range'), state.water + '%')}</div><div class="dashboard-section"><h3>${L('จุดที่น่าสนใจ', 'Places to visit')}</h3>${events(
-        getLang() === 'en'
-          ? [
-              ['Meeting room', 'Tap the meeting room to try the lights and AC'],
-              ['Rooftop', 'Follow the energy path from the solar panels'],
-              ['Car park', 'Watch plates read at the barrier and cars find their bays'],
-            ]
-          : [
-              ['ห้องประชุม', 'แตะห้องประชุมเพื่อทดลองไฟและแอร์'],
-              ['ดาดฟ้า', 'ดูการผลิตไฟจากแผงโซลาร์'],
-              ['ลานจอดรถ', 'ดูการอ่านทะเบียนที่ไม้กั้นและรถเข้าช่องจอด'],
-            ],
-      )}</div>`;
-    if (destination === 'meeting')
-      html = `<p class="dashboard-intro">${L('ห้องประชุมย่อย 2 ชั้น 4 · ควบคุมไฟและแอร์ตามการใช้งาน', 'Meeting room 2, floor 4 · light and air tuned to how the room is used')}</p><div class="metric-pair">${metric(L('อุณหภูมิห้อง', 'Room temperature'), state.temp.toFixed(1), '°C')}${metric(L('ตั้งอุณหภูมิ', 'Set point'), state.target, '°C')}</div><div class="dashboard-section">${row(L('การใช้งาน', 'Occupancy'), state.occupied ? L('มีคนอยู่ · 6 คน', 'Occupied · 6 people') : L('ไม่มีคน', 'Empty'))}${row(L('แอร์', 'AC'), s.climate ? L('เปิดโหมดเย็น', 'Cooling') : L('ปิด', 'Off'))}${row(L('ประตู', 'Door'), Object.values(s.doors).some(Boolean) ? L('เปิด', 'Open') : L('ปิด', 'Closed'))}</div>${controls()}<div class="dashboard-section"><h3>${L('แนวโน้มอุณหภูมิ', 'Temperature trend')}</h3>${chart([27.5, 27.2, 26.8, 26.2, 25.9, state.temp], getLang() === 'en' ? ['Start', '5 min', '10 min', 'Now'] : ['เริ่ม', '5 นาที', '10 นาที', 'ตอนนี้'], L('อุณหภูมิ', 'temperature'), 'temp')}<div class="chart-caption"><span>${insights?.timeLabel() || L('อุณหภูมิห้อง', 'Room temperature')}</span><span>${L('เป้าหมาย', 'Target')} ${state.target} °C</span></div></div><button class="panel-action" data-action="${state.occupied ? 'meeting-end' : 'meeting'}">${state.occupied ? icon('leave') + L('จำลองเลิกประชุม', 'End the meeting') : icon('play') + L('จำลองเริ่มประชุม', 'Simulate a meeting')}</button><p class="scenario-note">${state.scenario === 'meeting' ? L('กำลังจำลองการทำความเย็น · เร่งเวลาเพื่อสาธิต', 'Simulating cooling · time sped up for the demo') : L('จุดสีเขียวเป็นตำแหน่งจำลอง ไม่ได้ติดตามบุคคลจริง', 'Green dots are made-up positions, not real people tracking')}</p>`;
-    if (destination === 'pond')
-      html = `<p class="dashboard-intro">${L('คุณภาพน้ำและระดับน้ำในบ่อปลา', 'Water and surroundings of the fish pond by the meeting room')}</p><div class="metric-pair">${metric(L('ระดับน้ำ', 'Water level'), state.water, '%')}${metric(L('อุณหภูมิน้ำ', 'Water temperature'), '27.1', '°C')}</div><div class="water-level ${state.pondAlert ? 'warning' : ''}" role="img" aria-label="${L('ระดับน้ำ', 'Water level')} ${state.water}%">${Array.from({length: 12}, (_, i) => `<i class="${i < Math.round((state.water / 100) * 12) ? 'filled' : ''}"></i>`).join('')}</div>${state.pondAlert ? `<div class="alert-strip">${L('ระดับน้ำต่ำ · ตรวจสอบบ่อและระบบเติมน้ำ', 'Low water · check the pond and the refill system')}</div>` : ''}<div class="dashboard-section">${row(L('ความเป็นกรด–ด่าง', 'Acidity'), 'pH 7.2')}${row(L('ออกซิเจนละลายน้ำ', 'Dissolved oxygen'), '6.4 mg/L')}${row(L('สถานะปั๊ม', 'Pump status'), L('ทำงาน', 'Running'))}${row(L('เกณฑ์ระดับน้ำในเดโม', 'Demo water threshold'), L('เตือนเมื่อ < 65%', 'Alert below 65%'))}</div><div class="dashboard-section"><h3>${L('ระดับน้ำวันนี้', 'Water level today')}</h3>${chart([81, 83, 82, 81, 82, state.water], ['08:00', '10:00', '12:00', '13:30'], L('ระดับน้ำ', 'water level'), 'water')}</div><button class="panel-action" data-action="pond">${icon(state.pondAlert ? 'check' : 'water')}${state.pondAlert ? L('คืนค่าระดับน้ำ', 'Restore water level') : L('จำลองระดับน้ำต่ำ', 'Simulate low water')}</button>`;
-    if (destination === 'energy')
-      html = `<p class="dashboard-intro">${L('แผงโซลาร์ 24 แผง · ผลิตไฟฟ้าใช้ภายในอาคาร', '24 solar panels · see where the building gets its power')}</p><div class="metric-pair">${metric(L('ผลิตอยู่ตอนนี้', 'Producing now'), state.solar.toFixed(1), 'kW')}${metric(L('ผลิตสะสมวันนี้', 'Produced today'), state.energy.toFixed(1), 'kWh')}</div><div class="energy-flow"><div class="energy-node">${icon('solar')}<strong>${state.solar.toFixed(1)} kW</strong><span>${L('โซลาร์', 'Solar')}</span></div><span class="flow-arrow">${icon('arrow')}</span><div class="energy-node">${icon('building')}<strong>${state.load.toFixed(1)} kW</strong><span>${L('อาคาร', 'Building')}</span></div></div>${row(L('รับไฟจากกริด', 'From the grid'), Math.max(0, state.load - state.solar).toFixed(1) + ' kW')}${row(L('สัดส่วนไฟจากโซลาร์', 'Solar share'), Math.min(100, Math.round((state.solar / state.load) * 100)) + '%')}<div class="dashboard-section"><h3>${L('กำลังผลิตวันนี้', 'Output today')}</h3>${chart([0, 0.4, 2.3, 5.1, 7.4, 9.1, state.solar, 7.7, 5.8, 2.4, 0], ['06:00', '10:00', '14:00', '18:00'], L('กำลังผลิตโซลาร์', 'solar output'), 'solar')}<div class="chart-caption"><span>${insights?.timeLabel() || L('การผลิตไฟฟ้าจากแสงอาทิตย์', 'Solar production')}</span><span>kW</span></div></div><button class="panel-action" data-action="energy"${sim.night ? ' disabled' : ''}>${icon('solar')}${sim.night ? L('กลางคืน ไม่มีการผลิตไฟ', 'Night · no sun to make power') : state.solar < 5 ? L('จำลองแดดกลับมา', 'Simulate the sun returning') : L('จำลองเมฆบังแผง', 'Simulate clouds over the panels')}</button>`;
     // Updated in place (morph), not rebuilt: a rebuilt button under the pointer lost its hover on every refresh.
     const next = document.createElement('template');
-    next.innerHTML = html;
+    next.innerHTML = panels[destination]?.({...shown, sim, room: s}) ?? '';
     const action = next.content.querySelector('.panel-action'),
       section = next.content.querySelector('.dashboard-section');
     if (destination !== 'overview' && action && section) section.before(action);
@@ -299,58 +94,16 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
         : d.chip;
     insights?.update({destination, traveling, landed, state, sim});
   }
-  function stopScenario() {
-    cancelAnimationFrame(scenarioFrame);
-    scenarioFrame = 0;
-    state.scenario = null;
-  }
-  // The car park's layout (a wider panel, a taller view, no timeline) changes as one short animation, a view transition:
-  // the 3D view, the dock and the panel move to their new size and place while the rest cross-fades. Switched in one
-  // frame, the whole page jumped and the 3D picture zoomed by about 8% just as the camera set off. A switch asked for
-  // while one is still running waits for it, then goes to the layout wanted last: cutting one short made the page
-  // jump to its end and flash.
-  let layoutWanted = false,
-    layoutChange = null;
-  function setParkingLayout(on) {
-    if (!parking) return;
-    layoutWanted = on;
-    if (!on) parking.stopStory(); // leaving: the story drives the camera, so it stops at once; the layout follows
-    if (layoutChange || parking.active === on) return;
-    const apply = () => {
-      if (parking.active !== layoutWanted) {
-        if (layoutWanted) parking.enter();
-        else parking.exit();
-      }
-    };
-    // Screenshots (`manual`): at once, as a view transition runs on real time and was caught part way.
-    if (!document.startViewTransition || reduced.matches || document.hidden || 'manual' in options) {
-      apply();
-      return;
-    }
-    let done = false;
-    const transition = (layoutChange = document.startViewTransition(() => {
-      done = true;
-      apply();
-    }));
-    transition.ready.catch(() => {});
-    transition.updateCallbackDone.catch(() => {});
-    transition.finished
-      .catch(() => {})
-      .finally(() => {
-        layoutChange = null;
-        if (!disposed && parking.active !== layoutWanted) setParkingLayout(layoutWanted);
-      });
-    // The animation starts at the browser's next frame; if that is slow to come, the layout changes without it.
-    setTimeout(() => {
-      if (!done) transition.skipTransition();
-    }, 250);
-  }
   async function select(id, {guided = false, instant = false} = {}) {
-    if (!destinations[id] || disposed) return false;
-    if (!guided) story.stop();
+    if (!stops[id] || disposed) return false;
+    // A visitor's own pick: the story ends, and a paused day runs again.
+    if (!guided) {
+      story.stop();
+      if (world.paused) world.setPaused(false);
+    }
     stopScenario();
     const ticket = ++sequence,
-      d = destinations[id];
+      d = stops[id];
     // The car park changes the page layout: switch it as the flight sets off, so the view is its final size while the
     // camera moves instead of jumping at the end.
     setParkingLayout(id === 'parking');
@@ -376,7 +129,7 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
       effects.select(id);
       // The meeting stop's controls act on its room: select it on arrival, so night lighting is laid out around it
       // from the start and its switch only changes that room.
-      if (id === 'meeting') simulation.selectRoom(meetingId);
+      if (id === 'meeting') simulation.selectRoom(MEETING_ROOM);
       render();
     };
     const arrived = await navigate(id, {
@@ -419,111 +172,16 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
     return true;
   }
 
-  function scenario(kind) {
-    if (traveling) return;
-    stopScenario();
-    state.scenario = kind;
-    scenarioStart = realNow();
-    lastTick = -1;
-    let lastVisual = 0;
-    if (kind === 'meeting') {
-      state.occupied = true;
-      state.temp = 27.4;
-      simulation.selectRoom(meetingId);
-      simulation.setRoom(meetingId, {light: true, climate: true});
-    }
-    // Ending it by hand: the room empties and its light and AC go off, until the building's schedule next changes them.
-    if (kind === 'meeting-end') {
-      state.scenario = null;
-      state.occupied = false;
-      simulation.selectRoom(meetingId);
-      simulation.setRoom(meetingId, {light: false, climate: false});
-      insights?.hold(['occupied']);
-      render();
-      return;
-    }
-    if (kind === 'pond') {
-      state.pondAlert = !state.pondAlert;
-      state.water = state.pondAlert ? 58 : 82;
-      state.scenario = null;
-      insights?.hold(['pondAlert', 'water']);
-      render();
-      return;
-    }
-    if (kind === 'energy') {
-      if (simulation.getState().night) {
-        stopScenario();
-        return;
-      }
-      state.solar = state.solar < 5 ? 8.4 : 3.1;
-      state.load = Math.max(state.load, state.solar + 0.5);
-    } // the building takes what the panels make, as in the day's schedule
-    // What a scenario changed by hand stays a while before the building's schedule takes it back.
-    insights?.hold({meeting: ['temp', 'occupied'], energy: ['solar', 'load']}[kind] || []);
-    render();
-    function tick(time) {
-      if (disposed || document.hidden) return;
-      const elapsed = (realNow() - scenarioStart) / 1000,
-        limit = kind === 'meeting' ? 12 : 5;
-      if (kind === 'meeting') state.temp = 27.4 - Math.min(1, elapsed / 12) * 2.6;
-      if (!reduced.matches && time - lastVisual >= 50) {
-        effects.animate(elapsed);
-        effects.update({...state, climate: actual().climate, light: actual().light});
-        lastVisual = time;
-      }
-      if (Math.floor(elapsed * 2) !== lastTick) {
-        lastTick = Math.floor(elapsed * 2);
-        render();
-      }
-      if (elapsed < limit) scenarioFrame = requestAnimationFrame(tick);
-      else {
-        scenarioFrame = 0;
-        state.scenario = null;
-        render();
-      }
-    }
-    scenarioFrame = requestAnimationFrame(tick);
-  }
-  // The building's story (building-story.js): it flies the camera with select, and works each stop's own buttons here.
-  function storyAct(kind) {
-    scenario({'pond-low': 'pond', 'pond-ok': 'pond', cloud: 'energy', sun: 'energy'}[kind] ?? kind);
-  }
-  // `storySet`: the readings this run of the story has set.
-  const storySet = new Set();
-  function storyHold(...keys) {
-    for (const key of keys) storySet.add(key);
-    insights?.hold(keys);
-  }
-  // The scene as it stands before a step's button, whatever the day or a visitor made of it: the room empty (by the
-  // day's schedule it is in use at 10:00, and its meeting started with people already in it), and so on.
-  function storyPrepare(kind) {
-    if (kind === 'meeting') {
-      Object.assign(state, {occupied: false, temp: 27.4});
-      simulation.setRoom(meetingId, {light: false, climate: false});
-      storyHold('occupied', 'temp');
-    } else if (kind === 'meeting-end') {
-      state.occupied = true;
-      simulation.setRoom(meetingId, {light: true, climate: true});
-      storyHold('occupied');
-    } else if (kind === 'pond-low' || kind === 'pond-ok') {
-      state.pondAlert = kind === 'pond-ok';
-      state.water = state.pondAlert ? 58 : 82;
-      storyHold('pondAlert', 'water');
-    } else {
-      state.solar = kind === 'sun' ? 3.1 : Math.max(state.solar, 5);
-      state.load = Math.max(state.load, state.solar + 0.5);
-      storyHold('solar', 'load');
-    }
-    render();
-  }
+  // The building's story (building-story.js): it flies the camera with select, and works each stop's own buttons.
+  const storySet = scenarios.story.set;
   story = createBuildingStory({
     select,
-    prepare: storyPrepare,
-    act: storyAct,
+    prepare: scenarios.story.prepare,
+    act: scenarios.story.act,
     restore() {
       if (disposed) return;
       stopScenario();
-      insights?.backToSchedule(storySet, storySet.has('occupied') ? meetingId : null);
+      insights?.backToSchedule(storySet, storySet.has('occupied') ? MEETING_ROOM : null);
     },
     tap: tapCues,
     changed() {
@@ -536,36 +194,26 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
   const stage = $('#viewport'),
     storyBarEl = $('#story-bar'),
     caption = $('#story-caption');
+  const renderBar = wireStoryBar(storyBarEl, {
+    story,
+    idle: () => t('story.idleBuilding'),
+    leave: () => story.stop(),
+    signal,
+  });
   function renderStory() {
-    // In place (morph): rebuilt, the button just pressed lost its focus at every step.
-    morph(storyBarEl, storyBar(story, {idle: pt('story.idleBuilding')}));
+    renderBar();
     const c = story.caption;
     caption.hidden = !c;
     stage.classList.toggle('building-story', Boolean(c));
     caption.innerHTML = c
       ? storyCaption({
-          step: pt('story.step', {n: story.index + 1, total: story.total}),
+          step: t('story.step', {n: story.index + 1, total: story.total}),
           title: L(...c.title),
           body: L(...c.body),
           hint: c.hint && L(...c.hint),
         })
       : '';
   }
-  listen(storyBarEl, 'click', (event) => {
-    const what = event.target.closest('[data-bar]')?.dataset.bar;
-    if (what === 'play' || what === 'restart') story.play();
-    else if (what === 'pause') world.setPaused(true);
-    else if (what === 'resume') world.setPaused(false);
-    else if (what === 'next') story.next();
-    else if (what === 'free') story.stop();
-  });
-  // Enter held down presses once (its repeats went on to press what the button had become).
-  listen(storyBarEl, 'keydown', (event) => {
-    if (event.repeat && event.key === 'Enter') event.preventDefault();
-  });
-  listen(storyBarEl, 'change', (event) => {
-    if (event.target.dataset.bar === 'auto') story.setAuto(event.target.checked);
-  });
   // The visitor takes over, as from the car park's: the 3D view (on auto-advance; Next by Next, the presenter may look
   // around between steps), or Esc. Taking the view, they go on from what they see (the press may be on a device: put
   // back to the schedule under it, the light they saw off was on, and their tap switched it off).
@@ -576,14 +224,6 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
     },
     {signal},
   );
-  listen(document, 'keydown', (event) => {
-    if (event.key === 'Escape') story.stop();
-  });
-  // Pause and Resume are the day's (the timeline's Pause too): redrawn when the clock's rate changes.
-  const offRate = world.subscribe((kind) => {
-    if (kind === 'rate') renderStory();
-  });
-  signal.addEventListener('abort', offRate, {once: true});
   signal.addEventListener('abort', () => story.stop(), {once: true});
   // Free play, the parking story, and back to the start after a quiet minute: the director's (director.js). Its minute
   // runs on real time (a paused day stops the engine's clock); not on stepped pages (`manual`, the screenshots), whose
@@ -623,15 +263,15 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
       stopScenario();
       const s = actual(),
         key = control.dataset.control;
-      simulation.selectRoom(meetingId);
+      simulation.selectRoom(MEETING_ROOM);
       if (key === 'door')
-        simulation.setRoom(meetingId, {
+        simulation.setRoom(MEETING_ROOM, {
           doors: Object.fromEntries(Object.entries(s.doors).map(([id, value]) => [id, !value])),
         });
-      else simulation.setRoom(meetingId, {[key]: !s[key]});
+      else simulation.setRoom(MEETING_ROOM, {[key]: !s[key]});
       render();
     }
-    if (action) scenario(action.dataset.action);
+    if (action && !traveling) scenarios.start(action.dataset.action);
   });
   document.querySelectorAll('[data-destination]').forEach((b) => {
     b.disabled = false;
@@ -642,41 +282,14 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
   listen($('#tour-night'), 'click', () => {
     story.stop();
     if (parking?.story.running) parking.stopStory();
-    insights?.jumpTo(simulation.getState().night ? 7 * 60 + 30 : 20 * 60);
+    insights?.jumpTo(simulation.getState().night ? DAY_AT : NIGHT_AT);
   });
   const unsubscribe = simulation.subscribe(() => render());
-  // The car park's plate camera card sits in the view's top-right corner, under what the corner shows (the room colours
-  // bar, the flight's status) or, when it shows nothing, level with the stop's title card (it waited below an empty gap),
-  // or below that card in a view too narrow for both side by side (on a phone it covered the title). The card's width:
-  // its own when shown, else what parking.css gives it.
-  const corner = $('.scene-top-right'),
-    titleCard = $('.scene-title');
-  // A title card hidden (the car park with the visitor's phone open) leaves the corner free: the card went below it
-  // all the same, half-way down a narrow view.
-  const placeCornerCard = () => {
-    const v = stage.getBoundingClientRect(),
-      c = corner.getBoundingClientRect(),
-      t = titleCard.getBoundingClientRect();
-    const card = $('.pk-feed')?.offsetWidth || (innerWidth <= 1280 ? 270 : Math.min(330, v.width * 0.4)),
-      beside = document.body.matches('.parking-active.phone-open') || t.right + 8 <= c.right - card;
-    stage.style.setProperty(
-      '--corner-free',
-      `${Math.round((c.height >= 1 ? c.bottom + 8 : beside ? t.top : t.bottom + 8) - v.top)}px`,
-    );
-    stage.style.setProperty('--corner-right', `${Math.round(v.right - c.right)}px`);
-  };
-  const cornerSize = new ResizeObserver(placeCornerCard);
-  cornerSize.observe(corner);
-  cornerSize.observe(stage);
-  cornerSize.observe(titleCard);
-  signal.addEventListener('abort', () => cornerSize.disconnect(), {once: true});
-  const bodyClass = new MutationObserver(placeCornerCard);
-  bodyClass.observe(document.body, {attributes: true, attributeFilter: ['class']});
-  signal.addEventListener('abort', () => bodyClass.disconnect(), {once: true});
+  placeCornerCard({stage, corner: $('.scene-top-right'), titleCard: $('.scene-title'), signal});
   // A device tapped in the 3D view is the visitor's own, as the panel's switches are: it ends the story and a scenario
   // under way (the room went on cooling with its AC switched off).
   simulation.setInteractionFilter((room) => {
-    const allowed = !traveling && destination === 'meeting' && room.id === meetingId;
+    const allowed = !traveling && destination === 'meeting' && room.id === MEETING_ROOM;
     if (allowed) {
       story.stop({keep: true});
       stopScenario();
@@ -703,27 +316,20 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
     followState: () => director.follow,
     toggleFollow: () => director.toggleFollow(),
   });
-  // Every touch, key or wheel on the page starts the quiet minute again, and so do a drag all along (one longer than a
-  // minute had the camera fly off under the finger) and every click (a screen reader sends only that).
-  for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'click'])
-    listen(
-      document,
-      type,
-      (event) => {
-        if (type === 'pointermove' && !event.buttons) return;
-        const on = (selector) => Boolean(event.target.closest?.(selector));
-        director.touch({own: on('#day-follow, #day-pause, #day-speed, #lang-toggle'), land: on('.parking-bar')});
-      },
-      {capture: true},
-    );
+  // Every touch on the page starts the quiet minute again.
+  onTouch(
+    (event) => {
+      const on = (selector) => Boolean(event.target.closest?.(selector));
+      director.touch({own: on('#day-follow, #day-pause, #day-speed, #lang-toggle'), land: on('.parking-bar')});
+    },
+    {signal},
+  );
   // Runs on every TH/EN switch: static markup, then everything the showcase draws itself.
   function applyLanguage() {
     const en = getLang() === 'en';
     $('#lang-toggle span').textContent = en ? 'TH' : 'EN';
     translatePage();
-    const dock = $('[data-destination="parking"] span');
-    if (dock) dock.textContent = pt('parking.dock');
-    const d = destinations[destination];
+    const d = stops[destination];
     $('#scene-heading').textContent = d.panel;
     $('#scene-floor').textContent = d.floor;
     insights?.relabel();
@@ -737,7 +343,7 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
   void select('overview', {instant: true});
   // Options (rehearsals, screenshots): on the engine's clock, so a stepped page (`manual`) starts them at the same moment.
   const dest = options.dest;
-  if (dest && destinations[dest])
+  if (dest && stops[dest])
     later(async () => {
       const arrived = await select(dest);
       if (arrived && dest === 'parking' && options.story === '1') void parking?.playStory({auto: options.auto !== '0'});

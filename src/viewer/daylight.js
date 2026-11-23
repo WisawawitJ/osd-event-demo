@@ -1,4 +1,4 @@
-// Sky and sun for a time of day, read from the world clock (src/parking/clock.js). Bangkok in late November:
+// Sky and sun for a time of day, read from the world clock (src/core/clock.js). Bangkok in late November:
 // sunrise about 06:20, sunset about 17:55. Daylight fades in and out over 40 minutes either side of them, with a
 // warm low sun near the horizon, and a dim blue moonlight at night.
 // The one shadow-casting light moves on a single closed path through the 24 hours, so shadows never jump (not at

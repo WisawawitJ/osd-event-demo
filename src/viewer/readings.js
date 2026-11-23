@@ -4,7 +4,7 @@
 // solar) are kept for HOLD_MINUTES of world time instead. Sunset ends a sun-returning override (it kept 8.4 kW of
 // output into the evening). The day's wrap at 03:00 keeps a held reading's time left.
 import {daySnapshot} from 'osd/viewer/building-day.js';
-import {world} from 'osd/parking/clock.js';
+import {world} from 'osd/core/clock.js';
 
 export const HOLD_MINUTES = 60;
 const STEADY = new Set(['pondAlert', 'water', 'occupied']);

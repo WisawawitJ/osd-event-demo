@@ -2,7 +2,7 @@
 // 3D car park (only what traffic reads from it: the barrier's arm and where cars are). No browser, no rendering:
 // simulation time is stepped by the test, so a minute of traffic takes a fraction of a second, the same every run.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
-import {advance, runUntil, seed, demoNow, TICK, world} from 'osd/parking/clock.js';
+import {advance, runUntil, seed, demoNow, TICK, world} from 'osd/core/clock.js';
 import {createParkingSim} from 'osd/parking/sim.js';
 import {createBoom, plateRead} from 'osd/parking/gate.js';
 import {createTraffic} from 'osd/parking/traffic.js';

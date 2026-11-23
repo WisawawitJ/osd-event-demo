@@ -2,7 +2,7 @@
 // so turns look like real cornering. Heading h means forward = (sin h, cos h) in (x, z).
 import {createCar, setCarLamps, setCarBlinker} from './cars.js';
 import {DRIVE, GATE, STREET, ENTRY_TURN, FAR_TURN, groundY} from './layout.js';
-import {demoNow, later, onTick, rng} from './clock.js';
+import {demoNow, later, onTick, rng} from 'osd/core/clock.js';
 
 const EAST = Math.PI / 2,
   WEST = -Math.PI / 2,

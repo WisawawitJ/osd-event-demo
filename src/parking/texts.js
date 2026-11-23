@@ -1,42 +1,10 @@
-// Thai (default) and English strings for the parking demo, plus Bangkok-time formatting.
-// The language choice is kept in this browser only.
+// The car park's texts: [thai, english]. Its modules take the language's functions from here too, so the texts are there.
+import {addTexts} from 'osd/core/texts.js';
 
-const KEY = 'osd-demo-language';
-const listeners = new Set();
-let lang = (() => {
-  try {
-    return localStorage.getItem(KEY) === 'en' ? 'en' : 'th';
-  } catch {
-    return 'th';
-  }
-})();
-
-export const getLang = () => lang;
-export function setLang(next) {
-  lang = next === 'en' ? 'en' : 'th';
-  try {
-    localStorage.setItem(KEY, lang);
-  } catch {}
-  document.documentElement.lang = lang;
-  for (const fn of listeners) fn(lang);
-}
-export const onLang = (fn) => {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-};
-document.documentElement.lang = lang;
-
-// [thai, english]
-const S = {
-  // destination + general
-  'parking.dock': ['ที่จอดรถ', 'Parking'],
-  'parking.panel': ['ระบบที่จอดรถ', 'Parking access'],
-  'parking.chip': ['ลานจอด 50 คัน · ไม้กั้นและกล้องอ่านทะเบียน', '50-space car park · barrier and plate cameras'],
-  'parking.floor': ['ลานจอดรถ', 'Car park'],
-  'sim.data': ['ข้อมูลจำลอง', 'Simulated data'],
-  'sim.disclosure': ['ข้อมูลจำลองเพื่อการสาธิต ไม่ได้เชื่อมต่ออุปกรณ์จริง', 'Demo data and events · no real devices connected'],
+export * from 'osd/core/texts.js';
+addTexts({
+  // general
   back: ['ย้อนกลับ', 'Back'],
-  next: ['ถัดไป', 'Next'],
   cancel: ['ยกเลิก', 'Cancel'],
   save: ['บันทึก', 'Save'],
   search: ['ค้นหาชื่อหรือทะเบียน', 'Search name or plate'],
@@ -301,6 +269,7 @@ const S = {
     'Parking access for this visit has been ended: the barrier will no longer open for this plate. If you still plan to visit, please send a new request.',
   ],
   'ph.ticket': ['บัตรจอดรถ', 'Parking ticket'],
+  'ph.ticket.where': ['ลานจอดรถ', 'Car park'],
   'ph.ticket.how': [
     'ขับเข้าทางประตูหลัก กล้องจะอ่านทะเบียนและเปิดไม้กั้นให้อัตโนมัติ · จอดโซน P2 แถว A',
     'Drive to the main gate: the camera reads your plate and opens the barrier · park in zone P2, row A',
@@ -312,20 +281,9 @@ const S = {
   'ph.plateHelp': ['ตัวเลข 0–9 และอักษรไทย เช่น 7กข 4821', 'Digits 0–9 and Thai letters, e.g. 7กข 4821'],
 
   // story
-  'story.play': ['เริ่มสาธิต', 'Play the story'],
-  'story.pause': ['หยุดชั่วคราว', 'Pause'],
-  'story.resume': ['เล่นต่อ', 'Resume'],
-  'story.restart': ['เริ่มใหม่', 'Restart'],
-  'story.exit': ['จบการสาธิต', 'Exit story'],
-  'story.autoAdvance': ['เล่นอัตโนมัติ', 'Auto-advance'],
-  'story.step': ['ขั้นที่ {n} / {total}', 'Step {n} / {total}'],
   'story.idle': [
     'กด “เริ่มสาธิต” เพื่อดูขั้นตอนของผู้มาติดต่อ หรือทดลองเองได้ทุกส่วน',
     'Choose “Play the story” to follow one visitor, or try any part yourself',
-  ],
-  'story.idleBuilding': [
-    'กด “เริ่มสาธิต” เพื่อดูระบบอาคารในวันประชุม หรือเลือกทดลองเองได้ทุกจุด',
-    'Choose “Play the story” to follow a visitor’s meeting day through the building, or try any stop yourself',
   ],
   'story.freeMode': [
     'จบการสาธิตแล้ว · ทดลองเองได้ทุกส่วน ทั้งคอนโซลเจ้าหน้าที่ มือถือ หรือส่งรถไปที่ไม้กั้น',
@@ -408,48 +366,4 @@ const S = {
     'แม้สิทธิ์หมดอายุ รถก็ออกได้ ระบบบันทึกเวลาออกและคืนช่องจอด',
     'An expired pass never traps a car. The exit is logged and the space is freed',
   ],
-};
-
-const fill = (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => vars?.[k] ?? '');
-// Every string, for tests (each key: [thai, english]).
-export const STRINGS = S;
-export function t(key, vars) {
-  const entry = S[key];
-  if (!entry) return key;
-  return fill(entry[lang === 'en' ? 1 : 0], vars);
-}
-// A pair given inline, for data objects that carry both languages.
-export const tx = (pair) => (Array.isArray(pair) ? pair[lang === 'en' ? 1 : 0] : pair);
-// The text in the chosen language, from its Thai and English versions.
-export const L = (th, en) => (lang === 'en' ? en : th);
-
-const MONTHS_TH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-// Demo times are epoch ms, always shown as Bangkok wall-clock time to stay independent of the laptop's zone.
-const pad = (n) => String(n).padStart(2, '0');
-function parts(ms) {
-  const d = new Date(ms + 7 * 3600e3);
-  return {
-    y: d.getUTCFullYear(),
-    m: d.getUTCMonth(),
-    d: d.getUTCDate(),
-    h: d.getUTCHours(),
-    min: d.getUTCMinutes(),
-    s: d.getUTCSeconds(),
-  };
-}
-export function fmtDate(ms) {
-  const p = parts(ms);
-  return lang === 'en' ? `${p.d} ${MONTHS_EN[p.m]} ${p.y}` : `${p.d} ${MONTHS_TH[p.m]} ${p.y + 543}`;
-}
-export const fmtTime = (ms, seconds = false) => {
-  const p = parts(ms);
-  return `${pad(p.h)}:${pad(p.min)}${seconds ? ':' + pad(p.s) : ''}`;
-};
-export const fmtDateTime = (ms) => `${fmtDate(ms)} ${fmtTime(ms)}`;
-export const fmtShortDate = (ms) => {
-  const p = parts(ms);
-  return lang === 'en' ? `${p.d} ${MONTHS_EN[p.m]}` : `${p.d} ${MONTHS_TH[p.m]}`;
-};
-// Bangkok wall-clock to epoch ms.
-export const bkk = (y, m, d, h = 0, min = 0, s = 0) => Date.UTC(y, m - 1, d, h - 7, min, s);
+});

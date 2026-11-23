@@ -1,4 +1,4 @@
-/* Parking access demo, layered on the showcase styles (app.css). Same palette: ink #000334, accent #0055b8. */
+/* Parking access demo, layered on the showcase styles (app.css). Same palette: ink var(--osd-navy), accent var(--osd-blue). */
 :root {
   --pk-blue: #0055b8;
   --pk-blue-soft: #eef4fc;
@@ -44,7 +44,7 @@
   display: flex;
   gap: 2px;
   padding: 3px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 14px;
   box-shadow: var(--shadow-card);
 }
@@ -66,7 +66,7 @@
 }
 .showcase-page .view-controls button[aria-pressed='true'] {
   background: var(--pk-blue-soft);
-  color: #023e8a;
+  color: var(--osd-deep);
 }
 .showcase-page .view-controls button[aria-pressed='true']:hover {
   background: #dce9f9;
@@ -140,7 +140,7 @@
   height: calc(100dvh - 448px);
   min-height: 460px;
 } /* the page fits the screen, its footer included */
-/* Switching to and from this layout is one view transition (showcase.js, switchLayout): the 3D view, the dock and the
+/* Switching to and from this layout is one view transition (parking-layout.js): the 3D view, the dock and the
    panel move and resize to their new place, each cross-fading inside its own frame (kept from the top left, not
    stretched); everything else cross-fades. */
 #viewport {
@@ -218,7 +218,7 @@
   gap: 8px 14px;
   padding: 8px 10px;
   container-type: inline-size;
-  background: #fff;
+  background: var(--surface);
   border-radius: 14px;
   box-shadow: 0 6px 20px #00033408;
   min-height: 60px;
@@ -235,7 +235,7 @@
   padding: 8px 13px;
 }
 .parking-bar button:not(.primary-button) {
-  color: #55565a;
+  color: var(--text-soft);
 }
 .pk-bar-main {
   display: flex;
@@ -292,7 +292,7 @@
   flex: 1;
   height: 5px;
   border-radius: 3px;
-  background: #e2e8f0;
+  background: var(--dot);
 }
 .pk-dots i.done {
   background: #8fb8e6;
@@ -315,7 +315,7 @@
 }
 .pk-phone-toggle[aria-pressed='true'] {
   background: var(--pk-blue-soft);
-  color: #023e8a !important;
+  color: var(--link) !important;
 }
 
 /* Pills, plates, buttons */
@@ -406,8 +406,8 @@
   font-size: 13px;
   border-radius: 9px;
   padding: 9px 14px;
-  background: #f1f4f8;
-  color: #33465a;
+  background: var(--control);
+  color: var(--text-button);
   border: 1px solid transparent;
   min-height: 42px !important;
 }
@@ -420,7 +420,7 @@
   color: #fff;
 }
 .pk-btn.primary:not(:disabled):hover {
-  background: #023e8a !important;
+  background: var(--osd-deep) !important;
 }
 .pk-btn.danger {
   background: var(--pk-bad-bg);
@@ -446,7 +446,7 @@
 }
 .pk-link {
   font-size: 11.5px;
-  color: #023e8a;
+  color: var(--osd-deep);
   padding: 4px 6px !important;
   min-height: 0 !important;
   border-radius: 6px;
@@ -557,7 +557,7 @@
   align-items: center;
   gap: 6px;
   font-weight: 600;
-  color: #34495a;
+  color: var(--text-console);
 }
 .pk-console-head svg {
   width: 16px !important;
@@ -576,7 +576,7 @@
   gap: 3px;
   padding: 5px;
   margin: 0 16px;
-  background: #f2f5f9;
+  background: var(--tabs);
   border-radius: 11px;
 }
 .pk-tabs button {
@@ -589,15 +589,15 @@
   padding: 6px 2px !important;
   min-height: 50px !important;
   border-radius: 8px;
-  color: #4f6074;
+  color: var(--text-tab);
 }
 .pk-tabs button svg {
   width: 18px !important;
   height: 18px !important;
 }
 .pk-tabs button[aria-selected='true'] {
-  background: #fff;
-  color: #1f3d9e;
+  background: var(--surface-raised);
+  color: var(--tab-on);
   box-shadow: 0 2px 8px #0003340f;
 }
 .pk-tab-body {
@@ -652,7 +652,7 @@
   margin-top: 14px;
 }
 .pk-kpis div {
-  background: #f6f8fb;
+  background: var(--card);
   border-radius: 9px;
   padding: 9px 8px;
 }
@@ -677,7 +677,7 @@
   padding: 9px 10px !important;
   margin-bottom: 6px;
   border-radius: 9px;
-  background: #f7f9fc;
+  background: var(--card-quiet);
   min-height: 0 !important;
 }
 .pk-attention > svg:first-child {
@@ -719,11 +719,11 @@
   fill: #9fb0c6;
 }
 .pk-bars .axis {
-  stroke: #dfe5ec;
+  stroke: var(--bars-axis);
 }
 .pk-bars text {
   font-size: 9.5px;
-  fill: #6d7c8e;
+  fill: var(--bars-text);
 }
 .pk-legend {
   display: flex;
@@ -762,7 +762,7 @@
   display: block;
   height: 7px;
   border-radius: 4px;
-  background: #edf1f6;
+  background: var(--track);
   overflow: hidden;
 }
 .pk-zone > i b {
@@ -838,9 +838,9 @@
   font: inherit;
   font-size: 12.5px;
   padding: 9px 12px;
-  border: 1px solid #d8e0e8;
+  border: 1px solid var(--field-line);
   border-radius: 9px;
-  background: #fff;
+  background: var(--field);
 }
 .pk-chips {
   display: flex;
@@ -857,8 +857,8 @@
   padding: 3px 12px 0 !important;
   min-height: 32px !important;
   border-radius: 16px;
-  background: #f1f4f8;
-  color: #55565a;
+  background: var(--control);
+  color: var(--text-soft);
 }
 /* The 3px top padding: the page font's line box sits high in the pill (it keeps room above for Thai marks), so the label
    moves down about 1.25px and the letters' bodies (Thai and Latin) sit within half a pixel of the middle. Measured on the rendered ink. */
@@ -887,7 +887,7 @@
   min-height: 0 !important;
 }
 .pk-row.is-new {
-  background: #f1f5ff;
+  background: var(--new-row);
 }
 .pk-row-main {
   min-width: 0;
@@ -919,7 +919,7 @@
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #023e8a;
+  color: var(--osd-deep);
   padding: 4px 6px !important;
   min-height: 0 !important;
   margin: -4px 0 8px -6px;
@@ -974,7 +974,7 @@
   margin-bottom: 2px;
 }
 .pk-atom span {
-  color: #55565a;
+  color: var(--osd-grey);
   line-height: 1.5;
 }
 .pk-atom.ok {
@@ -995,7 +995,7 @@
   font-size: 12.5px;
   margin-top: 6px;
   padding: 9px 11px;
-  border: 1px solid #d8e0e8;
+  border: 1px solid var(--field-line);
   border-radius: 9px;
   resize: vertical;
 }
@@ -1024,7 +1024,7 @@
   gap: 12px;
   padding: 12px;
   border-radius: 12px;
-  background: #f6f8fb;
+  background: var(--card);
 }
 .pk-gate-status > div:nth-child(2) {
   flex: 1;
@@ -1047,8 +1047,8 @@
   border-radius: 11px;
   display: grid;
   place-items: center;
-  background: #e5eaf1;
-  color: #55565a;
+  background: var(--gate-icon-bg);
+  color: var(--text-soft);
 }
 .pk-gate-status.open .pk-gate-icon,
 .pk-gate-status.opening .pk-gate-icon {
@@ -1104,9 +1104,9 @@
   font: inherit;
   font-size: 12.5px;
   padding: 9px 10px;
-  border: 1px solid #d8e0e8;
+  border: 1px solid var(--field-line);
   border-radius: 9px;
-  background: #fff;
+  background: var(--field);
 }
 .pk-sim-grid {
   display: grid;
@@ -1118,8 +1118,8 @@
   font-size: 12px;
 }
 .pk-alert-card {
-  border: 1.5px solid #f0b3aa;
-  background: #fff8f6;
+  border: 1.5px solid var(--alert-line);
+  background: var(--alert-bg);
   border-radius: 13px;
   padding: 13px;
   margin-bottom: 14px;
@@ -1132,7 +1132,7 @@
 }
 .pk-alert-card p {
   font-size: 12px;
-  color: #6b3a33;
+  color: var(--alert-text);
   margin: 6px 0 8px;
   line-height: 1.6;
 }
@@ -1149,7 +1149,7 @@
 }
 .pk-alert-head small {
   font-size: 11px;
-  color: #8a5a52;
+  color: var(--alert-small);
 }
 .pk-inline {
   display: flex;
@@ -1173,7 +1173,7 @@
   align-items: center;
   gap: 6px;
   font-size: 12.5px;
-  color: #023e8a;
+  color: var(--osd-deep);
   padding: 10px 0;
 }
 .pk-add summary::-webkit-details-marker {
@@ -1193,7 +1193,7 @@
   font: inherit;
   font-size: 12px;
   padding: 8px 9px;
-  border: 1px solid #d8e0e8;
+  border: 1px solid var(--field-line);
   border-radius: 8px;
   min-width: 0;
 }
@@ -1253,7 +1253,7 @@
 .pk-table thead th {
   font-size: 11px;
   font-weight: 600;
-  color: #55565a;
+  color: var(--osd-grey);
 }
 .pk-audit {
   display: grid;
@@ -1409,7 +1409,7 @@
   transform: translateX(-50%);
   width: min(400px, calc(100% - 380px));
   min-width: 300px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 14px;
   padding: 13px 14px 14px;
   box-shadow:
@@ -1431,7 +1431,7 @@
 }
 .pk-alert-pop-head small {
   font-size: 11px;
-  color: #8a5a52;
+  color: var(--alert-small);
 }
 .pk-alert-pop-body {
   display: grid;
@@ -1449,7 +1449,7 @@
   margin: 0;
   font-size: 11.5px;
   line-height: 1.55;
-  color: #6b3a33;
+  color: var(--alert-text);
 }
 
 /* With the camera card showing (top right), the alert moves to the top left so the two never overlap. */
@@ -1478,7 +1478,7 @@
   bottom: 16px;
   transform: translateX(-50%);
   width: min(660px, calc(100% - 40px));
-  background: #fffffff2;
+  background: var(--surface-caption);
   border-radius: 14px;
   padding: 14px 18px 15px;
   box-shadow: 0 12px 34px #00033422;
@@ -1509,7 +1509,7 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.65;
-  color: #4a5c66;
+  color: var(--text-caption);
 }
 .pk-caption-hint {
   display: inline-flex;
@@ -1517,7 +1517,7 @@
   gap: 6px;
   margin-top: 8px;
   font-size: 12px;
-  color: #023e8a;
+  color: var(--link);
   background: var(--pk-blue-soft);
   padding: 5px 10px;
   border-radius: 7px;
@@ -1547,7 +1547,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #000334;
+  background: var(--osd-navy);
   color: #fff;
   font-size: 12.5px;
   padding: 9px 14px;
@@ -1560,7 +1560,7 @@
   max-width: 420px;
 }
 .pk-toast.info {
-  background: #023e8a;
+  background: var(--osd-deep);
 }
 .pk-toast.ok {
   background: #1f6b52;
@@ -1668,7 +1668,7 @@
   min-height: 28px !important;
   padding: 2px 4px !important;
   border-radius: 6px;
-  color: #023e8a;
+  color: var(--osd-deep);
 }
 .showcase-page .ph-appbar svg {
   width: 16px;
@@ -1799,7 +1799,7 @@ html[data-night='true'] .ph-caption {
   justify-content: center;
   gap: 6px;
   font-size: 11.5px !important;
-  color: #023e8a;
+  color: var(--osd-deep);
   background: var(--pk-blue-soft);
   border-radius: 8px;
   min-height: 36px !important;
@@ -1928,7 +1928,7 @@ html[data-night='true'] .ph-caption {
 }
 .ph-link {
   font-size: 11px !important;
-  color: #023e8a;
+  color: var(--osd-deep);
   min-height: 30px !important;
 }
 .ph-banner {
@@ -2010,7 +2010,7 @@ html[data-night='true'] .ph-caption {
   display: flex;
   justify-content: space-between;
   padding: 8px 12px;
-  background: #000334;
+  background: var(--osd-navy);
   color: #fff;
   font-size: 11px;
 }

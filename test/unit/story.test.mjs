@@ -2,7 +2,7 @@
 import {test, afterEach} from 'vitest';
 import assert from 'node:assert/strict';
 import {STORY} from 'osd/parking/sim.js';
-import {world, demoNow} from 'osd/parking/clock.js';
+import {world, demoNow} from 'osd/core/clock.js';
 import {parking} from './world.mjs';
 
 const noop = () => {};
@@ -117,18 +117,27 @@ test('a console tap waits a cue out (6 s after the last), but only one during th
   assert.ok(await w.until(() => !alertOpen(), 20000));
 });
 
-test('Pause stops the phone typing; Auto-advance off while paused unpauses (the bar has Next, no Resume)', async () => {
+test("Pause (the day's) stops the story with everything else; it goes on with the day", async () => {
   const {w} = start();
   play(w);
   assert.ok(await w.until(() => w.phone.form.name.length > 2, 60000), 'typing the name');
-  w.story.pause();
+  world.setPaused(true);
+  assert.ok(w.story.paused);
   const typed = () => ['name', 'email', 'contact', 'company', 'phone'].reduce((n, f) => n + w.phone.form[f].length, 0);
   const a = typed();
   await w.run(5000);
   const b = typed();
   assert.equal(a, b, 'no typing while paused');
-  w.story.setAuto(false);
-  assert.equal(w.story.paused, false);
+  world.setPaused(false);
+  await w.run(1000);
+  assert.ok(!w.story.paused && typed() > b, 'it types on');
+  world.setPaused(true);
+  w.story.stop();
+  assert.ok(!world.paused, 'a story ended runs the day again');
+  world.setPaused(true);
+  w.story.stop();
+  assert.ok(world.paused, 'with none playing, the day stays as it was');
+  world.setPaused(false);
 });
 
 test("left at step 7, the story's unknown car is a background one: turned away after 8 s, not 45", async () => {

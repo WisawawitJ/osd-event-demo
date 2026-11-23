@@ -1,6 +1,6 @@
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {Reflector} from 'osd/node_modules/three/examples/jsm/objects/Reflector.js';
-import {options} from 'osd/parking/options.js';
+import {options} from 'osd/core/options.js';
 
 // Locally generated studio sky: no remote HDRI/texture dependencies.
 export function createRenderKit(renderer, scene) {

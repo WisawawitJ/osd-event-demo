@@ -33,13 +33,14 @@ npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, d
 
 **The tests run the demo without a browser.** Its logic is separate from its page:
 
-- `src/parking/clock.js`, the engine: simulation time moves only when stepped, in ticks of at most 50 ms; each tick
+- `src/core/clock.js`, the engine: simulation time moves only when stepped, in ticks of at most 50 ms; each tick
   fires the timers due in it in order, then the per-tick systems (cars moving, the world clock). The browser steps it
   every frame by the real time elapsed; pausing stops the stepping. Dice come from a seeded generator, so a run can be
   repeated exactly.
 - `src/parking/world.js`, the car park without a page: records, traffic, the story, the background life and the
   rules between them. `src/viewer/director.js`: following the day, and back to the start after a quiet minute.
-  `src/viewer/building-story.js`: the building's story. `src/viewer/readings.js`: readings set by hand against the
+  `src/viewer/building-story.js`: the building's story. `src/viewer/scenarios.js`: what the stops' buttons do.
+  `src/viewer/panels.js`: each stop's panel, as markup. `src/viewer/readings.js`: readings set by hand against the
   building's schedule. `src/viewer/view-math.js`: the camera's limits and steps.
 - `test/unit/` steps them as fast as it can: a whole parking story takes about 0.2 s, a busy hour of random traffic
   (checked every tick for cars driving through each other) under a second, a whole day of the car park on screen
@@ -52,12 +53,12 @@ after and the changed pixels for each state, the most changed first, unchanged o
 the two. A commit's shots are kept and reused; `+wip` ones are taken again. Words pick states (`parking 1920 en`: the
 car park states at 1920 wide in English; see `scripts/shots.mjs`). The states (`scripts/shots-states.mjs`) look the
 same on every run: pages open with the `manual` option, so simulation time moves only when the script steps it
-(`window.__engine` in `src/viewer/main.js`), camera flights are waited out, the dice are seeded and CSS animations
+(`window.__engine`, `src/viewer/debug-engine.js`), camera flights are waited out, the dice are seeded and CSS animations
 end at once; two runs of one version differ by a few pixels of GPU noise at most. It drives headless Chromium over
 the DevTools protocol (`test/browser.mjs`: `/usr/lib/chromium/chromium`, or `CHROMIUM=`), one browser, on the NVIDIA
 GPU or in software, **never the Intel iGPU** (it froze this laptop twice; `GPU=nvidia|software|vulkan|egl` forces one).
 The page itself takes no settings from its address; the screenshot script hands it test settings (`time`, `dest`,
-`story`, `auto`, `speed`, `debug`, `manual`, `seed` …) as `window.__demoOptions` before it loads (`src/parking/options.js`).
+`story`, `auto`, `speed`, `debug`, `manual`, `seed` …) as `window.__demoOptions` before it loads (`src/core/options.js`).
 
 ## Brand
 
@@ -70,17 +71,17 @@ overline (the floor) and the stop's name, uppercase in English as OSD titles are
 
 ## One day, always running
 
-Everything runs on one world clock (`src/parking/clock.js`) on the event date, 24 Nov 2026: a whole day takes about
+Everything runs on one world clock (`src/core/clock.js`) on the event date, 24 Nov 2026: a whole day takes about
 20 real minutes (the night, 21:00–05:00, a little faster) and then starts again, so visitors see the building through
-morning, noon, dusk and night. On the timeline, **Pause** freezes everything (clock, cars and barrier, the story,
-scenarios and the idle orbit; the camera can still be moved) until **Resume**, a story's Play or
-Next, Follow the day, or a quiet minute; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
+morning, noon, dusk and night. On the timeline, **Pause** (a story's bar has the same one) freezes everything (clock, cars and barrier, the story,
+scenarios and the idle orbit; the camera can still be moved) until **Resume**, a stop picked on the
+dock, a story's Play or Next (or its end), Follow the day, or a quiet minute; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 
 - **Koi** swim slow loops in the pond, each sized to keep the fish in the water, waving their tails. The motion is in
   the vertex shader (no per-fish CPU work); the pond redraws at 15 fps only while it is in view, and not when paused.
 - **Street lights** stand all along the main road's kerb, 17 m apart (the gap that clears the gate), their arms over
   the road. At night they and the car park's four poles each throw a cone of lit air down to a soft pool on the
-  ground, drawn as the meeting room's light (`src/viewer/light-cone.js`).
+  ground, drawn as the meeting room's light (`src/core/light-cone.js`).
 - **Headlights:** at night cars with the engine on (driving, queuing, at the barrier) have their lamps lit, and the
   light on the road ahead: two soft lobes, one from each lamp, starting at the bumper and meeting ahead of the car
   (also in the plate camera's picture), and their beams in the air: lit air like the meeting room's light cone,
@@ -142,9 +143,9 @@ Next, Follow the day, or a quiet minute; the **min/day** button makes a day take
 - On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance** and
   **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
-  Unticking auto-advance mid-step stops right there, at the cue or the step's pause (and ends a Pause, since the bar
-  then has Next). On auto-advance, a cue waits while the presenter works the console or the alert (Reject, a reason to
-  open with), until 6 s pass untouched. **Pause** stops the phone's typing too. A drag on the 3D view, a view key on
+  Unticking auto-advance mid-step stops right there, at the cue or the step's pause. On auto-advance, a cue waits while the presenter works the console or the alert (Reject, a reason to
+  open with), until 6 s pass untouched. **Pause** is the day's: the cars and
+  the phone's typing stop with the story. A drag on the 3D view, a view key on
   it (arrows, + −, Page Up/Down, R), Esc or **Exit story** leaves the story.
 - **EN / TH** in the header switches the whole showcase page (building and parking) between Thai and English. Names, plates and provinces stay as entered. The `#explore` page opens in the language last chosen (room names included).
 - **Night** / **Day** in the header moves the world clock on to 20:00 or 07:30 (showcase and explore).
@@ -272,13 +273,30 @@ lane, not at the exit barrier) (a check watches every pair of cars in a busy car
 index.html               import map and page shell
 src/boot.js              picks the page (#explore or the showcase) and starts the viewer
 src/pages/*.html         page markup (from the reference, plus the parking slots)
-src/viewer/*.js          the building viewer, split out of the reference file (parking wiring in main.js and showcase.js);
-                         daylight.js (sky and sun by time of day), building-day.js (the building's daily schedule)
+src/core/                what both halves use (nothing here knows the building or the car park)
+  clock.js               the simulation engine and the world clock
+  options.js             settings for tests (never from the address bar)
+  lang.js, texts.js      the language, text lookup and Bangkok-time formatting; the texts both halves share
+  story-bar.js           both stories' bar (working) and caption
+  dom.js, light-cone.js  small UI helpers (icons, morph, CSV, calendar file); lit air under a lamp
+src/viewer/              the building and the page
+  main.js                puts the 3D view and the page together: renderer, model, night, what the model shows
+  stops.js, building.js  the tour's stops, and the building's facts, each in one place
+  texts.js               the pages' texts
+  showcase.js            the showcase: going to a stop, the building's story on the page, what visitors do
+  panels.js, scenarios.js, readings.js, building-day.js, building-insights.js
+                         the stops' panels; their buttons; readings set by hand; the day's schedule; the timeline,
+                         room colours and incidents
+  building-story.js, director.js   the building's story; Follow the day and the quiet minute
+  navigation.js, camera-flight.js, scene-transition.js   flights between stops, and the floors' change on the way
+  view-limits.js, view-controls.js, view-math.js   how the view moves by hand; its buttons and the idle orbit
+  parking-layout.js, corner-card.js, page-night.js   the car park's layout, the plate card's place, the night look
+  explore-page.js        the #explore page's own buttons
+  sun-light.js, daylight.js, fog.js, render-kit.js, warm-up.js, merge-static.js, debug-engine.js …   the 3D view's parts
 src/parking/             the parking demo
   index.js               the page's side of the car park: 3D lot, console, phone, pop-ups, story bar
   world.js               the car park without a page: traffic, actions, story, background life and their rules
   life.js                background life: cars following the hour, visitors, who may come or leave
-  options.js             settings for tests (never from the address bar)
   sim.js                 in-memory simulation: allowed list, requests, presence, events, alerts, audit, outbox
   layout.js              car-park geometry in world metres
   lot3d.js, cars.js      3D lot, gate, cameras and procedural cars
@@ -288,10 +306,9 @@ src/parking/             the parking demo
   phone.js               visitor's phone
   overlays.js            plate-camera feed, alert, captions, toasts
   story.js               the guided story
-  story-bar.js           both stories' bar and caption (the building's too)
-  i18n.js                Thai and English strings, Bangkok-time formatting
-  clock.js, dom.js       the simulation engine and the world clock; small UI helpers (icons, CSV, calendar file)
-src/styles/              app.css (from the reference), parking.css, night.css (dark page at night)
+  texts.js               the car park's texts
+src/styles/              colors.css (colours that change at night, day and night together), app.css (from the reference),
+                         parking.css, night.css (the rest of the dark page)
 model/                   building model and data, extracted from the reference
 vendor/three/            three.js r186 as shipped in the reference
 scripts/serve.mjs        dependency-free static server

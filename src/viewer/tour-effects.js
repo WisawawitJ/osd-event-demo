@@ -1,6 +1,7 @@
 import * as T from 'osd/node_modules/three/build/three.module.js';
-import {realNow, ramp} from 'osd/parking/clock.js';
-import {createLightConeMaterial, createLightConeGeometry} from 'osd/viewer/light-cone.js';
+import {realNow, ramp} from 'osd/core/clock.js';
+import {createLightConeMaterial, createLightConeGeometry} from 'osd/core/light-cone.js';
+import {MEETING_PEOPLE} from 'osd/viewer/building.js';
 // Presentation-only objects. No bindings to hardware or Home Assistant.
 export function createTourEffects({model, schedule, meetingRoom}) {
   const groups = {},
@@ -39,7 +40,7 @@ export function createTourEffects({model, schedule, meetingRoom}) {
     teal = mat('#299c94', 0.85),
     room = [meetingRoom.center[0], meetingRoom.center[2]];
   const people = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < MEETING_PEOPLE; i++) {
     const x = room[0] + (i < 3 ? -1.1 : 1.1),
       z = room[1] + ((i % 3) - 1) * 0.8;
     const dot = mesh(meeting, new T.RingGeometry(0.11, 0.16, 28), teal, [x, 0.12, z]);

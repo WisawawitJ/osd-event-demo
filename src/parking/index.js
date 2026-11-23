@@ -1,14 +1,13 @@
 // Parking access demo inside the OSD building showcase. Everything is simulated locally.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
-import {t, onLang, getLang, setLang} from './i18n.js';
-import {icon, esc} from './dom.js';
+import {t, onLang, getLang, setLang} from './texts.js';
+import {icon, esc} from 'osd/core/dom.js';
 import {createParkingSim} from './sim.js';
-import {world} from './clock.js';
 import {createLot} from './lot3d.js';
 import {createPanel} from './panel.js';
 import {createPhone} from './phone.js';
 import {createOverlays} from './overlays.js';
-import {storyBar, onViewTaken, tapCues} from './story-bar.js';
+import {wireStoryBar, onViewTaken, tapCues} from 'osd/core/story-bar.js';
 import {createParkingWorld} from './world.js';
 import {CAR, disposeCars} from './cars.js';
 
@@ -28,6 +27,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
   const sim = createParkingSim();
   const lot = createLot({scene, stalls: sim.state.stalls, schedule, renderer});
   let active = false;
+  const abort = new AbortController();
 
   // Plate camera: snapshot plus where the plate sits in the frame, or null when the camera cannot read it: the plate
   // faces away, is behind the lens (projected corners would flip into the frame), or is not wholly in the picture.
@@ -205,28 +205,14 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
       );
 
   // Story bar below the viewport -----------------------------------------
-  function renderBar() {
-    bar.innerHTML = storyBar(story, {
-      idle: t('story.idle'),
-      more: `<button class="pk-phone-toggle" data-bar="phone" aria-pressed="${phone.isOpen}">${icon('phone')}<span>${phone.isOpen ? t('ph.hide') : t('ph.show')}</span></button>`,
-    });
-  }
-  bar.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-bar]');
-    if (!b || b.dataset.bar === 'auto') return;
-    const what = b.dataset.bar;
-    // Playing or moving the story on needs time to pass: it resumes a paused demo.
-    if (['play', 'restart', 'resume', 'next'].includes(what)) world.setPaused(false);
-    if (what === 'play' || what === 'restart') story.play({auto: story.auto});
-    if (what === 'pause') story.pause();
-    if (what === 'resume') story.resume();
-    if (what === 'next') story.next();
-    if (what === 'free') leaveStory();
-    if (what === 'phone') phone.setOpen(!phone.isOpen);
-    renderBar();
-  });
-  bar.addEventListener('change', (e) => {
-    if (e.target.dataset.bar === 'auto') story.setAuto(e.target.checked);
+  const renderBar = wireStoryBar(bar, {
+    story,
+    idle: () => t('story.idle'),
+    more: () =>
+      `<button class="pk-phone-toggle" data-bar="phone" aria-pressed="${phone.isOpen}">${icon('phone')}<span>${phone.isOpen ? t('ph.hide') : t('ph.show')}</span></button>`,
+    leave: leaveStory,
+    buttons: {phone: () => phone.setOpen(!phone.isOpen)},
+    signal: abort.signal,
   });
 
   // Leaving the story. A playing story also ends as soon as the visitor takes over:
@@ -247,7 +233,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     if (event.target.closest?.('#pk-phone, .pk-caption, .pk-alert-pop, .pk-feed, #view-orbit')) return;
     leaveStory();
   };
-  onViewTaken(viewport, takeOver);
+  onViewTaken(viewport, takeOver, {signal: abort.signal});
   panelRoot.addEventListener(
     'click',
     (event) => {
@@ -255,10 +241,6 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     },
     {capture: true},
   );
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && active && story.running) leaveStory();
-  });
-
   onLang(() => {
     panel.render();
     phone.render();
@@ -310,6 +292,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
       setLang(getLang() === 'en' ? 'th' : 'en');
     },
     dispose() {
+      abort.abort();
       afterRender.delete(drawLiveFeed);
       parking.dispose();
       lot.dispose();

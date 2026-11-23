@@ -1,10 +1,10 @@
 // The car park's life across the day and its records: jumps in time, the 03:00 wrap, reports, the Gate tab's buttons.
 import {test, afterEach} from 'vitest';
 import assert from 'node:assert/strict';
-import {world} from 'osd/parking/clock.js';
+import {world} from 'osd/core/clock.js';
 import {STORY} from 'osd/parking/sim.js';
 import {occupancyAt, UNKNOWN_PLATES} from 'osd/parking/life.js';
-import {visitInvite} from 'osd/parking/dom.js';
+import {visitInvite} from 'osd/core/dom.js';
 import {parking} from './world.mjs';
 
 const live = [];

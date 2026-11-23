@@ -1,8 +1,8 @@
 // In-memory parking simulation: allowed list, visitor requests, presence, gate events,
 // alerts, audit and outbox. Nothing here talks to ATOM, Keycloak, mail or cameras.
 import {buildStalls} from './layout.js';
-import {bkk} from './i18n.js';
-import {later, world, demoNow, rng, mulberry32} from './clock.js';
+import {bkk} from './texts.js';
+import {later, world, demoNow, rng, mulberry32} from 'osd/core/clock.js';
 
 export const DAY_START = bkk(2026, 11, 24, 0, 0);
 // The seeded morning: the records as they stand at 09:00, when the story starts.
@@ -104,7 +104,7 @@ export function createParkingSim() {
       if (state === made) fn();
     }, ms);
   };
-  // Time is the world clock's (src/parking/clock.js), shared with the building and the sky.
+  // Time is the world clock's (src/core/clock.js), shared with the building and the sky.
   const now = () => world.now();
   const setNow = (ms) => world.set(ms);
   world.subscribe((kind, payload) => {

@@ -2,7 +2,7 @@
 // the bays): the number of cars follows the hour, and no two cars ever touch.
 import {test} from 'vitest';
 import assert from 'node:assert/strict';
-import {world} from 'osd/parking/clock.js';
+import {world} from 'osd/core/clock.js';
 import {occupancyAt} from 'osd/parking/life.js';
 import {parking, overlaps} from './world.mjs';
 

@@ -7,16 +7,18 @@ import {
   createRoomSchedule,
 } from 'osd/viewer/building-day.js';
 import {createRoomLayers} from 'osd/viewer/room-layers.js';
-import {L} from 'osd/parking/i18n.js';
-import {world, realNow} from 'osd/parking/clock.js';
-import {morph, icon} from 'osd/parking/dom.js';
+import {L} from 'osd/viewer/texts.js';
+import {world, realNow} from 'osd/core/clock.js';
+import {morph, icon} from 'osd/core/dom.js';
+import {AIR, MEETING_ROOM, peopleIn} from 'osd/viewer/building.js';
+import {stops} from 'osd/viewer/stops.js';
 import {createReadings} from 'osd/viewer/readings.js';
 const legends = {
   none: () => '',
   temperature: () =>
     L(
-      '<i class="legend-cool"></i>ต่ำกว่า 25° <i class="legend-teal"></i>25–27° <i class="legend-warm"></i>27° ขึ้นไป',
-      '<i class="legend-cool"></i>Below 25° <i class="legend-teal"></i>25–27° <i class="legend-warm"></i>27° and up',
+      `<i class="legend-cool"></i>ต่ำกว่า ${AIR.cool}° <i class="legend-teal"></i>${AIR.cool}–${AIR.warm}° <i class="legend-warm"></i>${AIR.warm}° ขึ้นไป`,
+      `<i class="legend-cool"></i>Below ${AIR.cool}° <i class="legend-teal"></i>${AIR.cool}–${AIR.warm}° <i class="legend-warm"></i>${AIR.warm}° and up`,
     ),
   occupancy: () =>
     L(
@@ -30,11 +32,9 @@ const legends = {
     ),
 };
 // Readings set by hand against the schedule: readings.js.
-// The moments' icons, by the stop they show.
-const EVENT_ICONS = {parking: 'car', meeting: 'users', energy: 'sun', pond: 'drop', overview: 'moon'};
 // Real minutes a simulated day can take; the timeline's button steps through them.
 const DAY_LENGTHS = [10, 20, 40, 60];
-// The building follows the world clock (src/parking/clock.js) through its daily schedule (building-day.js):
+// The building follows the world clock (src/core/clock.js) through its daily schedule (building-day.js):
 // - readings (temperature, solar, water …) follow it continuously, except ones changed by hand for a while;
 // - rooms' lights, AC and doors change when the schedule changes them, so a switch flipped by hand stays until then.
 // The timeline shows the live time; its slider and moment buttons move the whole world forward to that time.
@@ -70,7 +70,7 @@ export function createBuildingInsights({
     events.innerHTML = dayEvents
       .map(
         (e, i) =>
-          `<button data-day-event="${i}" title="${e.title} · ${e.detail}">${icon(EVENT_ICONS[e.destination])}<span><time>${formatTime(e.minute)}</time><b>${e.title}</b></span></button>`,
+          `<button data-day-event="${i}" title="${e.title} · ${e.detail}">${icon(stops[e.destination].icon)}<span><time>${formatTime(e.minute)}</time><b>${e.title}</b></span></button>`,
       )
       .join('');
     $('#day-marks').innerHTML = dayEvents.map((e) => `<i style="--at:${e.minute / 1439}"></i>`).join('');
@@ -90,14 +90,14 @@ export function createBuildingInsights({
       'aria-valuetext',
       L(`${formatTime(minute)} นาฬิกา · เวลาจำลอง`, `${formatTime(minute)} · simulated time`),
     );
-    $('#replay-mode').textContent = world.held
-      ? L('กำลังสาธิต', 'Real time · story playing')
-      : world.paused
-        ? L('หยุดชั่วคราว', 'Paused · everything stands still')
+    $('#replay-mode').textContent = world.paused
+      ? L('หยุดชั่วคราว', 'Paused')
+      : world.held
+        ? L('กำลังสาธิต', 'Story playing')
         : {
             on: L('เปลี่ยนมุมกล้องตามช่วงเวลา', 'The camera follows the day'),
             waiting: L('จะตามวันต่อเองหลังไม่มีการแตะ 1 นาที', 'Follows the day again after a quiet minute'),
-            off: L('เวลาจำลอง', 'Simulated time · always running'),
+            off: L('เวลาจำลอง', 'Simulated time'),
           }[followState()];
     const following = followState() === 'on';
     button(
@@ -171,10 +171,11 @@ export function createBuildingInsights({
     paint();
     const roomData = state.roomData || daySnapshot(world.minute(), simulation.rooms).telemetry.roomData;
     // The meeting room also supports manual local experiments.
-    const data = {...roomData, f4_meeting_2: {temp: state.temp, people: state.occupied ? 6 : 0}};
+    const data = {...roomData, [MEETING_ROOM]: {temp: state.temp, people: peopleIn(state.occupied)}};
     // Room colours belong to the stops that look into rooms: the meeting room (floor 4) and the pond's floor-1 rooms.
     // Their bar (in the view's corner) shows only there, once the camera has landed (a click mid-flight stopped it).
-    const floor = destination === 'meeting' ? '4' : destination === 'pond' ? '1' : null;
+    const stop = stops[destination],
+      floor = stop.view === 'all' ? null : stop.view;
     $('.insight-toolbar').hidden = !floor || traveling || !landed;
     layers.update({
       layer,
@@ -192,11 +193,11 @@ export function createBuildingInsights({
               `<button class="incident-item" data-key="${i.id}" data-incident="${i.id}" data-target="${i.destination}" data-insight-layer="${i.layer}"><span class="incident-mark" aria-hidden="true">!</span><span><strong>${i.title}</strong><small>${i.detail}</small><small>${i.hint}</small></span><span aria-hidden="true">↗</span></button>`,
           )
           .join('')
-      : `<p class="incident-clear"><span aria-hidden="true">✓</span> ${L('ไม่พบความผิดปกติ', 'Readings are within normal range')}</p>`;
+      : `<p class="incident-clear"><span aria-hidden="true">✓</span> ${L('ไม่พบความผิดปกติ', 'Nothing unusual found')}</p>`;
     morph(incidentList, html);
     $('#insight-room').hidden = layer === 'none' || destination !== 'meeting';
     $('#insight-room').textContent =
-      `${L('ห้องประชุมย่อย 2 ชั้น 4', 'Meeting room 2, floor 4')} · ${layer === 'temperature' ? state.temp.toFixed(1) + ' °C' : layer === 'occupancy' ? (state.occupied ? L('มีคน 6 คน', '6 people') : L('ไม่มีคน', 'Empty')) : sim.rooms['f4_meeting_2'].light ? L('ไฟเปิด', 'Lights on') : L('ไฟปิด', 'Lights off')}`;
+      `${L('ห้องประชุมย่อย 2 ชั้น 4', 'Meeting room 2, floor 4')} · ${layer === 'temperature' ? state.temp.toFixed(1) + ' °C' : layer === 'occupancy' ? (state.occupied ? L(`มีคน ${peopleIn(state.occupied)} คน`, `${peopleIn(state.occupied)} people`) : L('ไม่มีคน', 'Empty')) : sim.rooms[MEETING_ROOM].light ? L('ไฟเปิด', 'Lights on') : L('ไฟปิด', 'Lights off')}`;
   }
   // The slider previews a time while dragged and moves the world there when let go.
   listen(range, 'input', () => {

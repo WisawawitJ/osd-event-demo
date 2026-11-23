@@ -145,17 +145,17 @@
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <rect x="3.5" y="3.5" width="17" height="17" rx="4" />
             <path d="M9.25 17V7h3.25a3.25 3.25 0 0 1 0 6.5H9.25" /></svg
-          ><span>ที่จอดรถ</span>
+          ><span data-i18n="dock.parking">ที่จอดรถ</span>
         </button>
       </nav>
-      <section class="day-timeline" aria-label="สำรวจหนึ่งวันในอาคารด้วยข้อมูลจำลอง" data-i18n-label="timeline">
+      <section class="day-timeline" aria-label="หนึ่งวันในอาคาร · เวลาจำลอง" data-i18n-label="timeline">
         <div class="timeline-heading">
           <div>
-            <strong id="replay-time">13:30</strong><span id="replay-mode" data-i18n-init="day.mode">เวลาจำลอง</span>
+            <strong id="replay-time">09:00</strong><span id="replay-mode" data-i18n-init="day.mode">เวลาจำลอง</span>
           </div>
           <div class="timeline-actions">
             <button id="day-follow" aria-pressed="false" disabled data-i18n-title="day.follow"></button
-            ><button id="day-pause" aria-pressed="false" disabled data-i18n-init="day.pause">หยุดชั่วคราว</button
+            ><button id="day-pause" aria-pressed="false" disabled data-i18n-init="day.pause">หยุด</button
             ><button id="day-speed" disabled data-i18n-title="day.speed" title="ความยาวหนึ่งวันจำลอง">20 นาที/วัน</button>
           </div>
         </div>
@@ -199,28 +199,11 @@
         </div>
         <div id="incident-list"><p class="loading-copy" data-i18n-init="incidents.loading">กำลังเตรียมเหตุการณ์…</p></div>
       </section>
-      <div id="dashboard-content"><p class="loading-copy" data-i18n-init="panel.loading">กำลังเตรียมข้อมูลจำลอง…</p></div>
+      <div id="dashboard-content"><p class="loading-copy" data-i18n-init="panel.loading">กำลังเตรียมข้อมูล…</p></div>
       <div id="parking-panel" class="pk-console" hidden></div>
     </aside>
   </div>
   <div class="tour-footer">
     <span class="simulation-disclosure" data-i18n="disclosure">ข้อมูลจำลองเพื่อการสาธิต ไม่ได้เชื่อมต่ออุปกรณ์จริง</span>
-  </div>
-  <div hidden id="legacy-controls">
-    <div class="toolbar">
-      <nav class="floors">
-        <button data-floor="all"></button><button data-floor="1"></button><button data-floor="2"></button
-        ><button data-floor="3"></button><button data-floor="4"></button><button data-floor="5"></button>
-      </nav>
-      <button id="exterior"></button><button id="explode"></button><button id="cutaway"></button
-      ><button id="reset"></button>
-    </div>
-    <div class="camera-presets">
-      <button id="camera-front"></button><button id="camera-side"></button><button id="lift"></button
-      ><button id="courtyard"></button><button id="office"></button><button id="arrival"></button
-      ><button id="reception"></button><button id="services"></button><button id="parking"></button
-      ><button id="stairs"></button>
-    </div>
-    <span id="view-label"></span>
   </div>
 </main>

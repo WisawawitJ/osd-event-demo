@@ -40,7 +40,7 @@ canvas:focus-visible {
 }
 button[aria-pressed='true'] {
   background: var(--ink);
-  color: white;
+  color: var(--on-primary);
 }
 button[aria-pressed='true']:not(:disabled):hover {
   background: var(--accent);
@@ -502,7 +502,7 @@ footer strong {
 }
 .showcase-page button:focus-visible,
 .showcase-page a:focus-visible {
-  outline: 3px solid #0055b8;
+  outline: 3px solid var(--osd-blue);
   outline-offset: 3px;
 }
 .showcase-page button {
@@ -527,7 +527,7 @@ footer strong {
   justify-content: space-between;
   padding: 0 32px;
   gap: 20px;
-  background: #fff;
+  background: var(--surface);
   position: relative;
 }
 .tour-header:after,
@@ -605,7 +605,7 @@ html[data-night='true'] .tour-brand .night-logo {
   display: flex;
   align-items: center;
   gap: 7px;
-  color: #55565a;
+  color: var(--text-quiet);
   white-space: nowrap;
 }
 .demo-label i {
@@ -615,8 +615,8 @@ html[data-night='true'] .tour-brand .night-logo {
   border-radius: 50%;
 }
 #tour-night[aria-pressed='true'] {
-  background: #000334;
-  color: white;
+  background: var(--primary);
+  color: var(--on-primary);
 }
 #showcase {
   padding: 22px 26px 12px;
@@ -647,7 +647,7 @@ html[data-night='true'] .tour-brand .night-logo {
   top: 16px;
   max-width: min(320px, calc(50% - 24px));
   padding: 10px 16px 11px;
-  background: #fff;
+  background: var(--surface-title);
   border-radius: 14px;
   box-shadow: var(--shadow-card);
   pointer-events: none;
@@ -687,7 +687,7 @@ html[lang='en'] .scene-overline {
   font-size: 12px;
 }
 #flight-status {
-  color: #0055b8;
+  color: var(--osd-blue);
   font-size: 11px;
 }
 .scene-bottom {
@@ -705,7 +705,7 @@ html[lang='en'] .scene-overline {
 }
 #scene-chip {
   padding: 7px 13px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 999px;
   color: var(--deep-blue);
   box-shadow: var(--shadow-card);
@@ -715,7 +715,7 @@ html[lang='en'] .scene-overline {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   padding: 7px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 14px;
   box-shadow: 0 6px 20px #00033408;
 }
@@ -728,18 +728,18 @@ html[lang='en'] .scene-overline {
   padding: 8px 5px;
   font-size: 13px;
   border-radius: 9px;
-  color: #55565a;
+  color: var(--text-soft);
 }
 .destination-dock button[aria-pressed='true'] {
-  background: #0055b8;
+  background: var(--osd-blue);
   color: #fff;
   box-shadow: 0 4px 10px #0055b82b;
 }
 .destination-dock button[aria-pressed='true']:hover {
-  background: #023e8a;
+  background: var(--osd-deep);
 }
 .context-panel {
-  background: white;
+  background: var(--surface);
   border-radius: 16px;
   padding: 24px;
   overflow-y: auto;
@@ -765,12 +765,12 @@ html[lang='en'] .scene-overline {
   white-space: nowrap;
   padding: 5px 10px;
   border-radius: 999px;
-  background: #e8f5f0;
-  color: #236b54;
+  background: var(--ok-bg);
+  color: var(--ok);
 }
 .status-pill.attention {
-  background: #fff0dd;
-  color: #8d510d;
+  background: var(--warn-bg);
+  color: var(--warn);
 }
 .dashboard-intro {
   font-size: 14px;
@@ -818,7 +818,7 @@ html[lang='en'] .scene-overline {
 }
 .metric-note {
   font-size: 11px;
-  color: #267a65;
+  color: var(--ok-note);
   margin-top: 7px;
   display: block;
 }
@@ -860,7 +860,7 @@ html[lang='en'] .scene-overline {
   height: 34px;
   display: grid;
   place-items: center;
-  background: #eef4fc;
+  background: var(--pressed-bg);
   border-radius: 9px;
   color: var(--accent);
 }
@@ -920,16 +920,16 @@ html[lang='en'] .scene-overline {
 .chart text {
   font-family: inherit;
   font-size: 11px;
-  fill: #66758b;
+  fill: var(--chart-text);
   stroke: none;
 }
 .chart .chart-line {
-  stroke: #0055b8;
+  stroke: var(--osd-blue);
   stroke-width: 2.5;
   fill: none;
 }
 .chart .chart-grid {
-  stroke: #e7edf3;
+  stroke: var(--chart-grid);
   stroke-width: 1;
 }
 .chart-caption {
@@ -945,8 +945,8 @@ html[lang='en'] .scene-overline {
   justify-content: center;
   align-items: center;
   gap: 8px;
-  background: #eef4fc;
-  color: #023e8a;
+  background: var(--pressed-bg);
+  color: var(--link);
   margin-top: 18px;
   font-size: 13px;
   border-radius: 9px;
@@ -983,8 +983,8 @@ html[lang='en'] .scene-overline {
 }
 .alert-strip {
   padding: 12px;
-  background: #fff2de;
-  color: #8b500e;
+  background: var(--warn-strip-bg);
+  color: var(--warn-strip);
   border-radius: 9px;
   font-size: 12px;
   line-height: 1.7;
@@ -999,13 +999,13 @@ html[lang='en'] .scene-overline {
 .energy-node {
   padding: 15px 5px;
   text-align: center;
-  background: #eef7f3;
+  background: var(--ok-node-bg);
   border-radius: 12px;
-  color: #216958;
+  color: var(--ok-node);
 }
 .energy-node:last-child {
-  background: #edf1fe;
-  color: #3156b5;
+  background: var(--node-bg);
+  color: var(--pick-text);
 }
 .energy-node svg {
   display: block;
@@ -1031,7 +1031,7 @@ html[lang='en'] .scene-overline {
   flex: 1;
   height: 17px;
   border-radius: 3px;
-  background: #dcefeb;
+  background: var(--water);
 }
 .water-level i.filled {
   background: #218d88;
@@ -1041,7 +1041,7 @@ html[lang='en'] .scene-overline {
 }
 .plate {
   padding: 12px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--plate-line);
   border-radius: 8px;
   text-align: center;
   font-size: 23px;
@@ -1066,8 +1066,8 @@ html[lang='en'] .scene-overline {
   display: flex;
   align-items: center;
   gap: 7px;
-  background: #000334;
-  color: white;
+  background: var(--primary);
+  color: var(--on-primary);
   font-size: 13px;
 }
 .primary-button:hover {
@@ -1088,7 +1088,7 @@ html[lang='en'] .scene-overline {
 }
 .showcase-page #status[data-state='loading'],
 .showcase-page #status[data-state='error'] {
-  background: white;
+  background: var(--surface);
   padding: 12px;
   border-radius: 8px;
   display: inline-block;
@@ -1098,7 +1098,7 @@ html[data-night='true'] #flight-status {
   color: #f0f5ff;
 }
 html[data-night='true'] #scene-chip {
-  color: #023e8a;
+  color: var(--osd-deep);
 }
 .loading-copy {
   color: var(--muted);
@@ -1302,10 +1302,10 @@ html[data-night='true'] #scene-chip {
 
 /* Travel keeps the previous context until arrival; the destination remains selectable. */
 [data-destination][aria-busy='true'] {
-  outline: 2px solid #0055b8;
+  outline: 2px solid var(--osd-blue);
   outline-offset: -3px;
   background: #e8efff;
-  color: #023e8a;
+  color: var(--osd-deep);
 }
 #dashboard-content[aria-busy='true'] {
   opacity: 0.68;
@@ -1325,7 +1325,7 @@ html[data-night='true'] #scene-chip {
   white-space: nowrap;
 }
 .insight-toolbar {
-  background: #fff;
+  background: var(--surface);
   border-radius: 14px;
   padding: 5px 12px;
 }
@@ -1337,7 +1337,7 @@ html[data-night='true'] #scene-chip {
   font-size: 12px;
 }
 .layer-controls > span {
-  color: #55565a;
+  color: var(--text-quiet);
   white-space: nowrap;
 }
 .layer-controls > div {
@@ -1348,11 +1348,11 @@ html[data-night='true'] #scene-chip {
   padding: 8px 13px;
   font-size: 12px;
   border-radius: 8px;
-  color: #425770;
+  color: var(--text-layer);
 }
 .layer-controls button[aria-pressed='true'] {
-  background: #e6effb;
-  color: #023e8a;
+  background: var(--layer-bg);
+  color: var(--link);
 }
 .layer-key {
   display: flex;
@@ -1361,7 +1361,7 @@ html[data-night='true'] #scene-chip {
   flex-wrap: wrap;
   gap: 4px 15px;
   font-size: 11px;
-  color: #55565a;
+  color: var(--text-quiet);
 }
 .layer-key:has([hidden] + [hidden]) {
   display: none;
@@ -1392,7 +1392,7 @@ html[data-night='true'] #scene-chip {
   background: #a5b4c5;
 }
 #insight-room {
-  color: #000334;
+  color: var(--primary);
   font-weight: 500;
 }
 /* The same card as the dock above it. */
@@ -1400,7 +1400,7 @@ html[data-night='true'] #scene-chip {
   container-type: inline-size;
   padding: 12px 16px 10px;
   border-radius: 14px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 6px 20px #00033408;
 }
 .timeline-heading {
@@ -1442,13 +1442,13 @@ html[data-night='true'] #scene-chip {
   gap: 6px;
   font-size: 12px;
   padding: 6px 12px;
-  border-color: #dce3ec;
+  border-color: var(--moment-line);
   border-radius: 9px;
   white-space: nowrap;
 }
 .timeline-actions button[aria-pressed='true'] {
-  background: #eef4fc;
-  color: #023e8a;
+  background: var(--pressed-bg);
+  color: var(--link);
 }
 .timeline-actions button[aria-pressed='true']:not(:disabled):hover {
   background: #dfeafa;
@@ -1500,7 +1500,7 @@ html[data-night='true'] #scene-chip {
   width: var(--thumb);
   height: var(--thumb);
   margin-top: -6px;
-  border: 5px solid #0055b8;
+  border: 5px solid var(--osd-blue);
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 5px #00033440;
@@ -1509,13 +1509,13 @@ html[data-night='true'] #scene-chip {
   box-sizing: border-box;
   width: var(--thumb);
   height: var(--thumb);
-  border: 5px solid #0055b8;
+  border: 5px solid var(--osd-blue);
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 5px #00033440;
 }
 .timeline-track input:focus-visible {
-  outline: 2px solid #0055b8;
+  outline: 2px solid var(--osd-blue);
   outline-offset: 2px;
 }
 /* The moments on the track, where the thumb's centre stands at that time. */
@@ -1533,16 +1533,16 @@ html[data-night='true'] #scene-chip {
   height: 5px;
   margin-left: -2.5px;
   border-radius: 50%;
-  background: #b6c3d3;
+  background: var(--mark);
 }
 .day-marks i.past {
-  background: #0055b8;
+  background: var(--pick);
 }
 .timeline-labels {
   display: flex;
   justify-content: space-between;
   margin-top: -3px;
-  color: #627188;
+  color: var(--text-axis);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -1565,8 +1565,8 @@ html[data-night='true'] #scene-chip {
   text-align: left;
   font-size: 11px;
   line-height: 1.35;
-  background: #f5f8fb;
-  color: #55565a;
+  background: var(--moment);
+  color: var(--text-soft);
 }
 .day-events svg {
   width: 18px;
@@ -1583,12 +1583,12 @@ html[data-night='true'] #scene-chip {
 .day-events b {
   display: block;
   font-weight: 500;
-  color: #000334;
+  color: var(--primary);
 }
 .day-events [aria-current='true'] {
-  background: #e6f0fb;
-  border-color: #0055b8;
-  color: #0055b8;
+  background: var(--pick-bg);
+  border-color: var(--pick);
+  color: var(--pick);
 }
 .day-now {
   display: none;
@@ -1597,7 +1597,7 @@ html[data-night='true'] #scene-chip {
   text-align: center;
   font-size: 12px;
   line-height: 1.4;
-  color: #023e8a;
+  color: var(--link);
 }
 @container (max-width: 860px) {
   .day-events button {
@@ -1654,9 +1654,9 @@ html[data-night='true'] #scene-chip {
 .incidents-heading > span {
   font-size: 10px;
   border-radius: 5px;
-  background: #edf2f7;
+  background: var(--badge-bg);
   padding: 1px 6px;
-  color: #55565a;
+  color: var(--badge-text);
 }
 .incident-item {
   width: 100%;
@@ -1664,8 +1664,8 @@ html[data-night='true'] #scene-chip {
   gap: 10px;
   align-items: flex-start;
   text-align: left;
-  background: #fff7e9;
-  border: 1px solid #f0ddbc;
+  background: var(--incident-bg);
+  border: 1px solid var(--incident-line);
   border-radius: 9px;
   padding: 12px;
   margin: 6px 0;
@@ -1683,7 +1683,7 @@ html[data-night='true'] #scene-chip {
   font-size: 11px;
   display: block;
   margin-top: 4px;
-  color: #755c3c;
+  color: var(--incident-text);
   line-height: 1.6;
 }
 .incident-mark {
@@ -1754,7 +1754,7 @@ html[data-night='true'] #scene-chip {
 }
 .showcase-page .layer-controls button[aria-pressed='true']:not(:disabled):hover {
   background: #d9e4ff;
-  color: #023e8a;
+  color: var(--osd-deep);
 }
 /* The room-colour bar floats under the floor label at the meeting-room and pond stops, clear of the stop title (at most
    ~350 px from the left edge); its buttons wrap rather than run under the title. In a view too narrow for both, the
@@ -1819,7 +1819,7 @@ html[data-night='true'] #scene-chip {
   height: 84px;
   padding: 0 32px;
   box-sizing: border-box;
-  background: #fff;
+  background: var(--surface);
   position: relative;
   border-bottom: 0;
 }

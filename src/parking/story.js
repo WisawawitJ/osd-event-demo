@@ -1,8 +1,8 @@
 // The guided parking story: one visitor from request to exit, plus an unknown car.
 // Auto mode advances by itself; guided mode waits for Next or for the presenter to click the cued button.
-import {t, bkk} from './i18n.js';
+import {t, bkk} from './texts.js';
 import {STORY, emailed} from './sim.js';
-import {demoNow, later} from './clock.js';
+import {demoNow, later, world} from 'osd/core/clock.js';
 
 const ABORT = Symbol('story-abort');
 const at = (h, m) => bkk(2026, 11, 24, h, m);
@@ -12,7 +12,6 @@ export function createStory(ctx) {
     token = 0,
     index = -1,
     auto = true,
-    paused = false,
     running = false,
     nextWaiter = null,
     requestId = null,
@@ -29,14 +28,10 @@ export function createStory(ctx) {
     // `stopIf`: ends the wait early (Auto-advance turned off during a hold).
     const wait = (ms, stopIf = () => false) =>
       new Promise((resolve, reject) => {
-        let left = ms,
-          last = demoNow();
+        const end = demoNow() + ms;
         const tick = () => {
           if (my !== token) return reject(ABORT);
-          const now = demoNow();
-          if (!paused) left -= now - last;
-          last = now;
-          if (left <= 0 || stopIf()) resolve();
+          if (demoNow() >= end || stopIf()) resolve();
           else later(tick, 50);
         };
         tick();
@@ -64,8 +59,7 @@ export function createStory(ctx) {
         let seen;
         do {
           seen = touches;
-          // `done` with no time limit: the wait does the timing, and story Pause stops it (until's own 60 s ran on
-          // through a Pause, and the action fired the moment the story resumed).
+          // `done` with no time limit: the wait does the timing.
           await Promise.race([
             wait(seen !== before ? Math.max(delay, 6000) : delay, () => !auto || touches !== seen),
             until(done, Infinity),
@@ -117,9 +111,8 @@ export function createStory(ctx) {
         ctx.sim.setNow(at(9, 2));
         await s.wait(500);
         // Typing stops with this run (Restart starts a new one without stopping: it typed on into the new run's form).
-        // And it pauses with the story (it typed on through Pause).
         const v = STORY.visitor,
-          opts = {cps: 26, isCancelled: s.cancelled, isPaused: () => paused};
+          opts = {cps: 26, isCancelled: s.cancelled};
         await ctx.phone.typeInto('name', v.name, opts);
         s.alive();
         await ctx.phone.typeInto('email', v.email, opts);
@@ -364,7 +357,6 @@ export function createStory(ctx) {
       waiting();
     }
     running = true;
-    paused = false;
     emit();
     try {
       await ctx.resetWorld();
@@ -424,8 +416,9 @@ export function createStory(ctx) {
     get auto() {
       return auto;
     },
+    // Pause is the day's: everything stands still, the story with it.
     get paused() {
-      return paused;
+      return world.paused;
     },
     get index() {
       return index;
@@ -440,23 +433,12 @@ export function createStory(ctx) {
       auto = a;
       return run();
     },
-    // Off while paused: unpaused too (with Auto-advance off the bar has Next, no Resume, and the step stood still).
     setAuto(a) {
       auto = a;
-      if (!a) paused = false;
       if (a && nextWaiter) nextWaiter();
       emit();
     },
-    pause() {
-      paused = true;
-      emit();
-    },
-    resume() {
-      paused = false;
-      emit();
-    },
     next() {
-      paused = false;
       if (nextWaiter) nextWaiter();
       emit();
     },
@@ -464,10 +446,11 @@ export function createStory(ctx) {
     touched() {
       touches++;
     },
+    // The day it was paused on runs again (the visitor left with everything standing still took it for broken).
     stop() {
+      if (running && world.paused) world.setPaused(false);
       token++;
       running = false;
-      paused = false;
       index = -1;
       if (nextWaiter) nextWaiter();
       nextWaiter = null;

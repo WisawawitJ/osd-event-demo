@@ -30,9 +30,9 @@ addEventListener('hashchange', () => {
 // The explore page has no story or idle return of its own: left alone for the showcase's quiet minute, it goes back to
 // the showcase, so a booth screen never stays on it. (Not on stepped pages, the screenshots: real time means nothing there.)
 if (mode === 'explore') {
-  const [{IDLE_MS}, {options}] = await Promise.all([
+  const [{IDLE_MS, onTouch}, {options}] = await Promise.all([
     import('osd/viewer/director.js'),
-    import('osd/parking/options.js'),
+    import('osd/core/options.js'),
   ]);
   if (!('manual' in options)) {
     let idle = 0;
@@ -42,7 +42,7 @@ if (mode === 'explore') {
         location.hash = '#showcase';
       }, IDLE_MS);
     };
-    for (const type of ['pointerdown', 'keydown', 'wheel']) addEventListener(type, arm, {capture: true});
+    onTouch(arm);
     arm();
   }
 }

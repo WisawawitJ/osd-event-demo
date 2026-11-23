@@ -1,8 +1,8 @@
 // Overlays on the 3D view: the plate-camera feed, the unknown-car alert, story captions and toasts.
-import {t, fmtTime, fmtShortDate} from './i18n.js';
-import {esc, icon} from './dom.js';
-import {storyCaption} from './story-bar.js';
-import {later, cancelLater} from './clock.js';
+import {t, fmtTime, fmtShortDate} from './texts.js';
+import {esc, icon} from 'osd/core/dom.js';
+import {storyCaption} from 'osd/core/story-bar.js';
+import {later, cancelLater} from 'osd/core/clock.js';
 import {GATE_REASONS as REASONS, openReasonOf as reasonOf} from './sim.js';
 
 // A pass that ends on a later day shows its date too ("valid until 23:59" read as today for a two-day pass).

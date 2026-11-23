@@ -1,7 +1,7 @@
 // The clock (clock.js): its fades (ramp), a function of the time whatever the frames, and its stepping.
 import {test} from 'vitest';
 import assert from 'node:assert/strict';
-import {ramp, advance, realNow, demoNow} from 'osd/parking/clock.js';
+import {ramp, advance, realNow, demoNow} from 'osd/core/clock.js';
 
 test('a ramp runs toward its target at 1 per `ms`, from where it stood, and reads the same at the same moment', async () => {
   const r = ramp(400, 0),

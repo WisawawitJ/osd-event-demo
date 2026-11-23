@@ -6,7 +6,7 @@ import {createParkingSim, STORY_START} from './sim.js';
 import {createTraffic} from './traffic.js';
 import {plateRead} from './gate.js';
 import {createStory} from './story.js';
-import {later, cancelLater, sleep, world, demoNow, rng} from './clock.js';
+import {later, cancelLater, sleep, world, demoNow, rng} from 'osd/core/clock.js';
 import {
   storyCar,
   UNKNOWN_PLATES,

@@ -1,7 +1,7 @@
 // The barrier's pace: a car in every 6.5 s from a queue (gate.test.mjs), and the rushes of a 20-minute day bring one
 // every 7 s, so there is little room to slow it. Shared by the 3D car park (lot3d.js), the parking world (world.js) and
 // the Node tests' stand-ins.
-import {sleep} from './clock.js';
+import {sleep} from 'osd/core/clock.js';
 
 // The arm: eased in and out, a quarter turn in BOOM_SECONDS (at one speed throughout, and faster, it snapped up).
 const BOOM_SECONDS = 1.3,

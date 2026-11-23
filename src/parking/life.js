@@ -3,7 +3,7 @@
 // tests on the engine's clock as it does in the browser.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {STORY, STORY_START, DAY_START} from './sim.js';
-import {later, cancelLater, world, minuteOf, rng, demoNow} from './clock.js';
+import {later, cancelLater, world, minuteOf, rng, demoNow} from 'osd/core/clock.js';
 
 // The story's own cars: its visitor and its unknown car (neither can come from the Gate tab's test buttons).
 export const storyCar = (a) => a.plate === STORY.plate || a.plate === STORY.unknown.plate;

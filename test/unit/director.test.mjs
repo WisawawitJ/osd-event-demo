@@ -2,7 +2,7 @@
 // headless parking world.
 import {test, afterEach} from 'vitest';
 import assert from 'node:assert/strict';
-import {world, sleep} from 'osd/parking/clock.js';
+import {world, sleep} from 'osd/core/clock.js';
 import {createDirector, IDLE_MS} from 'osd/viewer/director.js';
 import {parking} from './world.mjs';
 
@@ -179,6 +179,18 @@ test('turned off, it stays off: a quiet minute goes back to the overview', async
   assert.equal(d.follow, 'off');
   assert.ok(await w.until(() => log.stops.length === 2, IDLE_MS + 10000));
   assert.equal(log.stops[1], 'overview');
+});
+
+test('the parking story on auto on a paused day: abandoned at the quiet minute (the screen stayed frozen for good)', async () => {
+  const timer = {};
+  const {w} = showcase({time: '10:00', timer});
+  void w.playStory({auto: true});
+  assert.ok(await w.until(() => w.story.index === 0, 20000));
+  timer.fn();
+  assert.ok(w.story.running, 'playing: left to finish');
+  world.setPaused(true);
+  timer.fn();
+  assert.ok(!w.story.running && !world.paused);
 });
 
 test('a paused day left alone runs again, and is followed again', async () => {

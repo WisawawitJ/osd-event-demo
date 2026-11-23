@@ -1,4 +1,5 @@
 import {Mesh, MeshBasicMaterial, DoubleSide} from 'osd/node_modules/three/build/three.module.js';
+import {AIR} from 'osd/viewer/building.js';
 // Reuse the modeled room footprint, including the curved ground-floor rooms.
 export function createRoomLayers({model, rooms, schedule}) {
   // Floor meshes carry layout ids; overlays use the public device-map ids.
@@ -45,9 +46,9 @@ export function createRoomLayers({model, rooms, schedule}) {
         if (!mesh.visible) continue;
         const color =
           layer === 'temperature'
-            ? data.temp < 25
+            ? data.temp < AIR.cool
               ? '#639cd9'
-              : data.temp < 27
+              : data.temp < AIR.warm
                 ? '#62b7a4'
                 : '#e5a351'
             : layer === 'occupancy'

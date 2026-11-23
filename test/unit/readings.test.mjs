@@ -2,7 +2,7 @@
 import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {world} from 'osd/parking/clock.js';
+import {world} from 'osd/core/clock.js';
 import {daySnapshot} from 'osd/viewer/building-day.js';
 import {createReadings, HOLD_MINUTES} from 'osd/viewer/readings.js';
 

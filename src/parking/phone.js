@@ -1,8 +1,8 @@
 // The visitor's phone: the public request form, the confirmation, and the emailed ticket.
-import {t, fmtDate, fmtTime, bkk} from './i18n.js';
-import {esc, icon, patch, fakeQr, saveFile, visitInvite} from './dom.js';
+import {t, fmtDate, fmtTime, bkk} from './texts.js';
+import {esc, icon, patch, fakeQr, saveFile, visitInvite} from 'osd/core/dom.js';
 import {PROVINCES} from './sim.js';
-import {later, cancelLater, sleep} from './clock.js';
+import {later, cancelLater, sleep} from 'osd/core/clock.js';
 
 const blankForm = () => ({
   name: '',
@@ -103,7 +103,7 @@ export function createPhone({root, sim, actions}) {
     const subject = t(`ph.mail.${mail.kind}`);
     const head = `<div class="ph-mail-head"><span class="ph-avatar">P</span><div><strong>OSD Parking</strong><small>no-reply@osd.example · ${fmtTime(mail.at)}</small></div></div><h4>${subject}</h4><p class="ph-to">${esc(r.visitor.email)}, cc ${esc(r.contact)}</p>`;
     if (mail.kind === 'approved') {
-      return `${head}<div class="ph-ticket"><div class="ph-ticket-top"><span>${t('ph.ticket')}</span><b>OSD</b></div><div class="ph-ticket-plate">${esc(r.plate)}<small>${esc(r.province)}</small></div><div class="ph-ticket-rows"><div><span>${t('req.dates')}</span><b>${fmtDate(r.arrival)}${r.departure !== r.arrival ? ` – ${fmtDate(r.departure)}` : ''}</b></div><div><span>${t('req.visitor')}</span><b>${esc(r.visitor.name)}</b></div><div><span>${t('parking.floor')}</span><b>P2 · A</b></div></div><p class="ph-ticket-how">${t('ph.ticket.how')}</p><div class="ph-ticket-qr">${fakeQr(r.ref)}<span>${t('ph.ticket.qr')}</span></div><button type="button" class="ph-cal" data-ph="calendar">${icon('calendar')}${t('ph.ticket.cal')}</button><p class="ph-cc-note">${t('ph.ccNote', {contact: esc(r.contact)})}</p></div>`;
+      return `${head}<div class="ph-ticket"><div class="ph-ticket-top"><span>${t('ph.ticket')}</span><b>OSD</b></div><div class="ph-ticket-plate">${esc(r.plate)}<small>${esc(r.province)}</small></div><div class="ph-ticket-rows"><div><span>${t('req.dates')}</span><b>${fmtDate(r.arrival)}${r.departure !== r.arrival ? ` – ${fmtDate(r.departure)}` : ''}</b></div><div><span>${t('req.visitor')}</span><b>${esc(r.visitor.name)}</b></div><div><span>${t('ph.ticket.where')}</span><b>P2 · A</b></div></div><p class="ph-ticket-how">${t('ph.ticket.how')}</p><div class="ph-ticket-qr">${fakeQr(r.ref)}<span>${t('ph.ticket.qr')}</span></div><button type="button" class="ph-cal" data-ph="calendar">${icon('calendar')}${t('ph.ticket.cal')}</button><p class="ph-cc-note">${t('ph.ccNote', {contact: esc(r.contact)})}</p></div>`;
     }
     return `${head}<p class="ph-mail-body">${mail.kind === 'rejected' ? esc(r.reason || '') : t('ph.mail.revokedBody')}</p><button type="button" class="ph-link" data-ph="new">${t('ph.newRequest')}</button>`;
   }
@@ -234,7 +234,7 @@ export function createPhone({root, sim, actions}) {
   }
 
   let typingRun = 0;
-  async function typeInto(name, text, {cps = 28, isCancelled = () => false, isPaused = () => false} = {}) {
+  async function typeInto(name, text, {cps = 28, isCancelled = () => false} = {}) {
     const mine = ++typingRun;
     // Cancelled (the story stopped or restarted): it leaves the field alone (it wrote the whole text into the new run's
     // empty form), and its highlight goes unless a newer typing has taken over (it stayed on in free play). Checked
@@ -254,7 +254,6 @@ export function createPhone({root, sim, actions}) {
       ui.form[name] += ch;
       render();
       await sleep(1000 / cps);
-      while (isPaused() && !isCancelled()) await sleep(100);
     }
     if (cancelled()) return;
     ui.form[name] = text;

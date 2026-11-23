@@ -4,7 +4,7 @@
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
 import {mergeGeometries, mergeVertices} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
 import {DRIVE, GATE, STREET, SITE, Y, RAMP, PAVEMENT} from './layout.js';
-import {createLightConeMaterial, createLightConeGeometry} from 'osd/viewer/light-cone.js';
+import {createLightConeMaterial, createLightConeGeometry} from 'osd/core/light-cone.js';
 import {createCarInstances} from './cars.js';
 import {createBoom} from './gate.js';
 

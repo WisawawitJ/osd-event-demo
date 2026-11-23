@@ -8,9 +8,10 @@ const here = (path) => fileURLToPath(new URL(path, import.meta.url));
 const IGNORE = ['vendor/**', 'model/**', 'shots/**', 'reference/**', 'dev/**', 'node_modules/**'];
 
 export default defineConfig({
-  // The page's import map (index.html), for the tests: "osd/viewer/…" and "osd/parking/…" are src/, three.js is vendored.
+  // The page's import map (index.html), for the tests: "osd/core/…", "osd/viewer/…" and "osd/parking/…" are src/, three.js is vendored.
   resolve: {
     alias: [
+      {find: /^osd\/core\//, replacement: here('./src/core/')},
       {find: /^osd\/viewer\//, replacement: here('./src/viewer/')},
       {find: /^osd\/parking\//, replacement: here('./src/parking/')},
       {find: /^osd\/node_modules\/three\//, replacement: here('./vendor/three/')},

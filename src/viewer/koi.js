@@ -3,7 +3,7 @@
 // vertex shader from one time uniform, so moving them costs no per-fish work on the CPU, only redraws: those run at
 // FPS (not the screen's rate), and only while the pond is in view, the page is visible and the demo is not paused.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
-import {demoNow, isPaused} from 'osd/parking/clock.js';
+import {demoNow, isPaused} from 'osd/core/clock.js';
 
 const FISH_VERTICES = 52,
   FPS = 15,
