@@ -1,12 +1,18 @@
 // Low-poly cars and no per-car geometry. What every car has, its body (body + roof, in its paint colour), details
-// (glass + wheels, vertex colours) and a soft blob shadow, is drawn for all the cars at once (createCarInstances: three
-// draw calls however many cars). Each car's own object (createCar) holds the rest, one draw call each while shown:
-//   decals (both plates, the four lamps and the blinker lenses, unlit, one small texture per plate), and at night the
-//   headlights' light on the road (see headlightPool) and their beams in the air (see headlightBeams), and a blinker
-//   on each side (front and rear corners, amber) that the traffic flashes before a turn (setCarBlinker).
+// (glass, wheels and trim, vertex colours) and a soft blob shadow, is drawn for all the cars at once (createCarInstances:
+// two draw calls per model and one for the shadows, however many cars). Each car's own object (createCar) holds the
+// rest, one draw call each while shown:
+//   decals (both plates, the lamps and the blinker lenses, unlit, one small texture per plate), and at night the
+//   headlights' light on the road (see headlightPool) and their beams in the air (see headlightBeams), the red glow of
+//   the tail lamps, and a blinker on each side (front and rear corners, amber) that the traffic flashes before a turn
+//   (setCarBlinker).
+// Five models (MODELS), all on the same footprint, 4.46 × 1.72 m, with the plates and lamps in the same places: the
+// traffic, the bays and the plate cameras treat every car alike. Front and back differ on each: white lamps, a grille
+// and a bonnet under a pale raked windscreen, against tall red lamps joined by a red strip under a dark rear window.
 // (Drawn car by car, 34 parked cars cost 136 draw calls a frame.)
 // A car faces local +Z and sits on y = 0.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
+import {normalizePlate} from './sim.js';
 import {mergeGeometries} from 'osd/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const CAR_COLORS = ['#f2f1ec', '#b9bec2', '#22262b', '#6d747a', '#2f5d9a', '#b8322e', '#33584a', '#cdbb98', '#1f3150'];
@@ -18,7 +24,7 @@ const HEAD_Y = 0.6,
   TAIL_Y = 0.64,
   FACE_Z = 2.255;
 // Blinker lenses (one side; mirrored for the other): [x, y, z, width, depth]. Front and rear faces at the outer corners
-// (head lamps run .37–.67, tail lamps .43–.69 from the middle) and a strip down each side next to them. The body is
+// (head lamps run .35–.69, tail lamps .39–.69 from the middle) and a strip down each side next to them. The body is
 // 1.72 m wide and 4.46 m long over its rounded edges.
 const BLINKER_LENSES = [
   [0.76, HEAD_Y, FACE_Z, 0.14, 0.05],
@@ -69,14 +75,29 @@ const lampUv = (geo, u, v) => {
 const strip = (TEX_H - PLATE_H) / 2 / TEX_H;
 const flat = (g) => (g.index ? g.toNonIndexed() : g);
 
-let shared = null;
-function sharedParts() {
-  if (shared) return shared;
-  // A sedan, side profiles in (forward, up): a low nose sloping up the bonnet to the windscreen, the cabin's glass over
-  // the middle (a raked windscreen and rear window), a painted roof, and a short raised boot deck; bumpers, a grille
-  // and mirrors in dark trim. The wheels stand a little proud of the body's sides, so the whole of each shows.
-  const body = mergeGeometries(
-    [
+const TRIM = '#22262b',
+  TYRE = '#1b1d20',
+  GLASS = '#18222a',
+  WINDSCREEN = '#6f8fa3',
+  CHROME = '#c9ced2';
+const box = (w, h, d, x, y, z) => flat(new THREE.BoxGeometry(w, h, d)).translate(x, y, z);
+const trim = (w, h, d, x, y, z, color = TRIM) => tint(box(w, h, d, x, y, z), color);
+// A cabin's glass: the windscreen (the faces looking ahead) pale, the sides and the rear window dark.
+function glass(points, width = 1.48) {
+  const geo = tint(flat(profileGeometry(points, width, 0.02)), GLASS),
+    pale = new THREE.Color(WINDSCREEN),
+    {normal, color} = geo.attributes;
+  for (let i = 0; i < normal.count; i++) if (normal.getZ(i) > 0.4) pale.toArray(color.array, i * 3);
+  return geo;
+}
+// Side profiles are in (forward, up). Each model: its painted parts (`body`), its own glass and trim (`details`), its
+// wheels' radius and its mirrors' height. Every nose and tail face stands about 2.24 m from the middle at the lamps' heights.
+const MODELS = {
+  // A low nose sloping up the bonnet, the cabin over the middle, a short raised boot deck.
+  sedan: {
+    wheel: 0.33,
+    mirror: 0.95,
+    body: () => [
       profileGeometry(
         [
           [-2.18, 0.3],
@@ -103,41 +124,240 @@ function sharedParts() {
         1.5,
         0.02,
       ),
-    ].map(flat),
-  );
-  const wheel = new THREE.CylinderGeometry(0.33, 0.33, 0.22, 16).rotateZ(Math.PI / 2);
-  const wheelFlat = flat(wheel);
-  const trim = (w, h, d, x, y, z) => tint(flat(new THREE.BoxGeometry(w, h, d)).translate(x, y, z), '#22262b');
-  const details = mergeGeometries([
-    tint(
-      flat(
-        profileGeometry(
-          [
-            [1.02, 0.83],
-            [-1.44, 0.85],
-            [-0.97, 1.36],
-            [0.26, 1.38],
-          ],
-          1.48,
-          0.02,
-        ),
+    ],
+    details: () => [
+      glass([
+        [1.02, 0.83],
+        [-1.44, 0.85],
+        [-0.97, 1.36],
+        [0.26, 1.38],
+      ]),
+    ],
+  },
+  // The cabin runs to the tail: no boot, an upright rear window under a small roof spoiler.
+  hatchback: {
+    wheel: 0.33,
+    mirror: 1.02,
+    body: () => [
+      profileGeometry(
+        [
+          [-2.18, 0.3],
+          [2.18, 0.3],
+          [2.22, 0.48],
+          [2.17, 0.7],
+          [1.9, 0.82],
+          [1.15, 0.92],
+          [-2.08, 0.98],
+          [-2.2, 0.84],
+          [-2.22, 0.5],
+        ],
+        1.62,
+        0.05,
       ),
-      '#1e2a33',
-    ),
-    ...[
-      [0.8, 1.38],
-      [-0.8, 1.38],
-      [0.8, -1.38],
-      [-0.8, -1.38],
-    ].map(([x, z]) => tint(wheelFlat.clone().translate(x, 0.33, z), '#1b1d20')),
-    trim(1.78, 0.1, 0.12, 0, 0.34, 2.21),
-    trim(1.78, 0.1, 0.12, 0, 0.34, -2.21), // bumpers, just behind the plates (in front, they hid the province line)
-    trim(0.62, 0.09, 0.04, 0, 0.53, FACE_Z), // grille, below the plate's top and between the head lamps
-    trim(0.08, 0.09, 0.16, 0.9, 0.93, 0.86),
-    trim(0.08, 0.09, 0.16, -0.9, 0.93, 0.86), // mirrors
-  ]);
-  wheel.dispose();
-  wheelFlat.dispose();
+      profileGeometry(
+        [
+          [0.36, 1.45],
+          [-1.78, 1.41],
+          [-1.96, 1.43],
+          [-1.9, 1.49],
+          [0.32, 1.53],
+        ],
+        1.5,
+        0.02,
+      ),
+    ],
+    details: () => [
+      glass([
+        [1.2, 0.9],
+        [-2.04, 0.96],
+        [-1.74, 1.44],
+        [0.36, 1.48],
+      ]),
+    ],
+  },
+  // Tall and square, on bigger wheels, with dark cladding along the sills and rails on the roof.
+  suv: {
+    wheel: 0.38,
+    mirror: 1.15,
+    body: () => [
+      profileGeometry(
+        [
+          [-2.16, 0.38],
+          [2.16, 0.38],
+          [2.22, 0.5],
+          [2.2, 0.86],
+          [1.98, 0.99],
+          [1.05, 1.06],
+          [-2.12, 1.08],
+          [-2.22, 0.92],
+          [-2.22, 0.5],
+        ],
+        1.62,
+        0.05,
+      ),
+      profileGeometry(
+        [
+          [0.36, 1.66],
+          [-1.9, 1.64],
+          [-1.86, 1.74],
+          [0.28, 1.76],
+        ],
+        1.5,
+        0.02,
+      ),
+    ],
+    details: () => [
+      glass([
+        [1.02, 1.05],
+        [-2.1, 1.07],
+        [-1.88, 1.68],
+        [0.34, 1.7],
+      ]),
+      ...[1, -1].flatMap((side) => [
+        trim(0.05, 0.12, 1.9, side * 0.865, 0.42, 0),
+        trim(0.05, 0.05, 1.7, side * 0.62, 1.81, -0.78),
+      ]),
+    ],
+  },
+  // A short cabin ahead of an open bed with a tailgate.
+  pickup: {
+    wheel: 0.38,
+    mirror: 1.12,
+    body: () => [
+      profileGeometry(
+        [
+          [-2.16, 0.36],
+          [2.16, 0.36],
+          [2.22, 0.5],
+          [2.2, 0.82],
+          [2, 0.95],
+          [1.2, 1.02],
+          [-0.5, 1.02],
+          [-0.52, 0.66],
+          [-2.2, 0.66],
+          [-2.22, 0.5],
+        ],
+        1.62,
+        0.05,
+      ),
+      profileGeometry(
+        [
+          [0.5, 1.58],
+          [-0.36, 1.57],
+          [-0.34, 1.67],
+          [0.44, 1.68],
+        ],
+        1.5,
+        0.02,
+      ),
+      box(0.1, 0.36, 1.72, 0.81, 0.84, -1.38),
+      box(0.1, 0.36, 1.72, -0.81, 0.84, -1.38),
+      box(1.72, 0.36, 0.1, 0, 0.84, -2.2),
+    ],
+    details: () => [
+      glass([
+        [1.18, 1.01],
+        [-0.5, 1.01],
+        [-0.36, 1.6],
+        [0.48, 1.62],
+      ]),
+      trim(1.5, 0.02, 1.58, 0, 0.72, -1.34),
+    ],
+  },
+  // A short sloping nose, the windscreen right above it, and a closed box to the tail.
+  van: {
+    wheel: 0.34,
+    mirror: 1.2,
+    body: () => [
+      profileGeometry(
+        [
+          [-2.2, 0.32],
+          [2.18, 0.32],
+          [2.22, 0.5],
+          [2.18, 0.84],
+          [1.72, 1.06],
+          [-2.2, 1.08],
+          [-2.22, 0.5],
+        ],
+        1.62,
+        0.05,
+      ),
+      profileGeometry(
+        [
+          [0.5, 1.06],
+          [-2.18, 1.06],
+          [-2.12, 1.86],
+          [0.5, 1.9],
+        ],
+        1.54,
+        0.04,
+      ),
+      profileGeometry(
+        [
+          [0.98, 1.8],
+          [0.45, 1.8],
+          [0.45, 1.93],
+          [0.86, 1.9],
+        ],
+        1.54,
+        0.02,
+      ),
+    ],
+    details: () => [
+      glass(
+        [
+          [1.74, 1.05],
+          [0.4, 1.05],
+          [0.4, 1.82],
+          [0.96, 1.82],
+        ],
+        1.52,
+      ),
+      trim(1.1, 0.36, 0.06, 0, 1.45, -2.19, GLASS),
+    ],
+  },
+};
+// How common each is, out of ten: an office's car park.
+const SHARES = {sedan: 3, hatchback: 2, suv: 3, pickup: 1, van: 1};
+const MIX = Object.entries(SHARES).flatMap(([name, n]) => Array(n).fill(name));
+// A plate's car is always the same model; through-traffic (no plate) goes by its colour.
+export function carModel(plate, color = 0) {
+  let h = 2166136261;
+  for (const ch of normalizePlate(plate) || `#${color}`) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
+  h ^= h >>> 15;
+  return MIX[(h >>> 0) % MIX.length];
+}
+function modelParts({wheel, mirror, body, details}) {
+  const tyre = flat(new THREE.CylinderGeometry(wheel, wheel, 0.22, 16).rotateZ(Math.PI / 2)),
+    hub = flat(new THREE.CylinderGeometry(wheel * 0.55, wheel * 0.55, 0.23, 10).rotateZ(Math.PI / 2));
+  return {
+    body: mergeGeometries(body().map(flat)),
+    // The wheels stand a little proud of the body's sides, so the whole of each shows.
+    details: mergeGeometries([
+      ...details(),
+      ...[
+        [0.8, 1.38],
+        [-0.8, 1.38],
+        [0.8, -1.38],
+        [-0.8, -1.38],
+      ].flatMap(([x, z]) => [
+        tint(tyre.clone().translate(x, wheel, z), TYRE),
+        tint(hub.clone().translate(x, wheel, z), '#9aa1a6'),
+      ]),
+      trim(1.78, 0.1, 0.12, 0, 0.34, 2.21),
+      trim(1.78, 0.1, 0.12, 0, 0.34, -2.21), // bumpers, just behind the plates (in front, they hid the province line)
+      trim(0.64, 0.14, 0.06, 0, 0.65, FACE_Z - 0.01), // grille, above the plate and between the head lamps
+      trim(0.64, 0.025, 0.07, 0, 0.73, FACE_Z - 0.02, CHROME),
+      // Mirrors, on an arm from the cabin's side (glass, 0.76 m out).
+      ...[1, -1].map((side) => trim(0.22, 0.1, 0.16, side * 0.83, mirror, 0.8)),
+    ]),
+  };
+}
+
+let shared = null;
+function sharedParts() {
+  if (shared) return shared;
+  const models = Object.fromEntries(Object.entries(MODELS).map(([name, model]) => [name, modelParts(model)]));
   const plateGeo = new THREE.PlaneGeometry(0.62, 0.3);
   const uv = plateGeo.attributes.uv;
   for (let i = 0; i < uv.count; i++)
@@ -155,10 +375,17 @@ function sharedParts() {
     [
       flat(front),
       flat(back),
-      lamp(0.52, HEAD_Y, FACE_Z, 0.3, 0.1, 1 / 6),
-      lamp(-0.52, HEAD_Y, FACE_Z, 0.3, 0.1, 1 / 6),
-      lamp(0.56, TAIL_Y, -FACE_Z, 0.26, 0.12, 5 / 6),
-      lamp(-0.56, TAIL_Y, -FACE_Z, 0.26, 0.12, 5 / 6),
+      ...[1, -1].flatMap((side) => [
+        lamp(side * 0.52, HEAD_Y + 0.02, FACE_Z, 0.34, 0.15, 1 / 6),
+        lamp(side * 0.54, TAIL_Y + 0.02, -FACE_Z, 0.3, 0.2, 5 / 6),
+        // The tail lamps wrap round the sides, over the blinkers.
+        lampUv(
+          flat(new THREE.BoxGeometry(0.05, 0.1, 0.34)).translate(side * 0.858, TAIL_Y + 0.11, -2.02),
+          5 / 6,
+          strip,
+        ),
+      ]),
+      lamp(0, TAIL_Y + 0.1, -FACE_Z, 0.8, 0.045, 5 / 6), // the red strip between them
       ...lenses,
     ].map((g) => {
       for (const k of Object.keys(g.attributes)) if (!['position', 'uv'].includes(k)) g.deleteAttribute(k);
@@ -185,8 +412,7 @@ function sharedParts() {
       ),
     );
   shared = {
-    body,
-    details,
+    models,
     decals,
     blob,
     ...headlightPool(),
@@ -196,7 +422,12 @@ function sharedParts() {
     blinkMaterial: new THREE.MeshBasicMaterial({color: '#ffa31a', toneMapped: false}),
     glowLeft: blinkerGlow(1),
     glowRight: blinkerGlow(-1),
-    glowMaterial: blinkerGlowMaterial(),
+    glowMaterial: glowMaterial('#ffa31a', 0.6),
+    tailGlow: cornerFlares([
+      [0.54, TAIL_Y, -FACE_Z - 0.03],
+      [-0.54, TAIL_Y, -FACE_Z - 0.03],
+    ]),
+    tailGlowMaterial: glowMaterial('#ff2a24', 0.5),
     ...blinkerLight(),
     detailMaterial: new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.3, metalness: 0.5}),
     // The soft shadow sits on the road; the depth offset stops it flickering against the asphalt and paint.
@@ -361,25 +592,27 @@ function headlightBeams() {
   return {beam: box, beamMaterial: material};
 }
 
-// A blinker's flare: one quad per lamp (front and rear corner), every vertex at the lamp's centre with a corner
+// A lamp's flare (blinkers, tail lamps): one quad per lamp, every vertex at the lamp's centre with a corner
 // offset that the vertex shader lays out across the screen, so the quad always faces the camera. Soft round falloff,
 // added onto what lies behind it.
-function blinkerGlow(side) {
+const blinkerGlow = (side) =>
+  cornerFlares([
+    [side * 0.8, HEAD_Y, FACE_Z + 0.03],
+    [side * 0.8, TAIL_Y, -FACE_Z - 0.03],
+  ]);
+function cornerFlares(lamps) {
   const geo = new THREE.BufferGeometry(),
     pos = [],
     corner = [],
     index = [];
-  [
-    [HEAD_Y, FACE_Z + 0.03],
-    [TAIL_Y, -FACE_Z - 0.03],
-  ].forEach(([y, z], q) => {
+  lamps.forEach((at, q) => {
     for (const [u, v] of [
       [-1, -1],
       [1, -1],
       [1, 1],
       [-1, 1],
     ]) {
-      pos.push(side * 0.8, y, z);
+      pos.push(...at);
       corner.push(u, v);
     }
     index.push(q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3);
@@ -427,9 +660,9 @@ function blinkerLight() {
     }),
   };
 }
-function blinkerGlowMaterial() {
+function glowMaterial(color, size) {
   return new THREE.ShaderMaterial({
-    uniforms: {color: {value: new THREE.Color('#ffa31a')}, size: {value: 0.6}},
+    uniforms: {color: {value: new THREE.Color(color)}, size: {value: size}},
     vertexShader: `attribute vec2 corner; uniform float size; varying vec2 vCorner;
       void main(){vCorner=corner;vec4 mv=modelViewMatrix*vec4(position,1.);mv.xy+=corner*size;gl_Position=projectionMatrix*mv;}`,
     fragmentShader: `uniform vec3 color; varying vec2 vCorner;
@@ -448,6 +681,7 @@ export function createCar({plate, province, color = 0}) {
   const p = sharedParts();
   const car = new THREE.Group();
   car.name = `Demo_car_${plate}`;
+  car.userData.model = carModel(plate, color);
   car.userData.paint = CAR_COLORS[color % CAR_COLORS.length];
   // Parts never move inside the car, and the car's own matrix is set when it is placed.
   car.matrixAutoUpdate = false;
@@ -498,12 +732,17 @@ export function createCar({plate, province, color = 0}) {
     l.renderOrder = -1;
     l.name = `Demo_car_blinker_light_${side}`;
   }
+  const tail = add(p.tailGlow, p.tailGlowMaterial);
+  tail.visible = false;
+  tail.renderOrder = 1;
+  tail.frustumCulled = false; // as the blinkers' flares
+  tail.name = 'Demo_car_tail_glow';
   cars.add(car);
   return car;
 }
 
-// The common parts of every car in `root` (a car park's, already in its scene), drawn as one instanced mesh each: the
-// body in each car's paint (instance colours on a white material, the same shading), the details, and the blob shadow
+// The common parts of every car in `root` (a car park's, already in its scene), drawn as instanced meshes, a body and
+// details per model and the shadows together: the body in each car's paint (instance colours on a white material, the same shading), the details, and the blob shadow
 // under it. Brought up to date at the start of every draw of the scene (the scene's onBeforeRender, before three.js
 // uploads instance data: synced from the meshes' own, the data reached the GPU a draw late, and the first draw had no
 // colours at all), from the cars as they stand: a car moved, added, hidden or taken away needs nothing else.
@@ -511,19 +750,24 @@ export function createCar({plate, province, color = 0}) {
 export function createCarInstances(root, capacity = 160) {
   const p = sharedParts();
   const paint = new THREE.MeshStandardMaterial({color: '#ffffff', roughness: 0.32, metalness: 0.45});
-  const body = new THREE.InstancedMesh(p.body, paint, capacity),
-    details = new THREE.InstancedMesh(p.details, p.detailMaterial, capacity),
-    blob = new THREE.InstancedMesh(p.blob, p.blobMaterial, capacity);
-  body.name = 'Demo_cars_body';
-  details.name = 'Demo_cars_details';
+  const models = new Map();
+  for (const [name, parts] of Object.entries(p.models)) {
+    const body = new THREE.InstancedMesh(parts.body, paint, capacity),
+      details = new THREE.InstancedMesh(parts.details, p.detailMaterial, capacity);
+    body.name = `Demo_cars_body_${name}`;
+    details.name = `Demo_cars_details_${name}`;
+    body.receiveShadow = details.receiveShadow = true;
+    body.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
+    models.set(name, {body, details});
+  }
+  const blob = new THREE.InstancedMesh(p.blob, p.blobMaterial, capacity);
   blob.name = 'Demo_cars_blob';
-  body.receiveShadow = details.receiveShadow = true;
-  body.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
   blob.renderOrder = -1;
+  const meshes = [...[...models.values()].flatMap(({body, details}) => [body, details]), blob];
   const colour = new THREE.Color(),
     lift = new THREE.Matrix4().makeTranslation(0, 0.025, 0),
     under = new THREE.Matrix4();
-  for (const mesh of [body, details, blob]) {
+  for (const mesh of meshes) {
     // The cars move every frame, beyond any bounds worked out once.
     mesh.frustumCulled = false;
     mesh.matrixAutoUpdate = false;
@@ -537,29 +781,29 @@ export function createCarInstances(root, capacity = 160) {
     sync();
   };
   function sync() {
-    let n = 0;
+    for (const mesh of meshes) mesh.count = 0;
     for (const car of cars) {
       if (!car.parent) {
         cars.delete(car);
         continue;
       }
-      if (car.parent !== root || !car.visible || n >= capacity) continue;
+      if (car.parent !== root || !car.visible || blob.count >= capacity) continue;
+      const {body, details} = models.get(car.userData.model),
+        n = body.count;
       body.setMatrixAt(n, car.matrix);
       details.setMatrixAt(n, car.matrix);
-      blob.setMatrixAt(n, under.multiplyMatrices(car.matrix, lift));
       body.setColorAt(n, colour.set(car.userData.paint));
-      n++;
+      blob.setMatrixAt(blob.count, under.multiplyMatrices(car.matrix, lift));
+      body.count = details.count = n + 1;
+      blob.count++;
     }
-    for (const mesh of [body, details, blob]) {
-      mesh.count = n;
-      mesh.instanceMatrix.needsUpdate = true;
-    }
-    body.instanceColor.needsUpdate = true;
+    for (const mesh of meshes) mesh.instanceMatrix.needsUpdate = true;
+    for (const {body} of models.values()) body.instanceColor.needsUpdate = true;
   }
   return {
     dispose() {
       scene.onBeforeRender = before;
-      for (const mesh of [body, details, blob]) {
+      for (const mesh of meshes) {
         mesh.removeFromParent();
         mesh.dispose();
       }
@@ -574,10 +818,10 @@ export function createCarInstances(root, capacity = 160) {
 export function setCarLamps(car, on, night) {
   const [decals, pool, beams] = car.children;
   decals.material.color.setScalar(!night || on ? 1 : 0.3);
-  pool.visible = beams.visible = night && on;
+  pool.visible = beams.visible = car.children[9].visible = night && on;
 }
 
-// The blinkers (children 3 and 4, their flares 5 and 6, their light on the road 7 and 8): `side` is 'left', 'right'
+// The blinkers (children 3 and 4, their flares 5 and 6, their light on the road 7 and 8; 9 is the tail lamps' glow): `side` is 'left', 'right'
 // or null; `lit` is the flash's on half.
 export function setCarBlinker(car, side, lit) {
   car.children.slice(3, 9).forEach((o, i) => {
@@ -587,9 +831,11 @@ export function setCarBlinker(car, side, lit) {
 
 export function disposeCars() {
   if (!shared) return;
+  for (const {body, details} of Object.values(shared.models)) {
+    body.dispose();
+    details.dispose();
+  }
   for (const k of [
-    'body',
-    'details',
     'decals',
     'blob',
     'pool',
@@ -600,6 +846,7 @@ export function disposeCars() {
     'glowRight',
     'lightLeft',
     'lightRight',
+    'tailGlow',
   ])
     shared[k].dispose();
   for (const k of [
@@ -611,6 +858,7 @@ export function disposeCars() {
     'beamMaterial',
     'blinkMaterial',
     'glowMaterial',
+    'tailGlowMaterial',
     'lightMaterial',
     'lightTexture',
   ])

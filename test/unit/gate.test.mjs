@@ -32,7 +32,7 @@ test('ten cars arriving at once are all parked within 85 s (the queue moves up, 
   arrivals.forEach((v, i) => cp.traffic.arrive({plate: v.plate, province: v.province, color: 2, fromX: -70 - i * 3}));
   assert.ok(await cp.until(() => arrivals.every(cp.parked), 900000));
   const took = (cp.now() - t0) / 1000;
-  // About 74 s (the rushes need a car every 7 s).
+  // About 83 s, 6.5 s a car (the rushes need one every 7 s).
   assert.ok(took < 85, `10 in in ${took.toFixed(0)} s`);
   assert.deepEqual(cp.overlaps(), []);
   cp.dispose();

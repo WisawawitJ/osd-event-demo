@@ -1395,11 +1395,13 @@ html[data-night='true'] #scene-chip {
   color: #000334;
   font-weight: 500;
 }
+/* The same card as the dock above it. */
 .day-timeline {
-  padding: 13px 17px 10px;
+  container-type: inline-size;
+  padding: 12px 16px 10px;
   border-radius: 14px;
   background: #fff;
-  border: 1px solid #dce3ec;
+  box-shadow: 0 6px 20px #00033408;
 }
 .timeline-heading {
   display: flex;
@@ -1411,79 +1413,227 @@ html[data-night='true'] #scene-chip {
   display: flex;
   align-items: baseline;
   gap: 12px;
+  min-width: 0;
 }
 .timeline-heading strong {
-  font-size: 24px;
+  font-size: 26px;
+  line-height: 1.2;
   font-weight: 600;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
 }
-.timeline-heading span {
-  font-size: 11px;
+/* One line whatever it says: as it changed at a press, a longer one wrapped the header and moved the button pressed. */
+#replay-mode {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
   color: var(--muted);
 }
 .timeline-actions {
   display: flex;
+  flex: none;
   gap: 7px;
 }
 .timeline-actions button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   padding: 6px 12px;
-  border-radius: 8px;
+  border-color: #dce3ec;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+.timeline-actions button[aria-pressed='true'] {
+  background: #eef4fc;
+  color: #023e8a;
+}
+.timeline-actions button[aria-pressed='true']:not(:disabled):hover {
+  background: #dfeafa;
+}
+.timeline-actions svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
 }
 .timeline-track {
+  position: relative;
   display: block;
+  --thumb: 22px;
+  /* The day's sky, midnight to midnight: night, dawn, day, dusk, night. */
+  --sky: linear-gradient(
+    90deg,
+    #23345f 0 20%,
+    #7d7fa8 24%,
+    #f3b98a 27%,
+    #9fd0f2 33%,
+    #74bdf0 50%,
+    #9fd0f2 67%,
+    #f2a36b 74%,
+    #6b5f93 78%,
+    #23345f 82%
+  );
 }
 .timeline-track input {
+  appearance: none;
   width: 100%;
   display: block;
-  accent-color: #0055b8;
   height: 44px;
   margin: 0;
+  background: transparent;
   cursor: ew-resize;
+}
+.timeline-track input::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--sky);
+}
+.timeline-track input::-moz-range-track {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--sky);
+}
+.timeline-track input::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: -6px;
+  border: 5px solid #0055b8;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 5px #00033440;
+}
+.timeline-track input::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--thumb);
+  height: var(--thumb);
+  border: 5px solid #0055b8;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 5px #00033440;
 }
 .timeline-track input:focus-visible {
   outline: 2px solid #0055b8;
   outline-offset: 2px;
 }
+/* The moments on the track, where the thumb's centre stands at that time. */
+.day-marks {
+  position: absolute;
+  inset: 0 calc(var(--thumb) / 2) auto;
+  height: 44px;
+  pointer-events: none;
+}
+.day-marks i {
+  position: absolute;
+  left: calc(100% * var(--at));
+  top: 31px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: #b6c3d3;
+}
+.day-marks i.past {
+  background: #0055b8;
+}
 .timeline-labels {
   display: flex;
   justify-content: space-between;
+  margin-top: -3px;
   color: #627188;
-  font-size: 10px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
+/* One row of equal moments at every width: beside their titles when there is room, otherwise icon and time, with the
+   title of the one it is on under them. */
 .day-events {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
-  gap: 4px;
+  gap: 6px;
   margin-top: 8px;
 }
 .day-events button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+  padding: 5px 9px;
+  border-radius: 9px;
   text-align: left;
-  padding: 5px 8px;
-  border-radius: 7px;
-  border-left: 2px solid #d8e2ef;
-  font-size: 10px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.35;
+  background: #f5f8fb;
+  color: #55565a;
+}
+.day-events svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.day-events button > span {
+  min-width: 0;
 }
 .day-events time {
   display: block;
-  color: #55565a;
   font-variant-numeric: tabular-nums;
 }
-.day-events span {
+.day-events b {
   display: block;
+  font-weight: 500;
   color: #000334;
 }
 .day-events [aria-current='true'] {
+  background: #e6f0fb;
   border-color: #0055b8;
-  background: #eef4fc;
-}
-.day-events [aria-current='true'] time {
   color: #0055b8;
+}
+.day-now {
+  display: none;
+  margin: 8px 0 0;
+  min-height: 1.4em;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #023e8a;
+}
+@container (max-width: 860px) {
+  .day-events button {
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 2px;
+    text-align: center;
+  }
+  .day-events b {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .day-now {
+    display: block;
+  }
+}
+@container (max-width: 560px) {
+  .timeline-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .timeline-actions {
+    flex-wrap: wrap;
+  }
+  .timeline-actions button {
+    padding: 6px 10px;
+  }
+  .day-events {
+    gap: 4px;
+  }
 }
 .building-incidents {
   margin-bottom: 24px;
@@ -1557,7 +1707,7 @@ html[data-night='true'] #scene-chip {
   margin-right: 4px;
 }
 .showcase-page #viewport {
-  height: calc(100dvh - 465px);
+  height: calc(100dvh - 500px);
   min-height: 440px;
 }
 @media (max-width: 1100px) {
@@ -1568,22 +1718,8 @@ html[data-night='true'] #scene-chip {
     padding: 6px 10px;
     font-size: 11px;
   }
-  .day-events {
-    grid-auto-flow: row;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
   .showcase-page #viewport {
     min-height: 420px;
-  }
-  .timeline-heading > div:first-child {
-    gap: 8px;
-  }
-  .timeline-heading span {
-    font-size: 10px;
-  }
-  .timeline-actions button {
-    font-size: 11px;
-    padding: 6px 9px;
   }
   .day-timeline {
     padding: 10px 12px;
@@ -1605,32 +1741,6 @@ html[data-night='true'] #scene-chip {
   .showcase-page #viewport {
     height: 48dvh;
     min-height: 365px;
-  }
-  .timeline-heading {
-    align-items: flex-start;
-    gap: 4px;
-  }
-  .timeline-heading > div:first-child {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-  .timeline-heading strong {
-    font-size: 25px;
-  }
-  .timeline-actions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 4px;
-  }
-  .timeline-actions button {
-    font-size: 11px;
-    min-height: 44px;
-    padding: 6px 9px;
-  }
-  .day-events button {
-    font-size: 10px;
-    padding: 6px;
   }
   .building-incidents {
     margin-bottom: 20px;

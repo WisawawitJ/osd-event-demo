@@ -4,6 +4,7 @@
 // stand-in car park and no UI, and step the engine's clock.
 import {createParkingSim, STORY_START} from './sim.js';
 import {createTraffic} from './traffic.js';
+import {plateRead} from './gate.js';
 import {createStory} from './story.js';
 import {later, cancelLater, sleep, world, demoNow, rng} from './clock.js';
 import {
@@ -59,13 +60,10 @@ export function createParkingWorld({
     schedule,
     hooks: {
       snapshot: ui.snapshot ?? (() => ''),
-      // `recognised`: the plate is read (the barrier goes on); the card then shows the verdict a moment.
+      // gate.js's pace: read, the verdict on the card, then the barrier.
       async readPlate(which, agent, verdict, recognised) {
         ui.plateRead?.(which, agent, verdict, 0.9 + rng() * 0.09);
-        await sleep(900);
-        ui.plateDone?.(which);
-        recognised();
-        await sleep(verdict.allow ? 500 : 300);
+        await plateRead({read: () => ui.plateDone?.(which), recognised});
       },
       onFull(plate) {
         ui.full?.(plate);

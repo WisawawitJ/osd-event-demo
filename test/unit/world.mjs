@@ -2,16 +2,16 @@
 // 3D car park (only what traffic reads from it: the barrier's arm and where cars are). No browser, no rendering:
 // simulation time is stepped by the test, so a minute of traffic takes a fraction of a second, the same every run.
 import * as THREE from 'osd/node_modules/three/build/three.module.js';
-import {advance, runUntil, seed, sleep, demoNow, TICK, world} from 'osd/parking/clock.js';
+import {advance, runUntil, seed, demoNow, TICK, world} from 'osd/parking/clock.js';
 import {createParkingSim} from 'osd/parking/sim.js';
+import {createBoom, plateRead} from 'osd/parking/gate.js';
 import {createTraffic} from 'osd/parking/traffic.js';
 import {createParkingWorld} from 'osd/parking/world.js';
 import {createPhone} from 'osd/parking/phone.js';
 
-// The lot as traffic sees it: a group the cars are added to, and the arm, which turns a quarter in about 0.8 s.
+// The lot as traffic sees it: a group the cars are added to, and the arm (gate.js's own).
 function standInLot() {
-  let angle = 0,
-    target = 0;
+  const arm = createBoom();
   return {
     root: new THREE.Group(),
     // The sign's count, for tests.
@@ -20,20 +20,14 @@ function standInLot() {
     drawSign(free) {
       this.free = free;
     },
-    setBoom(open) {
-      target = open ? (Math.PI / 2) * 0.96 : 0;
-    },
+    setBoom: arm.set,
     get boomMoving() {
-      return angle !== target;
+      return arm.moving;
     },
     get armAngle() {
-      return angle;
+      return arm.angle;
     },
-    update(dt) {
-      if (angle === target) return false;
-      angle = target > angle ? Math.min(target, angle + dt * 2) : Math.max(target, angle - dt * 2);
-      return true;
-    },
+    update: arm.update,
   };
 }
 
@@ -100,12 +94,7 @@ export function carPark({seed: s = 1, time, quiet = false} = {}) {
     schedule() {},
     hooks: {
       snapshot: () => '',
-      // As the page's: the camera reads the plate (0.9 s), then shows the verdict a moment.
-      async readPlate(which, agent, verdict, recognised) {
-        await sleep(900);
-        recognised();
-        await sleep(verdict.allow ? 500 : 300);
-      },
+      readPlate: (which, agent, verdict, recognised) => plateRead({recognised}),
     },
   });
   traffic.syncParked();

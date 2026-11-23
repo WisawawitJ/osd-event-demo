@@ -5,14 +5,16 @@ import {world, realNow, later} from 'osd/parking/clock.js';
 import {options} from 'osd/parking/options.js';
 import {createDirector} from 'osd/viewer/director.js';
 import {createBuildingStory} from 'osd/viewer/building-story.js';
-import {morph, icon as barIcon} from 'osd/parking/dom.js';
+import {morph} from 'osd/parking/dom.js';
+import {storyBar, storyCaption, onViewTaken, tapCues} from 'osd/parking/story-bar.js';
 const icons = {
   building: 'M3 21V5h12v16M15 11h6v10M7 9h4M7 13h4M7 17h4',
   light: 'M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0l-1 2H9Z',
   air: 'M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h5',
   water: 'M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z',
   solar: 'm5 9-2 10h18L19 9ZM8 9l-1 10m9-10 1 10M4 14h16M12 19v3M12 2v3M5 3l2 2m12-2-2 2',
-  door: 'M5 21V3h14v18M9 21V5l8 2v14M13 13h.01',
+  door: 'M4 21h16M7 21V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v17M13.5 12.5v-1',
+  leave: 'M13 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h7M10 12h11m-4-4 4 4-4 4',
   arrow: 'M4 12h16m-5-5 5 5-5 5',
   play: 'm8 5 11 7-11 7Z',
   pause: 'M8 5v14M16 5v14',
@@ -98,6 +100,10 @@ const pageText = {
   'dock.energy': ['พลังงาน', 'Energy'],
   timeline: ['หนึ่งวันในอาคาร · เวลาจำลองเดินตลอด', 'A day in the building · simulated time always running'],
   'day.mode': ['เวลาจำลอง · เดินตลอด', 'Simulated time · always running'],
+  'day.follow': [
+    'กล้องไปตามช่วงเวลาของวัน แตะที่ใดก็ได้เพื่อสำรวจเอง',
+    'The camera goes where the day goes; touch anything to explore yourself',
+  ],
   'day.pause': ['หยุดชั่วคราว', 'Pause'],
   'day.speed': ['ความยาวหนึ่งวันจำลอง (เวลาจริง)', 'How long a simulated day takes (real time)'],
   'day.time': ['เวลาในโลกจำลอง · เลื่อนเพื่อข้ามไปเวลาอื่น', 'Simulated time · slide to move on to another time'],
@@ -109,6 +115,7 @@ const pageText = {
   'incidents.loading': ['กำลังเตรียมเหตุการณ์…', 'Preparing events…'],
   'panel.loading': ['กำลังเตรียมข้อมูล…', 'Preparing data…'],
   'view.group': ['ควบคุมมุมมอง', 'View controls'],
+  'building.storyBar': ['เรื่องเล่าอาคาร', 'Building story'],
   'parking.storyBar': ['เรื่องเล่าที่จอดรถ', 'Parking story'],
   'view.zoomIn': ['ซูมเข้า', 'Zoom in'],
   'view.zoomOut': ['ซูมออก', 'Zoom out'],
@@ -185,7 +192,8 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
     effects = createTourEffects({model, schedule, meetingRoom: simulation.rooms.find((r) => r.id === meetingId)});
   const $ = (s) => document.querySelector(s),
     content = $('#dashboard-content');
-  let insights = null,
+  let story = null,
+    insights = null,
     flightStopped = false,
     resetAfterFlight = false;
   // landed: the camera reached the current stop's view (a flight cut short leaves it false until a stop or Reset view lands).
@@ -264,7 +272,7 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
             ],
       )}</div>`;
     if (destination === 'meeting')
-      html = `<p class="dashboard-intro">${L('ห้องประชุมย่อย 2 ชั้น 4 · แสงและอากาศที่ปรับให้เข้ากับการใช้งาน', 'Meeting room 2, floor 4 · light and air tuned to how the room is used')}</p><div class="metric-pair">${metric(L('อุณหภูมิห้อง', 'Room temperature'), state.temp.toFixed(1), '°C')}${metric(L('ตั้งอุณหภูมิ', 'Set point'), state.target, '°C')}</div><div class="dashboard-section">${row(L('การใช้งาน', 'Occupancy'), state.occupied ? L('มีคนอยู่ · 6 คน', 'Occupied · 6 people') : L('ไม่มีคน', 'Empty'))}${row(L('แอร์', 'AC'), s.climate ? L('เปิดโหมดเย็น', 'Cooling') : L('ปิด', 'Off'))}${row(L('ประตู', 'Door'), Object.values(s.doors).some(Boolean) ? L('เปิด', 'Open') : L('ปิด', 'Closed'))}</div>${controls()}<div class="dashboard-section"><h3>${L('แนวโน้มอุณหภูมิ', 'Temperature trend')}</h3>${chart([27.5, 27.2, 26.8, 26.2, 25.9, state.temp], getLang() === 'en' ? ['Start', '5 min', '10 min', 'Now'] : ['เริ่ม', '5 นาที', '10 นาที', 'ตอนนี้'], L('อุณหภูมิ', 'temperature'), 'temp')}<div class="chart-caption"><span>${insights?.timeLabel() || L('อุณหภูมิห้อง', 'Room temperature')}</span><span>${L('เป้าหมาย', 'Target')} ${state.target} °C</span></div></div><button class="panel-action" data-action="${state.occupied ? 'meeting-end' : 'meeting'}">${state.occupied ? icon('door') + L('จำลองเลิกประชุม', 'End the meeting') : icon('play') + L('จำลองเริ่มประชุม', 'Simulate a meeting')}</button><p class="scenario-note">${state.scenario === 'meeting' ? L('กำลังจำลองการทำความเย็น · เร่งเวลาเพื่อสาธิต', 'Simulating cooling · time sped up for the demo') : L('จุดสีเขียวเป็นตำแหน่งคนสมมติ ไม่ใช่ผลติดตามบุคคลจริง', 'Green dots are made-up positions, not real people tracking')}</p>`;
+      html = `<p class="dashboard-intro">${L('ห้องประชุมย่อย 2 ชั้น 4 · แสงและอากาศที่ปรับให้เข้ากับการใช้งาน', 'Meeting room 2, floor 4 · light and air tuned to how the room is used')}</p><div class="metric-pair">${metric(L('อุณหภูมิห้อง', 'Room temperature'), state.temp.toFixed(1), '°C')}${metric(L('ตั้งอุณหภูมิ', 'Set point'), state.target, '°C')}</div><div class="dashboard-section">${row(L('การใช้งาน', 'Occupancy'), state.occupied ? L('มีคนอยู่ · 6 คน', 'Occupied · 6 people') : L('ไม่มีคน', 'Empty'))}${row(L('แอร์', 'AC'), s.climate ? L('เปิดโหมดเย็น', 'Cooling') : L('ปิด', 'Off'))}${row(L('ประตู', 'Door'), Object.values(s.doors).some(Boolean) ? L('เปิด', 'Open') : L('ปิด', 'Closed'))}</div>${controls()}<div class="dashboard-section"><h3>${L('แนวโน้มอุณหภูมิ', 'Temperature trend')}</h3>${chart([27.5, 27.2, 26.8, 26.2, 25.9, state.temp], getLang() === 'en' ? ['Start', '5 min', '10 min', 'Now'] : ['เริ่ม', '5 นาที', '10 นาที', 'ตอนนี้'], L('อุณหภูมิ', 'temperature'), 'temp')}<div class="chart-caption"><span>${insights?.timeLabel() || L('อุณหภูมิห้อง', 'Room temperature')}</span><span>${L('เป้าหมาย', 'Target')} ${state.target} °C</span></div></div><button class="panel-action" data-action="${state.occupied ? 'meeting-end' : 'meeting'}">${state.occupied ? icon('leave') + L('จำลองเลิกประชุม', 'End the meeting') : icon('play') + L('จำลองเริ่มประชุม', 'Simulate a meeting')}</button><p class="scenario-note">${state.scenario === 'meeting' ? L('กำลังจำลองการทำความเย็น · เร่งเวลาเพื่อสาธิต', 'Simulating cooling · time sped up for the demo') : L('จุดสีเขียวเป็นตำแหน่งคนสมมติ ไม่ใช่ผลติดตามบุคคลจริง', 'Green dots are made-up positions, not real people tracking')}</p>`;
     if (destination === 'pond')
       html = `<p class="dashboard-intro">${L('ข้อมูลน้ำและสภาพแวดล้อมของบ่อปลาริมห้องประชุม', 'Water and surroundings of the fish pond by the meeting room')}</p><div class="metric-pair">${metric(L('ระดับน้ำ', 'Water level'), state.water, '%')}${metric(L('อุณหภูมิน้ำ', 'Water temperature'), '27.1', '°C')}</div><div class="water-level ${state.pondAlert ? 'warning' : ''}" role="img" aria-label="${L('ระดับน้ำ', 'Water level')} ${state.water}%">${Array.from({length: 12}, (_, i) => `<i class="${i < Math.round((state.water / 100) * 12) ? 'filled' : ''}"></i>`).join('')}</div>${state.pondAlert ? `<div class="alert-strip">${L('ระดับน้ำต่ำ · ตรวจสอบบ่อและระบบเติมน้ำ', 'Low water · check the pond and the refill system')}</div>` : ''}<div class="dashboard-section">${row(L('ความเป็นกรด–ด่าง', 'Acidity'), 'pH 7.2')}${row(L('ออกซิเจนละลายน้ำ', 'Dissolved oxygen'), '6.4 mg/L')}${row(L('สถานะปั๊ม', 'Pump status'), L('ทำงาน', 'Running'))}${row(L('เกณฑ์ระดับน้ำในเดโม', 'Demo water threshold'), L('เตือนเมื่อ < 65%', 'Alert below 65%'))}</div><div class="dashboard-section"><h3>${L('ระดับน้ำวันนี้', 'Water level today')}</h3>${chart([81, 83, 82, 81, 82, state.water], ['08:00', '10:00', '12:00', '13:30'], L('ระดับน้ำ', 'water level'), 'water')}</div><button class="panel-action" data-action="pond">${icon(state.pondAlert ? 'check' : 'water')}${state.pondAlert ? L('คืนค่าระดับน้ำ', 'Restore water level') : L('จำลองระดับน้ำต่ำ', 'Simulate low water')}</button>`;
     if (destination === 'energy')
@@ -275,6 +283,7 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
     const action = next.content.querySelector('.panel-action'),
       section = next.content.querySelector('.dashboard-section');
     if (destination !== 'overview' && action && section) section.before(action);
+    if (action && story?.cue) action.dataset.cue = 'true';
     morph(content, next.content);
     if (focused)
       content.querySelector(`[data-control="${focused}"],[data-action="${focused}"]`)?.focus({preventScroll: true});
@@ -475,50 +484,100 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
     }
     scenarioFrame = requestAnimationFrame(tick);
   }
-  // The building's story (building-story.js): it flies the camera with select and works each stop's own buttons here.
+  // The building's story (building-story.js): it flies the camera with select, and works each stop's own buttons here.
   function storyAct(kind) {
-    if (kind === 'meeting' || kind === 'meeting-end') scenario(kind);
-    else if (kind === 'pond-low') {
-      if (!state.pondAlert) scenario('pond');
-    } else if (kind === 'pond-ok') {
-      if (state.pondAlert) scenario('pond');
-    } else if (kind === 'cloud') {
-      if (state.solar >= 5) scenario('energy');
-    } else if (kind === 'sun') {
-      if (state.solar < 5) scenario('energy');
-    }
+    scenario({'pond-low': 'pond', 'pond-ok': 'pond', cloud: 'energy', sun: 'energy'}[kind] ?? kind);
   }
-  const storyPlay = $('#story-play'),
-    storyCaption = $('#story-caption');
-  const story = createBuildingStory({select, act: storyAct, changed: () => renderStory()});
-  // Play in the timeline's header; while it plays, the step's line and its controls in a card on the 3D view.
-  function renderStory() {
-    const s = story,
-      step = s.running ? s.step : null,
-      paused = world.paused;
-    storyPlay.innerHTML = `${barIcon(s.running ? 'x' : 'play')}<span>${s.running ? L('ออกจากเรื่องเล่า', 'Exit story') : L('เล่าเรื่องอาคาร', 'Building story')}</span>`;
-    storyPlay.setAttribute('aria-pressed', String(s.running));
-    storyCaption.hidden = !step;
-    if (!step) {
-      storyCaption.innerHTML = '';
-      return;
-    }
-    const dots = Array.from(
-      {length: s.total},
-      (_, i) => `<i class="${i < s.index ? 'done' : i === s.index ? 'now' : ''}"></i>`,
-    ).join('');
-    storyCaption.innerHTML = `<span class="pk-caption-step">${L(`เรื่องเล่าอาคาร · ${s.index + 1}/${s.total}`, `Building story · ${s.index + 1}/${s.total}`)}</span><strong>${L(...step.title)}</strong><p>${L(...step.text)}</p><div class="story-controls"><button data-story="${paused ? 'resume' : 'pause'}">${barIcon(paused ? 'play' : 'pause')}<span>${paused ? L('เล่นต่อ', 'Resume') : L('หยุดชั่วคราว', 'Pause')}</span></button><button data-story="next">${barIcon('next')}<span>${L('ถัดไป', 'Next')}</span></button><div class="pk-dots">${dots}</div></div>`;
+  // `storySet`: the readings this run of the story has set.
+  const storySet = new Set();
+  function storyHold(...keys) {
+    for (const key of keys) storySet.add(key);
+    insights?.hold(keys);
   }
-  listen(storyPlay, 'click', () => {
-    if (story.running) story.stop();
-    else story.play();
+  // The scene as it stands before a step's button, whatever the day or a visitor made of it: the room empty (by the
+  // day's schedule it is in use at 10:00, and its meeting started with people already in it), and so on.
+  function storyPrepare(kind) {
+    if (kind === 'meeting') {
+      Object.assign(state, {occupied: false, temp: 27.4});
+      simulation.setRoom(meetingId, {light: false, climate: false});
+      storyHold('occupied', 'temp');
+    } else if (kind === 'meeting-end') {
+      state.occupied = true;
+      simulation.setRoom(meetingId, {light: true, climate: true});
+      storyHold('occupied');
+    } else if (kind === 'pond-low' || kind === 'pond-ok') {
+      state.pondAlert = kind === 'pond-ok';
+      state.water = state.pondAlert ? 58 : 82;
+      storyHold('pondAlert', 'water');
+    } else {
+      state.solar = kind === 'sun' ? 3.1 : Math.max(state.solar, 5);
+      state.load = Math.max(state.load, state.solar + 0.5);
+      storyHold('solar', 'load');
+    }
+    render();
+  }
+  story = createBuildingStory({
+    select,
+    prepare: storyPrepare,
+    act: storyAct,
+    restore() {
+      if (disposed) return;
+      stopScenario();
+      insights?.backToSchedule(storySet, storySet.has('occupied') ? meetingId : null);
+    },
+    tap: tapCues,
+    changed() {
+      if (!story.running) storySet.clear();
+      renderStory();
+      render();
+    },
   });
-  listen(storyCaption, 'click', (event) => {
-    const what = event.target.closest('[data-story]')?.dataset.story;
-    if (!what) return;
-    if (what === 'pause') world.setPaused(true);
+  // Its bar under the timeline and its caption on the 3D view: the car park's story's (story-bar.js).
+  const stage = $('#viewport'),
+    storyBarEl = $('#story-bar'),
+    caption = $('#story-caption');
+  function renderStory() {
+    // In place (morph): rebuilt, the button just pressed lost its focus at every step.
+    morph(storyBarEl, storyBar(story, {idle: pt('story.idleBuilding')}));
+    const c = story.caption;
+    caption.hidden = !c;
+    stage.classList.toggle('building-story', Boolean(c));
+    caption.innerHTML = c
+      ? storyCaption({
+          step: pt('story.step', {n: story.index + 1, total: story.total}),
+          title: L(...c.title),
+          body: L(...c.body),
+          hint: c.hint && L(...c.hint),
+        })
+      : '';
+  }
+  listen(storyBarEl, 'click', (event) => {
+    const what = event.target.closest('[data-bar]')?.dataset.bar;
+    if (what === 'play' || what === 'restart') story.play();
+    else if (what === 'pause') world.setPaused(true);
     else if (what === 'resume') world.setPaused(false);
     else if (what === 'next') story.next();
+    else if (what === 'free') story.stop();
+  });
+  // Enter held down presses once (its repeats went on to press what the button had become).
+  listen(storyBarEl, 'keydown', (event) => {
+    if (event.repeat && event.key === 'Enter') event.preventDefault();
+  });
+  listen(storyBarEl, 'change', (event) => {
+    if (event.target.dataset.bar === 'auto') story.setAuto(event.target.checked);
+  });
+  // The visitor takes over, as from the car park's: the 3D view (on auto-advance; Next by Next, the presenter may look
+  // around between steps), or Esc. Taking the view, they go on from what they see (the press may be on a device: put
+  // back to the schedule under it, the light they saw off was on, and their tap switched it off).
+  onViewTaken(
+    stage,
+    (event) => {
+      if (story.running && story.auto && !event.target.closest?.('.pk-caption, #view-orbit')) story.stop({keep: true});
+    },
+    {signal},
+  );
+  listen(document, 'keydown', (event) => {
+    if (event.key === 'Escape') story.stop();
   });
   // Pause and Resume are the day's (the timeline's Pause too): redrawn when the clock's rate changes.
   const offRate = world.subscribe((kind) => {
@@ -535,16 +594,31 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
     parking,
     building: story,
     current: () => destination,
+    landed: () => landed,
     hidden: () => document.hidden,
-    ui: {stopScenario, render},
+    // Not on stepped pages, nor a page opened at a stop (rehearsals).
+    followFromStart: !('manual' in options) && !options.dest,
+    ui: {stopScenario, render, followChanged: () => insights?.paint()},
     after: (fn, ms) => ('manual' in options ? null : setTimeout(fn, ms)),
     cancel: (handle) => clearTimeout(handle),
   });
   signal.addEventListener('abort', () => director.dispose(), {once: true});
+  // A press anywhere in the panel: its buttons stay as they are until it is let go. Enter held down presses once (its
+  // repeats went on to press what the button had become).
+  for (const type of ['pointerdown', 'keydown'])
+    listen($('.context-panel'), type, (event) => {
+      story.pressing();
+      if (event.repeat && event.key === 'Enter' && event.target.closest('[data-action]')) event.preventDefault();
+    });
   listen(content, 'click', (event) => {
     const control = event.target.closest('[data-control]'),
       action = event.target.closest('[data-action]');
-    if (control || action) story.stop();
+    // The button the story waits for: pressed for it. Any other is the visitor's own.
+    if (action && story.cue) {
+      story.press();
+      return;
+    }
+    if (control || action) story.stop({keep: true});
     if (control) {
       stopScenario();
       const s = actual(),
@@ -564,7 +638,6 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
     listen(b, 'click', () => void select(b.dataset.destination));
   });
   $('#tour-night').disabled = false;
-  storyPlay.disabled = false;
   // Night and day are the world clock's: the button moves it on to 20:00, or to 07:30.
   listen($('#tour-night'), 'click', () => {
     story.stop();
@@ -577,7 +650,6 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
   // or below that card in a view too narrow for both side by side (on a phone it covered the title). The card's width:
   // its own when shown, else what parking.css gives it.
   const corner = $('.scene-top-right'),
-    stage = $('#viewport'),
     titleCard = $('.scene-title');
   // A title card hidden (the car park with the visitor's phone open) leaves the corner free: the card went below it
   // all the same, half-way down a narrow view.
@@ -601,7 +673,16 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
   const bodyClass = new MutationObserver(placeCornerCard);
   bodyClass.observe(document.body, {attributes: true, attributeFilter: ['class']});
   signal.addEventListener('abort', () => bodyClass.disconnect(), {once: true});
-  simulation.setInteractionFilter((room) => !traveling && destination === 'meeting' && room.id === meetingId);
+  // A device tapped in the 3D view is the visitor's own, as the panel's switches are: it ends the story and a scenario
+  // under way (the room went on cooling with its AC switched off).
+  simulation.setInteractionFilter((room) => {
+    const allowed = !traveling && destination === 'meeting' && room.id === meetingId;
+    if (allowed) {
+      story.stop({keep: true});
+      stopScenario();
+    }
+    return allowed;
+  });
   listen(document, 'visibilitychange', () => {
     if (document.hidden) director.hiddenPage();
   });
@@ -618,11 +699,23 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
     render,
     navigate: (id) => select(id, {guided: true}),
     // A parking story played on its own (the `story` option, the bar's Play) stops too: it holds the clock, and set a jump back.
-    stopActivity: () => director.stopActivity(),
+    stopActivity: (options) => director.stopActivity(options),
+    followState: () => director.follow,
+    toggleFollow: () => director.toggleFollow(),
   });
-  // Every touch, key or wheel on the page starts the quiet minute again.
-  for (const type of ['pointerdown', 'keydown', 'wheel'])
-    listen(document, type, () => director.touch(), {capture: true});
+  // Every touch, key or wheel on the page starts the quiet minute again, and so do a drag all along (one longer than a
+  // minute had the camera fly off under the finger) and every click (a screen reader sends only that).
+  for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'click'])
+    listen(
+      document,
+      type,
+      (event) => {
+        if (type === 'pointermove' && !event.buttons) return;
+        const on = (selector) => Boolean(event.target.closest?.(selector));
+        director.touch({own: on('#day-follow, #day-pause, #day-speed, #lang-toggle'), land: on('.parking-bar')});
+      },
+      {capture: true},
+    );
   // Runs on every TH/EN switch: static markup, then everything the showcase draws itself.
   function applyLanguage() {
     const en = getLang() === 'en';
@@ -684,7 +777,7 @@ export function createShowcase({model, simulation, navigate, cancelFlight, sched
       effects.dispose();
     },
     getState() {
-      return {traveling};
+      return {traveling, story: story.running};
     },
   };
 }

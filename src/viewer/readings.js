@@ -36,6 +36,10 @@ export function createReadings(rooms) {
       }
       return telemetry;
     },
+    // Back to the schedule from now.
+    release(keys) {
+      for (const key of keys) held.delete(key);
+    },
     held: (key) => held.has(key),
     clear() {
       held.clear();

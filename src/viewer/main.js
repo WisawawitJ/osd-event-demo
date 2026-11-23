@@ -1696,7 +1696,7 @@ try {
           {signal: abort.signal},
         );
         // Idle: 20 s with no input on the 3D view. Never while
-        // the camera is flying or the parking story is directing it. Only the 3D view's own input counts (the canvas and
+        // the camera is flying or a story is directing it. Only the 3D view's own input counts (the canvas and
         // its view controls): scrolling or tapping the panel, the page or the phone mock-up leaves the camera turning.
         let lastInput = performance.now(),
           orbitFrame = 0;
@@ -1729,6 +1729,7 @@ try {
             isPaused() ||
             flight.running ||
             st.traveling ||
+            st.story ||
             parking?.story.running
           )
             return false;

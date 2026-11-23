@@ -1,6 +1,7 @@
 // Overlays on the 3D view: the plate-camera feed, the unknown-car alert, story captions and toasts.
 import {t, fmtTime, fmtShortDate} from './i18n.js';
 import {esc, icon} from './dom.js';
+import {storyCaption} from './story-bar.js';
 import {later, cancelLater} from './clock.js';
 import {GATE_REASONS as REASONS, openReasonOf as reasonOf} from './sim.js';
 
@@ -63,7 +64,7 @@ export function createOverlays({layer, sim, actions}) {
     caption.hidden = !c;
     layer.classList.toggle('has-caption', Boolean(c));
     if (!c) return;
-    caption.innerHTML = `<span class="pk-caption-step">${esc(c.step)}</span><strong>${esc(c.title)}</strong><p>${esc(c.body)}</p>${c.hint ? `<span class="pk-caption-hint">${icon('hand')}${esc(c.hint)}</span>` : ''}`;
+    caption.innerHTML = storyCaption(c);
   }
 
   sim.subscribe((kind) => {

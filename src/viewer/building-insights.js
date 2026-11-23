@@ -9,7 +9,7 @@ import {
 import {createRoomLayers} from 'osd/viewer/room-layers.js';
 import {L} from 'osd/parking/i18n.js';
 import {world, realNow} from 'osd/parking/clock.js';
-import {morph} from 'osd/parking/dom.js';
+import {morph, icon} from 'osd/parking/dom.js';
 import {createReadings} from 'osd/viewer/readings.js';
 const legends = {
   none: () => '',
@@ -30,13 +30,26 @@ const legends = {
     ),
 };
 // Readings set by hand against the schedule: readings.js.
+// The moments' icons, by the stop they show.
+const EVENT_ICONS = {parking: 'car', meeting: 'users', energy: 'sun', pond: 'drop', overview: 'moon'};
 // Real minutes a simulated day can take; the timeline's button steps through them.
 const DAY_LENGTHS = [10, 20, 40, 60];
 // The building follows the world clock (src/parking/clock.js) through its daily schedule (building-day.js):
 // - readings (temperature, solar, water …) follow it continuously, except ones changed by hand for a while;
 // - rooms' lights, AC and doors change when the schedule changes them, so a switch flipped by hand stays until then.
 // The timeline shows the live time; its slider and moment buttons move the whole world forward to that time.
-export function createBuildingInsights({model, simulation, schedule, read, write, render, navigate, stopActivity}) {
+export function createBuildingInsights({
+  model,
+  simulation,
+  schedule,
+  read,
+  write,
+  render,
+  navigate,
+  stopActivity,
+  followState,
+  toggleFollow,
+}) {
   const $ = (s) => document.querySelector(s),
     abort = new AbortController(),
     layers = createRoomLayers({model, rooms: simulation.rooms, schedule});
@@ -57,11 +70,18 @@ export function createBuildingInsights({model, simulation, schedule, read, write
     events.innerHTML = dayEvents
       .map(
         (e, i) =>
-          `<button data-day-event="${i}" title="${e.detail}"><time>${formatTime(e.minute)}</time><span>${e.title}</span></button>`,
+          `<button data-day-event="${i}" title="${e.title} · ${e.detail}">${icon(EVENT_ICONS[e.destination])}<span><time>${formatTime(e.minute)}</time><b>${e.title}</b></span></button>`,
       )
       .join('');
+    $('#day-marks').innerHTML = dayEvents.map((e) => `<i style="--at:${e.minute / 1439}"></i>`).join('');
   }
   relabel();
+  // An icon and a label, rewritten only when they change (a press under way keeps its target).
+  function button(el, name, label) {
+    if (el.dataset.shown === `${name}|${label}`) return;
+    el.dataset.shown = `${name}|${label}`;
+    el.innerHTML = `${icon(name)}<span>${label}</span>`;
+  }
   function paint() {
     const minute = dragging ? Number(range.value) : world.minute();
     $('#replay-time').textContent = formatTime(minute);
@@ -74,12 +94,25 @@ export function createBuildingInsights({model, simulation, schedule, read, write
       ? L('เวลาจริง · เรื่องราวกำลังเล่น', 'Real time · story playing')
       : world.paused
         ? L('หยุดชั่วคราว · ทุกอย่างหยุดนิ่ง', 'Paused · everything stands still')
-        : L('เวลาจำลอง · เดินตลอด', 'Simulated time · always running');
-    $('#day-pause').textContent = world.paused ? L('เล่นต่อ', 'Resume') : L('หยุดชั่วคราว', 'Pause');
+        : {
+            on: L('กล้องตามวันในอาคาร', 'The camera follows the day'),
+            waiting: L('ตามวันต่อเมื่อไม่มีใครแตะ 1 นาที', 'Follows the day again after a quiet minute'),
+            off: L('เวลาจำลอง · เดินตลอด', 'Simulated time · always running'),
+          }[followState()];
+    const following = followState() === 'on';
+    button(
+      $('#day-follow'),
+      following ? 'x' : 'camera',
+      following ? L('หยุดตามวัน', 'Stop following') : L('ตามวันในอาคาร', 'Follow the day'),
+    );
+    $('#day-follow').setAttribute('aria-pressed', String(following));
+    button($('#day-pause'), world.paused ? 'play' : 'pause', world.paused ? L('เล่นต่อ', 'Resume') : L('หยุด', 'Pause'));
     $('#day-pause').setAttribute('aria-pressed', String(world.paused));
-    $('#day-speed').textContent = world.dayLength
-      ? L(`${world.dayLength} นาที/วัน`, `${world.dayLength} min/day`)
-      : L('เวลาจริง', 'Real time');
+    button(
+      $('#day-speed'),
+      'clock',
+      world.dayLength ? L(`${world.dayLength} นาที/วัน`, `${world.dayLength} min/day`) : L('เวลาจริง', 'Real time'),
+    );
     document
       .querySelectorAll('[data-layer]')
       .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.layer === layer)));
@@ -87,6 +120,10 @@ export function createBuildingInsights({model, simulation, schedule, read, write
     $('#layer-legend').hidden = layer === 'none';
     const current = dayEvents.findLastIndex((e) => e.minute <= minute);
     events.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-current', String(i === current)));
+    document.querySelectorAll('#day-marks i').forEach((m, i) => m.classList.toggle('past', i <= current));
+    // Where the strip is too narrow for titles, the one it is on is written under it.
+    const now = dayEvents[current];
+    $('#day-now').textContent = now ? `${formatTime(now.minute)} · ${now.title}` : '';
   }
   // Brings the building to the clock's time of day. `all` re-applies every room (a jump in time, or a reset).
   function sync({all = false} = {}) {
@@ -188,6 +225,7 @@ export function createBuildingInsights({model, simulation, schedule, read, write
     world.setPaused(!world.paused);
     paint();
   });
+  listen($('#day-follow'), 'click', toggleFollow);
   listen($('#day-speed'), 'click', () => {
     const next = DAY_LENGTHS.find((n) => n > world.dayLength) ?? DAY_LENGTHS[0];
     world.setDayLength(next);
@@ -200,18 +238,18 @@ export function createBuildingInsights({model, simulation, schedule, read, write
   listen(incidentList, 'click', (e) => {
     const b = e.target.closest('[data-incident]');
     if (!b) return;
-    stopActivity();
+    stopActivity({keep: true}); // the incident is in what the story set
     setLayer(b.dataset.insightLayer);
     void navigate(b.dataset.target);
   });
   document.querySelectorAll('[data-layer]').forEach((b) => {
     b.disabled = false;
     listen(b, 'click', () => {
-      stopActivity();
+      stopActivity({keep: true});
       setLayer(b.dataset.layer);
     });
   });
-  for (const selector of ['#day-pause', '#day-speed', '#day-time']) $(selector).disabled = false;
+  for (const selector of ['#day-follow', '#day-pause', '#day-speed', '#day-time']) $(selector).disabled = false;
   const offClock = world.subscribe((kind) => {
     if (kind === 'tick') sync();
     else if (kind === 'jump' || kind === 'set') sync({all: true});
@@ -221,6 +259,15 @@ export function createBuildingInsights({model, simulation, schedule, read, write
   return {
     update,
     hold: readings.hold,
+    // These readings, and this room's light and AC if any, set by hand, go back to the day's schedule.
+    backToSchedule(keys, roomId = null) {
+      readings.release(keys);
+      if (roomId) {
+        const {light, climate} = daySnapshot(world.minute(), simulation.rooms).rooms[roomId];
+        simulation.setRoom(roomId, {light, climate});
+      }
+      sync();
+    },
     jumpTo,
     relabel,
     paint,

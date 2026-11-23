@@ -6,6 +6,7 @@ import {mergeGeometries, mergeVertices} from 'osd/node_modules/three/examples/js
 import {DRIVE, GATE, STREET, SITE, Y, RAMP, PAVEMENT} from './layout.js';
 import {createLightConeMaterial, createLightConeGeometry} from 'osd/viewer/light-cone.js';
 import {createCarInstances} from './cars.js';
+import {createBoom} from './gate.js';
 
 // `renderer`: its shadows are redrawn while the barrier's arm moves (they are drawn only when something asks).
 export function createLot({scene, stalls, schedule, renderer = null}) {
@@ -301,14 +302,16 @@ export function createLot({scene, stalls, schedule, renderer = null}) {
   // At night each lamp throws light: a cone of lit air down to the ground (light-cone.js, as the meeting room's
   // light) and a soft pool where it lands. Painted, not real lights, so they cost the rest of the scene nothing.
   const glowCanvas = document.createElement('canvas');
-  glowCanvas.width = glowCanvas.height = 128;
+  glowCanvas.width = glowCanvas.height = 256;
   const gc = glowCanvas.getContext('2d'),
-    gg = gc.createRadialGradient(64, 64, 2, 64, 64, 64);
-  gg.addColorStop(0, 'rgba(255,255,255,1)');
-  gg.addColorStop(0.5, 'rgba(255,255,255,.45)');
-  gg.addColorStop(1, 'rgba(255,255,255,0)');
+    gg = gc.createRadialGradient(128, 128, 0, 128, 128, 128);
+  // Levels off at the rim instead of stopping there: a straight fade to nothing left a ring at the pool's edge.
+  for (let i = 0; i <= 24; i++) {
+    const r = i / 24;
+    gg.addColorStop(r, `rgba(255,255,255,${((1 - r * r) ** 3 * Math.exp(-1.2 * r * r)).toFixed(4)})`);
+  }
   gc.fillStyle = gg;
-  gc.fillRect(0, 0, 128, 128);
+  gc.fillRect(0, 0, 256, 256);
   const glowTexture = new THREE.CanvasTexture(glowCanvas);
   textures.push(glowTexture);
   const cone = {height: LAMP_HEIGHT, top: 0.3, bottom: 5.5};
@@ -325,7 +328,7 @@ export function createLot({scene, stalls, schedule, renderer = null}) {
   lampLight.push(
     put(
       mergeGeometries(
-        lit.map(([x, y, z]) => new THREE.CircleGeometry(6.8, 48).rotateX(-Math.PI / 2).translate(x, y + 0.02, z)),
+        lit.map(([x, y, z]) => new THREE.CircleGeometry(9.5, 48).rotateX(-Math.PI / 2).translate(x, y + 0.02, z)),
       ),
       basic({
         color: '#ffd9a0',
@@ -538,21 +541,14 @@ export function createLot({scene, stalls, schedule, renderer = null}) {
   }
 
   // Boom motion
-  let boomAngle = 0,
-    boomTarget = 0;
-  function setBoom(open) {
-    boomTarget = open ? (Math.PI / 2) * 0.96 : 0;
-  }
+  const barrierArm = createBoom();
   function update(dt) {
-    if (boomAngle === boomTarget) return false;
-    const step = dt * 2; // a quarter turn in ~0.8 s, like a fast parking barrier
-    boomAngle =
-      boomTarget > boomAngle ? Math.min(boomTarget, boomAngle + step) : Math.max(boomTarget, boomAngle - step);
-    boom.rotation.z = boomAngle;
+    if (!barrierArm.update(dt)) return false;
+    boom.rotation.z = barrierArm.angle;
     // Its shadow moves with it (it stayed where the arm had been until the sun's next step); not while the car park is
     // hidden (showing it again redraws the shadows anyway).
     if (renderer && root.visible) renderer.shadowMap.needsUpdate = true;
-    const open = boomAngle > 0.05;
+    const open = barrierArm.angle > 0.05;
     lampOn.color.set(open ? '#2f9e57' : '#c03d32');
     lampOn.emissive.set(open ? '#3dff7a' : '#ff3b2f');
     return true;
@@ -578,11 +574,11 @@ export function createLot({scene, stalls, schedule, renderer = null}) {
     cameras: {in: camIn, out: camOut},
     setBays,
     drawSign,
-    setBoom,
+    setBoom: barrierArm.set,
     update,
     setNight,
     get boomMoving() {
-      return boomAngle !== boomTarget;
+      return barrierArm.moving;
     },
     dispose() {
       root.removeFromParent();

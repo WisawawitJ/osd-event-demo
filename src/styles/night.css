@@ -100,15 +100,52 @@ html[data-night='true'] .day-events time,
 html[data-night='true'] .timeline-labels {
   color: var(--muted);
 }
-html[data-night='true'] .day-events span,
+html[data-night='true'] .day-events b,
 html[data-night='true'] #insight-room {
   color: var(--ink);
 }
 html[data-night='true'] .day-events button {
-  border-left-color: #2c3c4d;
+  background: #1b2733;
+  color: #b9c7d5;
 }
 html[data-night='true'] .day-events [aria-current='true'] {
   background: #1d2a45;
+  border-color: #7fd0f3;
+  color: #7fd0f3;
+}
+html[data-night='true'] .day-events [aria-current='true'] time,
+html[data-night='true'] .day-now {
+  color: #7fd0f3;
+}
+html[data-night='true'] .timeline-actions button {
+  border-color: #2c3c4d;
+}
+html[data-night='true'] .timeline-actions button[aria-pressed='true'] {
+  background: #1d2a45;
+  color: #7fd0f3;
+}
+html[data-night='true'] .timeline-actions button[aria-pressed='true']:not(:disabled):hover {
+  background: #22314a;
+}
+html[data-night='true'] .day-marks i {
+  background: #4a5b6e;
+}
+html[data-night='true'] .day-marks i.past {
+  background: #7fd0f3;
+}
+html[data-night='true'] .timeline-track {
+  --sky: linear-gradient(
+    90deg,
+    #33477d 0 20%,
+    #8485ad 24%,
+    #d9a47c 27%,
+    #86b5d8 33%,
+    #67a6d4 50%,
+    #86b5d8 67%,
+    #d68f60 74%,
+    #74689c 78%,
+    #33477d 82%
+  );
 }
 
 /* Building panel */

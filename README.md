@@ -38,8 +38,9 @@ npm run bench            # frame cost per stop: fps, CPU and GPU ms per frame, d
   every frame by the real time elapsed; pausing stops the stepping. Dice come from a seeded generator, so a run can be
   repeated exactly.
 - `src/parking/world.js`, the car park without a page: records, traffic, the story, the background life and the
-  rules between them. `src/viewer/director.js`: back to the start after a quiet minute. `src/viewer/building-story.js`: the building's story. `src/viewer/readings.js`:
-  readings set by hand against the building's schedule. `src/viewer/view-math.js`: the camera's limits and steps.
+  rules between them. `src/viewer/director.js`: following the day, and back to the start after a quiet minute.
+  `src/viewer/building-story.js`: the building's story. `src/viewer/readings.js`: readings set by hand against the
+  building's schedule. `src/viewer/view-math.js`: the camera's limits and steps.
 - `test/unit/` steps them as fast as it can: a whole parking story takes about 0.2 s, a busy hour of random traffic
   (checked every tick for cars driving through each other) under a second, a whole day of the car park on screen
   (every car through the barrier; the car count checked against the hour every half hour, every pair of cars for
@@ -72,7 +73,8 @@ overline (the floor) and the stop's name, uppercase in English as OSD titles are
 Everything runs on one world clock (`src/parking/clock.js`) on the event date, 24 Nov 2026: a whole day takes about
 20 real minutes (the night, 21:00–05:00, a little faster) and then starts again, so visitors see the building through
 morning, noon, dusk and night. On the timeline, **Pause** freezes everything (clock, cars and barrier, the story,
-scenarios and the idle orbit; the camera can still be moved) until **Resume**, a story's Play or Next, or a quiet minute; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
+scenarios and the idle orbit; the camera can still be moved) until **Resume**, a story's Play or
+Next, Follow the day, or a quiet minute; the **min/day** button makes a day take 10, 20, 40 or 60 real minutes.
 
 - **Koi** swim slow loops in the pond, each sized to keep the fish in the water, waving their tails. The motion is in
   the vertex shader (no per-fish CPU work); the pond redraws at 15 fps only while it is in view, and not when paused.
@@ -97,7 +99,7 @@ scenarios and the idle orbit; the camera can still be moved) until **Resume**, a
   evening rush out from 16:00, two or three cars overnight. Visitors with a pass for the day (ten are booked) drop in between 09:30
   and 15:30, each at most once, stay 45 minutes to three hours, and drive out by themselves. On screen every car drives
   through the barrier, which keeps up with the rushes of a 20-minute day (at most a car every 7 s each way; it can take
-  one every 5 s): cars set off
+  one every 6.5 s): cars set off
   for the hour it will be when they get through (half an hour of the time-lapse ahead), as many at once as the car park
   is short or over. That look ahead builds up over a minute from when the barrier takes over (the page opening, a jump
   in time, the car park back on screen, the story over), so the first cars come one after another, not four at once. What the barrier cannot bring in or out (a shorter day, a jump in time) is made up in the bays
@@ -113,15 +115,30 @@ scenarios and the idle orbit; the camera can still be moved) until **Resume**, a
 
 - Two ways to use it. **Free play**: the day always runs; visitors pick a stop on the dock, move the 3D view and try
   each stop's own buttons (a meeting, the pond's water, the energy flow, the Gate tab's test cars). **The stories**:
-  **Building story** (timeline header) plays by itself in about 80 s: the overview, a meeting starting and ending, the
-  pond running low and refilled, a cloud over the solar panels and the sun back, and the overview again, each step's
-  line in a card on the 3D view with Pause and Next (outside 08:00–15:00 it moves the day on to 10:00 first, for the
-  sun). Picking a stop, a stop's own button, a jump in time or Night ends it. The parking story is on the Parking stop
-  (below).
+  each stop outside the car park has a bar under the timeline like the car park's: **Play the story**, **Auto-advance**,
+  and while it plays Next (or Pause), Restart, Exit and the step. The building's story is the meeting day of the visitor
+  the parking story follows (about 1¾ minutes on auto): the room getting ready for six people and switching off after
+  them, the pond running low and refilled, a cloud over the solar panels and the sun back. At each of those the stop's
+  own button is cued (in the panel): pressed by the presenter, by Next, or by itself on auto-advance; the line on the 3D
+  view says what is about to happen, then what did. It sets each step's scene first, and outside 09:00–13:00 moves the
+  day on to 10:00 (for the sun, and clear of the day's own changes). Picking a stop, any other of a stop's buttons, a
+  device tapped in the 3D view, a jump in time, Night, Esc, Exit, or (on auto-advance) taking the 3D view ends it. What
+  it set then goes back to the day's schedule, unless the visitor took over there, by the 3D view or one of the stop's
+  controls (they go on from what they see). The parking story is on the Parking stop (below).
+- **Follow the day** (timeline button, on from the page's opening, after 8 s on the overview) moves the camera to the
+  stop of the day's latest moment (07:30 car park, 09:00 meeting room, 12:00 roof, 14:30 meeting room, 15:00 pond, 17:00
+  car park, 18:00 overview until 07:30), 25 s to 2½ minutes apart in a 20-minute day, with about 11 minutes on the
+  overview overnight. It only moves the camera. Turned on during a story, it ends the story. Any touch (but for the
+  button itself, Pause, the day's length and the language) hands over and stops its flight (a touch on a story's bar
+  lets it land); after a quiet minute it follows again, until turned off with **Stop following** (a reload turns it on
+  again, and so does coming back from the `#explore` page).
+- **A 9:16 portrait screen** (at least 761 × 1500 CSS px, e.g. 1080×1920) has a layout of its own that fills it without
+  scrolling: the 3D view across the top, then the dock, the timeline and the story bar, and the panel along the bottom
+  in two columns (the car park's console scrolls). Nothing to set: turn the screen.
 - **Left alone for a minute** (no touch, key or wheel), the screen goes back to the start: what was playing stops (a
-  story playing by itself is left to finish first: the building's unless paused, the car park's on auto-advance), a paused day runs again, and the camera
-  flies back to the overview, where the idle orbit takes over. The `#explore` page, left alone for a minute, goes back
-  to the showcase.
+  story playing by itself is left to finish first: either's on auto-advance, unless paused), a paused day runs again,
+  and the camera follows the day again, if it was, or flies back to the overview, where the idle orbit takes over. The
+  `#explore` page, left alone for a minute, goes back to the showcase.
 - On the Parking destination, the bar under the 3D view has **Play the story**, **Auto-advance** and
   **Visitor's phone**. With auto-advance off, the story waits at the approval and the unknown-car steps
   so the presenter or a visitor can click **Approve**, **Open** or **Deny** themselves. **Next** also does it for them.
@@ -202,7 +219,8 @@ lane, not at the exit barrier) (a check watches every pair of cars in a busy car
 - The 3D view renders at up to 1.5× device pixels and steps down towards 1× by itself when the frame rate stays under
   ~38 fps. It never steps back up, and every step redraws in the same frame, so the picture never pops.
 - The frame cost is mostly CPU: three.js's work per draw call. So the scene keeps draw calls and per-draw work down:
-  - cars are four draw calls each and share all their geometry; trees, shrubs and bay lights are instanced;
+  - cars come in five models: two instanced draw calls per model, however many cars, and one for each car's plates and
+    lamps (a few more while its lights are on); trees, shrubs and bay lights are instanced;
   - the building's ~110 interior partition walls are merged per floor at load time, with the same cutaway clipping;
   - flat glass, door leaves and overlays draw in one pass (three.js draws transparent double-sided materials twice and
     re-checks their shader each time);
@@ -265,10 +283,12 @@ src/parking/             the parking demo
   layout.js              car-park geometry in world metres
   lot3d.js, cars.js      3D lot, gate, cameras and procedural cars
   traffic.js             car routes (lines and arcs) and the gate sequence
+  gate.js                the barrier's pace: plate read and arm
   panel.js               staff console
   phone.js               visitor's phone
   overlays.js            plate-camera feed, alert, captions, toasts
   story.js               the guided story
+  story-bar.js           both stories' bar and caption (the building's too)
   i18n.js                Thai and English strings, Bangkok-time formatting
   clock.js, dom.js       the simulation engine and the world clock; small UI helpers (icons, CSV, calendar file)
 src/styles/              app.css (from the reference), parking.css, night.css (dark page at night)

@@ -11,7 +11,7 @@ import * as THREE from 'osd/node_modules/three/build/three.module.js';
 const vertexShader = `varying vec3 local; varying vec3 eye;
  void main(){local=position;eye=(inverse(modelMatrix)*vec4(cameraPosition,1.)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
 const fragmentShader = `uniform vec3 color,shape; uniform float opacity,strength; varying vec3 local; varying vec3 eye;
- float glow(vec3 p){float h=(p.y+shape.x)/(2.*shape.x);if(h<0.||h>1.)return 0.;float q=length(p.xz)/mix(shape.z,shape.y,h);return q<1.?(1.-q*q)*h*h:0.;}
+ float glow(vec3 p){float h=(p.y+shape.x)/(2.*shape.x);if(h<0.||h>1.)return 0.;float q=length(p.xz)/mix(shape.z,shape.y,h);float e=1.-q*q;return q<1.?1.3*e*e*h*h:0.;}
  void main(){
   // Entered here (a front face), or from the eye when it is inside the cone (then only the back faces draw).
   float hEye=(eye.y+shape.x)/(2.*shape.x);bool inside=hEye>0.&&hEye<1.&&length(eye.xz)<mix(shape.z,shape.y,hEye);

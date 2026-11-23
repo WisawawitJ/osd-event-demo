@@ -56,3 +56,15 @@ test('a sun-returning override ends at sunset', () => {
   assert.equal(r.scheduled().solar, 0, 'the override ended with the sun');
   r.dispose();
 });
+
+test("released, a reading is the schedule's again at once; the others stay held", () => {
+  at(10 * 60);
+  const r = createReadings(rooms);
+  r.hold(['temp', 'occupied', 'solar']);
+  r.release(['temp', 'occupied']);
+  const now = r.scheduled();
+  assert.equal(now.temp, plan().temp);
+  assert.equal(now.occupied, plan().occupied);
+  assert.ok(!('solar' in now));
+  r.dispose();
+});

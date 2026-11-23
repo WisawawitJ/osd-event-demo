@@ -132,7 +132,8 @@
    the building's moment buttons, to leave the 3D view room above the story bar. */
 .parking-active #dashboard-content,
 .parking-active .building-incidents,
-.parking-active .day-events {
+.parking-active .day-events,
+.parking-active .day-now {
   display: none !important;
 }
 .parking-active #viewport {
@@ -189,7 +190,8 @@
 .parking-active.phone-open #scene-chip {
   opacity: 0;
 }
-.parking-active #viewport:has(.has-caption) .scene-bottom {
+.parking-active #viewport:has(.has-caption) .scene-bottom,
+#viewport.building-story .scene-bottom {
   opacity: 0;
 }
 /* While the story shows a caption it drives the camera: the view controls step aside (they sat over the caption). */
@@ -198,7 +200,8 @@
     opacity 0.25s,
     visibility 0.25s;
 }
-.parking-active #viewport:has(.has-caption) .view-controls {
+.parking-active #viewport:has(.has-caption) .view-controls,
+#viewport.building-story .view-controls {
   opacity: 0;
   visibility: hidden;
 }
@@ -260,6 +263,9 @@
   }
   .pk-phone-toggle {
     margin-left: auto;
+  }
+  .pk-bar-main {
+    flex-wrap: wrap;
   }
   /* Icons only for the secondary buttons (their text stays for screen readers), so the buttons keep one row. */
   [data-bar='restart'] span,
@@ -2129,46 +2135,67 @@ html[data-night='true'] .ph-caption {
 #parking-layer .pk-toasts > * {
   pointer-events: none;
 }
-/* The building's story: its line and controls in a card on the 3D view (not on the car park, which has its own story). */
-.parking-active #story-play {
+/* The building's story has a bar and a caption like the car park's (which has its own). */
+.parking-active #story-bar {
   display: none;
 }
 .building-caption {
   z-index: 4;
 }
-.story-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
+
+/* A tall portrait screen (a 9:16 booth screen): one column that fills it. The 3D view across the top, the dock, the
+   timeline and the story bar under it, and the panel along the bottom in two columns (the car park's console in one,
+   scrolling). Beside the view, the panel was a narrow strip over an empty bottom quarter. */
+@media (orientation: portrait) and (min-width: 761px) and (min-height: 1500px) {
+  .tour-workspace,
+  .parking-active .tour-workspace {
+    --panel: 31dvh;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto var(--panel);
+    gap: 14px;
+  }
+  /* All the height the rest leaves: the header and footer, the gaps, the dock, the timeline and the story bar. */
+  .showcase-page #viewport {
+    height: calc(69dvh - 516px);
+    max-height: none;
+  }
+  .parking-active #viewport {
+    height: calc(69dvh - 458px);
+  }
+  #dashboard-content {
+    columns: 2;
+    column-gap: 44px;
+  }
+  #dashboard-content > * {
+    break-inside: avoid;
+  }
+  /* The alert's photo beside its text, and the gate's two cameras, at about their size in the side panel. */
+  .pk-alert-card:has(> img) {
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    column-gap: 18px;
+    align-items: start;
+  }
+  .pk-alert-card:has(> img) > * {
+    grid-column: 2;
+  }
+  .pk-alert-card > .pk-alert-head {
+    grid-column: 1 / -1;
+  }
+  .pk-alert-card > img {
+    grid-column: 1;
+    grid-row: 2 / span 6;
+  }
+  .pk-cams {
+    max-width: 640px;
+  }
 }
-.story-controls button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  border-radius: 8px;
-  padding: 6px 11px;
-  color: #023e8a;
-  background: var(--pk-blue-soft);
-}
-.story-controls .pk-dots {
-  margin-left: 8px;
-}
-#story-play {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-#story-play span {
-  font-size: inherit;
-  color: inherit;
-} /* not the timeline header's small grey text */
-#story-play[aria-pressed='true'] {
-  background: var(--pk-blue-soft) !important;
-  color: #023e8a;
-}
-html[data-night='true'] #story-play[aria-pressed='true'] {
-  background: #1d2a45 !important;
-  color: #7fd0f3;
+/* Its narrower sizes (1080×1920 at 125%): the timeline's card is a line taller. */
+@media (orientation: portrait) and (min-width: 761px) and (max-width: 940px) and (min-height: 1500px) {
+  .showcase-page #viewport {
+    height: calc(69dvh - 534px);
+  }
+  .parking-active #viewport {
+    height: calc(69dvh - 458px);
+  }
 }

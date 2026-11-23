@@ -526,8 +526,8 @@ export function createTraffic({lot, sim, schedule, hooks}) {
   }
   // Plate reads take turns: the camera card shows one car at a time. One still waiting its turn at a reset is skipped
   // (it showed a removed car's card after the restart, and its flow, ended, never hid it). Done for the car once its
-  // plate is recognised (the hook's `recognised`): the card shows the verdict a moment longer, as the arm rises (the
-  // arm waited for that too, and each car stood half a second longer at the barrier).
+  // plate is recognised (the hook's `recognised`): the card shows the verdict a moment longer, as the arm rises
+  // (gate.js has the timing).
   function readPlate(...args) {
     const gen = generation;
     let recognised;

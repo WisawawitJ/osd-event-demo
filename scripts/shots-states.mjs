@@ -306,17 +306,34 @@ export function buildSessions() {
       stops(BOOTH, lang, tod, {extras: tod === 'day'});
       explore(BOOTH, lang, tod, {extras: tod === 'day'});
     }
-    // The building's story: the meeting step (the room cooling) and the pond running low.
-    const storyStep = (n) =>
-      `document.querySelector('#story-caption .pk-caption-step')?.textContent.includes('${n}/8') && ${STILL}`;
+    // The building's story, Next by Next: the bar and caption at the start, a cue, and what its button did.
+    const storyAt = (n, cued) =>
+      `document.querySelector('#story-caption .pk-caption-step')?.textContent.includes('${n} / 8') && ${STILL} && ${cued ? '' : '!'}document.querySelector('#dashboard-content [data-cue="true"]') && document.querySelector('#story-bar [data-bar="next"][data-cue="true"]')`;
+    const storyNext = async (p) => p.click('#story-bar [data-bar="next"]');
     session(BOOTH, lang, 'day', url('speed=30&time=10:00'), IDLE, [
-      step('modes', 'building-story-meeting', 'Building story: a meeting starts', async (p) => {
-        await p.click('#story-play');
-        await p.reach(storyStep(2), 'the meeting step');
+      step('modes', 'building-story-start', 'Building story: step 1', async (p) => {
+        await p.click('#story-bar [data-bar="auto"]');
+        await p.click('#story-bar [data-bar="play"]');
+        await p.reach(storyAt(1, false), 'the first step');
+        await p.step(600, {hold: false});
+      }),
+      step('modes', 'building-story-meeting-cue', 'Building story: a meeting about to start', async (p) => {
+        await storyNext(p);
+        await p.reach(storyAt(2, true), 'the meeting cue');
+        await p.step(600, {hold: false});
+      }),
+      step('modes', 'building-story-meeting', 'Building story: the meeting started', async (p) => {
+        await storyNext(p);
+        await p.reach(storyAt(2, false), 'the meeting started');
         await p.step(6000, {hold: false});
       }),
       step('modes', 'building-story-pond', 'Building story: the pond runs low', async (p) => {
-        await p.reach(storyStep(4), 'the pond step');
+        for (const n of [3, 4]) {
+          await storyNext(p);
+          await p.reach(storyAt(n, true), `cue ${n}`);
+          await storyNext(p);
+          await p.reach(storyAt(n, false), `step ${n}`);
+        }
         await p.step(1500, {hold: false});
       }),
     ]);

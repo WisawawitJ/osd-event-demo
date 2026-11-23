@@ -8,6 +8,7 @@ import {createLot} from './lot3d.js';
 import {createPanel} from './panel.js';
 import {createPhone} from './phone.js';
 import {createOverlays} from './overlays.js';
+import {storyBar, onViewTaken, tapCues} from './story-bar.js';
 import {createParkingWorld} from './world.js';
 import {CAR, disposeCars} from './cars.js';
 
@@ -127,13 +128,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
       caption(c, hint) {
         overlays.caption(c ? {...c, hint: hint && t(hint)} : null);
       },
-      tap() {
-        for (const el of document.querySelectorAll('[data-cue="true"]')) {
-          el.classList.remove('pk-tapped');
-          void el.offsetWidth;
-          el.classList.add('pk-tapped');
-        }
-      },
+      tap: tapCues,
       toast: say,
       // The plate camera reads: the pop-up shows the gate camera live (the 3D view draws it into its picture area).
       plateRead(which, agent, verdict, confidence) {
@@ -211,20 +206,10 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
 
   // Story bar below the viewport -----------------------------------------
   function renderBar() {
-    const s = story;
-    const dots = Array.from(
-      {length: s.total},
-      (_, i) => `<i class="${i < s.index ? 'done' : i === s.index ? 'now' : ''}"></i>`,
-    ).join('');
-    const main = !s.running
-      ? `<button class="primary-button" data-bar="play">${icon('play')}<span>${t('story.play')}</span></button>`
-      : s.auto
-        ? `<button class="primary-button" data-bar="${s.paused ? 'resume' : 'pause'}">${icon(s.paused ? 'play' : 'pause')}<span>${t(s.paused ? 'story.resume' : 'story.pause')}</span></button>`
-        : `<button class="primary-button" data-bar="next"${s.waitingForNext ? ' data-cue="true"' : ''}>${icon('next')}<span>${t('next')}</span></button>`;
-    bar.innerHTML = `<div class="pk-bar-main">${main}${s.running ? `<button data-bar="restart">${icon('restart')}<span>${t('story.restart')}</span></button><button data-bar="free" class="pk-exit-story" title="Esc">${icon('x')}<span>${t('story.exit')}</span></button>` : ''}
-      <label class="pk-switch"><input type="checkbox" data-bar="auto"${s.auto ? ' checked' : ''}><span>${t('story.autoAdvance')}</span></label></div>
-      <div class="pk-bar-progress">${s.running ? `<span>${t('story.step', {n: s.index + 1, total: s.total})}</span><div class="pk-dots">${dots}</div>` : `<span class="pk-bar-idle">${t('story.idle')}</span>`}</div>
-      <button class="pk-phone-toggle" data-bar="phone" aria-pressed="${phone.isOpen}">${icon('phone')}<span>${phone.isOpen ? t('ph.hide') : t('ph.show')}</span></button>`;
+    bar.innerHTML = storyBar(story, {
+      idle: t('story.idle'),
+      more: `<button class="pk-phone-toggle" data-bar="phone" aria-pressed="${phone.isOpen}">${icon('phone')}<span>${phone.isOpen ? t('ph.hide') : t('ph.show')}</span></button>`,
+    });
   }
   bar.addEventListener('click', (e) => {
     const b = e.target.closest('[data-bar]');
@@ -262,26 +247,7 @@ export function createParking({scene, schedule, camera = null, renderer, afterRe
     if (event.target.closest?.('#pk-phone, .pk-caption, .pk-alert-pop, .pk-feed, #view-orbit')) return;
     leaveStory();
   };
-  viewport.addEventListener('pointerdown', takeOver, {capture: true});
-  viewport.addEventListener('wheel', takeOver, {capture: true, passive: true});
-  // A view key on the 3D view too (arrows, + −, Page Up/Down, R): the story's next camera move overrode the presenter.
-  // As the view reads them: an arrow with any modifier (Ctrl+arrow turns it), the others without, by key place or, from
-  // an on-screen keyboard (no key place), by character.
-  viewport.addEventListener(
-    'keydown',
-    (event) => {
-      if (event.target.tagName !== 'CANVAS') return;
-      if (event.key.startsWith('Arrow')) return takeOver(event);
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (
-        event.key.startsWith('Page') ||
-        ['KeyR', 'Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(event.code) ||
-        ['r', 'R', '+', '=', '-'].includes(event.key)
-      )
-        takeOver(event);
-    },
-    {capture: true},
-  );
+  onViewTaken(viewport, takeOver);
   panelRoot.addEventListener(
     'click',
     (event) => {

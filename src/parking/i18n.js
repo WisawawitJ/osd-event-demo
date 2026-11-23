@@ -323,6 +323,10 @@ const S = {
     'เลือก “เล่นเรื่องราว” เพื่อดูการเดินทางของผู้มาติดต่อ หรือทดลองกดเองได้ทุกส่วน',
     'Choose “Play the story” to follow one visitor, or try any part yourself',
   ],
+  'story.idleBuilding': [
+    'เลือก “เล่นเรื่องราว” เพื่อตามวันประชุมของผู้มาติดต่อไปทั่วอาคาร หรือทดลองกดเองได้ทุกจุด',
+    'Choose “Play the story” to follow a visitor’s meeting day through the building, or try any stop yourself',
+  ],
   'story.freeMode': [
     'ออกจากเรื่องราวแล้ว · ทดลองเองได้ทุกส่วน: แผงเจ้าหน้าที่ มือถือ หรือส่งรถไปที่ไม้กั้น',
     'Story stopped · try anything: the staff console, the phone, or send cars to the barrier',
